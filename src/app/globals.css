@@ -1,8 +1,10 @@
 @import "tailwindcss";
-
-/* Bạn có thể định nghĩa các biến màu sắc ngay tại đây thay vì file config */
-
 @theme {
+    /* Màu xanh mới từ nút Tìm kiếm ngay của bạn - Dịu và chuyên nghiệp hơn */
     --color-primary: #2563eb;
-    --color-secondary: #64748b;
+    --color-primary-hover: #1d4ed8;
+}
+
+:root {
+    font-family: 'Manrope', sans-serif;
 }
