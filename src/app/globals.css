@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* Bạn có thể định nghĩa các biến màu sắc ngay tại đây thay vì file config */
+
+@theme {
+    --color-primary: #2563eb;
+    --color-secondary: #64748b;
+}
