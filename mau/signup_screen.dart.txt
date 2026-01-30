@@ -1,0 +1,604 @@
+import 'package:flutter/material.dart';
+import '../utils/constants.dart';
+import '../services/auth_service.dart';
+import 'package:provider/provider.dart';
+import '../services/language_service.dart';
+
+class SignupScreen extends StatefulWidget {
+  const SignupScreen({Key? key}) : super(key: key);
+
+  @override
+  State<SignupScreen> createState() => _SignupScreenState();
+}
+
+class _SignupScreenState extends State<SignupScreen> {
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
+  bool _agreeToTerms = false;
+  bool _isLoading = false;
+  bool _isGoogleLoading = false;
+  
+  int _currentStep = 0; // 0: email, 1: password
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignup() async {
+    final isEnglish = Provider.of<LanguageService>(context, listen: false).isEnglish;
+    final authService = context.read<AuthService>();
+
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+      _showSnackBar(isEnglish ? 'Please fill in all fields' : 'Vui lòng điền tất cả các trường');
+      return;
+    }
+
+    if (password != confirmPassword) {
+      _showSnackBar(isEnglish ? 'Passwords do not match' : 'Mật khẩu không khớp');
+      return;
+    }
+
+    if (password.length < 6) {
+      _showSnackBar(isEnglish ? 'Password must be at least 6 characters' : 'Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+
+    if (!_agreeToTerms) {
+      _showSnackBar(isEnglish ? 'Please agree to Terms & Conditions' : 'Vui lòng đồng ý với Điều khoản & Điều kiện');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final success = await authService.signupWithEmailPassword(
+      name,
+      email,
+      password,
+    );
+
+    setState(() => _isLoading = false);
+
+    if (success && mounted) {
+      _showSnackBar(isEnglish ? 'Signup successful!' : 'Đăng ký thành công!');
+      // TODO: Navigate to home screen
+    } else if (mounted) {
+      _showSnackBar(isEnglish ? 'Signup failed. Please try again.' : 'Đăng ký thất bại. Vui lòng thử lại.');
+    }
+  }
+
+  Future<void> _handleGoogleSignup() async {
+    final isEnglish = Provider.of<LanguageService>(context, listen: false).isEnglish;
+    final authService = context.read<AuthService>();
+    setState(() => _isGoogleLoading = true);
+
+    final success = await authService.signupWithGoogle();
+
+    setState(() => _isGoogleLoading = false);
+
+    if (success && mounted) {
+      _showSnackBar(isEnglish ? 'Signup successful!' : 'Đăng ký thành công!');
+      // TODO: Navigate to home screen
+    } else if (mounted) {
+        _showSnackBar(isEnglish ? 'Signup failed. Please try again.' : 'Đăng ký thất bại. Vui lòng thử lại.');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  bool get _isEnglish => context.watch<LanguageService>().isEnglish;
+
+  bool get _isValidEmail {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) return false;
+    return RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+        .hasMatch(email);
+  }
+
+  String get _stepTitle {
+    if (_currentStep == 0) {
+      return _isEnglish ? 'Sign up / Enter Email' : 'Đăng ký / Nhập Email';
+    } else {
+      return _isEnglish ? 'Sign up / Create password' : 'Đăng ký / Tạo mật khẩu';
+    }
+  }
+
+  String get _stepSubtitle {
+    if (_currentStep == 0) {
+      return _isEnglish ? 'What\'s your email address' : 'Email của bạn là gì?';
+    } else {
+      return _isEnglish ? 'Create your password' : 'Tạo mật khẩu của bạn';
+    }
+  }
+
+  String get _continueButtonText => _isEnglish ? 'Continue' : 'Tiếp tục';
+  String get _skipButtonText => _isEnglish ? 'Skip' : 'Bỏ qua';
+  String get _orText => _isEnglish ? 'Or' : 'Hoặc';
+  String get _loginText => _isEnglish ? 'Already have an account? Sign in' : 'Đã có tài khoản? Đăng nhập';
+
+  void _handleSkip() {
+    final authService = context.read<AuthService>();
+    authService.skipAuthentication();
+    // TODO: Navigate to home screen
+  }
+
+  void _handleContinue() {
+    final isEnglish = Provider.of<LanguageService>(context, listen: false).isEnglish;
+    if (_currentStep == 0) {
+      if (!_isValidEmail) {
+        _showSnackBar(isEnglish ? 'Please enter a valid email' : 'Vui lòng nhập email hợp lệ');
+        return;
+      }
+      setState(() => _currentStep = 1);
+    } else {
+      if (_passwordController.text.isEmpty) {
+        _showSnackBar(isEnglish ? 'Please enter a password' : 'Vui lòng nhập mật khẩu');
+        return;
+      }
+      if (_confirmPasswordController.text.isEmpty) {
+        _showSnackBar(isEnglish ? 'Please confirm your password' : 'Vui lòng xác nhận mật khẩu');
+        return;
+      }
+      if (!_agreeToTerms) {
+        _showSnackBar(isEnglish ? 'Please agree to the terms' : 'Vui lòng đồng ý với điều khoản');
+        return;
+      }
+      if (_passwordController.text != _confirmPasswordController.text) {
+        _showSnackBar(isEnglish ? 'Passwords do not match' : 'Mật khẩu không khớp');
+        return;
+      }
+      if (_passwordController.text.length < 6) {
+        _showSnackBar(isEnglish ? 'Password must be at least 6 characters' : 'Mật khẩu phải có ít nhất 6 ký tự');
+        return;
+      }
+      _handleSignup();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        color: AppColors.white,
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Column(
+                children: [
+              // Scrollable top content
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 12),
+
+                        // Back Button
+                        GestureDetector(
+                          onTap: () {
+                            if (_currentStep > 0) {
+                              setState(() => _currentStep = 0);
+                            } else {
+                              Navigator.of(context).pop();
+                            }
+                          },
+                          child: const Icon(Icons.arrow_back),
+                        ),
+
+                        SizedBox(height: _currentStep > 0 ? 20 : 32),
+
+                        // Step Title
+                        Text(
+                          _stepTitle,
+                          style: AppTextStyles.heading2.copyWith(
+                            color: AppColors.primaryColor,
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Step Subtitle
+                        Text(
+                          _stepSubtitle,
+                          style: AppTextStyles.bodyMedium,
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Email Input (Step 0)
+                        if (_currentStep == 0)
+                          TextField(
+                            controller: _emailController,
+                            keyboardType: TextInputType.emailAddress,
+                            onChanged: (value) => setState(() {}),
+                            decoration: InputDecoration(
+                              hintText: _isEnglish ? 'Enter your email' : 'Nhập email của bạn',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: AppColors.greyLight,
+                                  width: 1.5,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: AppColors.primaryColor,
+                                  width: 2,
+                                ),
+                              ),
+                              filled: true,
+                              fillColor: AppColors.white,
+                            ),
+                          )
+                        // Password Inputs (Step 1)
+                        else
+                          Column(
+                            children: [
+                              TextField(
+                                controller: _passwordController,
+                                obscureText: !_isPasswordVisible,
+                                onChanged: (value) => setState(() {}),
+                                decoration: InputDecoration(
+                                  hintText: _isEnglish ? 'Enter password' : 'Nhập mật khẩu',
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _isPasswordVisible
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                      color: AppColors.primaryColor,
+                                    ),
+                                    onPressed: () {
+                                      setState(
+                                        () =>
+                                            _isPasswordVisible = !_isPasswordVisible,
+                                      );
+                                    },
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.greyLight,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.primaryColor,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  filled: true,
+                                  fillColor: AppColors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _confirmPasswordController,
+                                obscureText: !_isConfirmPasswordVisible,
+                                onChanged: (value) => setState(() {}),
+                                decoration: InputDecoration(
+                                  hintText: _isEnglish
+                                      ? 'Confirm password'
+                                      : 'Xác nhận mật khẩu',
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _isConfirmPasswordVisible
+                                          ? Icons.visibility
+                                          : Icons.visibility_off,
+                                      color: AppColors.primaryColor,
+                                    ),
+                                    onPressed: () {
+                                      setState(
+                                        () => _isConfirmPasswordVisible =
+                                            !_isConfirmPasswordVisible,
+                                      );
+                                    },
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.greyLight,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: AppColors.primaryColor,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  filled: true,
+                                  fillColor: AppColors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _agreeToTerms,
+                                    onChanged: (value) {
+                                      setState(() => _agreeToTerms = value ?? false);
+                                    },
+                                    activeColor: AppColors.primaryColor,
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      _isEnglish
+                                          ? 'I agree to Terms & Conditions'
+                                          : 'Tôi đồng ý với Điều khoản & Điều kiện',
+                                      style: AppTextStyles.bodySmall,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+
+                        const SizedBox(height: 40),
+
+                        // Continue Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _currentStep == 0 && !_isValidEmail
+                                ? null
+                                : _handleContinue,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryColor,
+                              disabledBackgroundColor: AppColors.greyLight,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _continueButtonText,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Skip Button
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            onPressed: _handleSkip,
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: Text(
+                              _skipButtonText,
+                              style: const TextStyle(
+                                color: AppColors.primaryColor,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Fixed bottom section
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 24.0),
+                child: Column(
+                  children: [
+                    // Divider
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 1,
+                            color: AppColors.greyLight,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            _orText,
+                            style: AppTextStyles.bodySmall,
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            height: 1,
+                            color: AppColors.greyLight,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Social Buttons (Google only)
+                    Center(
+                      child: _buildSocialButton(
+                        'assets/icons/gg.png',
+                        onTap: _handleGoogleSignup,
+                      ),
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // Login Link
+                    Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).pushNamed(AppRoutes.login);
+                        },
+                        child: RichText(
+                          text: TextSpan(
+                            text: _loginText,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.greyLight,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+              
+              // Language Toggle Button - Top Right
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          context.read<LanguageService>().setLanguage(true);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: context.watch<LanguageService>().isEnglish
+                                ? AppColors.primaryColor.withValues(alpha: 0.2)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'EN',
+                            style: TextStyle(
+                              color: AppColors.primaryColor,
+                              fontWeight: context.watch<LanguageService>().isEnglish
+                                  ? FontWeight.bold
+                                  : FontWeight.w400,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          context.read<LanguageService>().setLanguage(false);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: !context.watch<LanguageService>().isEnglish
+                                ? AppColors.primaryColor.withValues(alpha: 0.2)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'VI',
+                            style: TextStyle(
+                              color: AppColors.primaryColor,
+                              fontWeight: !context.watch<LanguageService>().isEnglish
+                                  ? FontWeight.bold
+                                  : FontWeight.w400,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSocialButton(String label, {required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.white,
+          border: Border.all(
+            color: AppColors.greyLight,
+            width: 1,
+          ),
+        ),
+        child: label.endsWith('.png')
+            ? Image.asset(
+                label,
+                width: 28,
+                height: 28,
+                fit: BoxFit.contain,
+              )
+            : Center(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryColor,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+}

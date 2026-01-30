@@ -1,0 +1,331 @@
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+class AuthService extends ChangeNotifier {
+  final _supabase = Supabase.instance.client;
+
+  bool _isAuthenticated = false;
+  String? _userName;
+  String? _userEmail;
+  String? _userId;
+  String? _errorMessage;
+
+  bool get isAuthenticated => _isAuthenticated;
+  String? get userName => _userName;
+  String? get userEmail => _userEmail;
+  String? get userId => _userId;
+  String? get errorMessage => _errorMessage;
+
+  /// Login with email and password
+  Future<bool> loginWithEmailPassword(String email, String password) async {
+    try {
+      _errorMessage = null;
+      
+      final response = await _supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (response.user != null) {
+        _isAuthenticated = true;
+        _userEmail = response.user!.email;
+        _userId = response.user!.id;
+        _userName = response.user!.userMetadata?['name'] ?? 
+                   response.user!.email?.split('@')[0] ?? 'User';
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } on AuthException catch (e) {
+      _errorMessage = e.message;
+      print('Login error: ${e.message}');
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = 'An unexpected error occurred';
+      print('Login error: $e');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Signup with email and password
+  Future<bool> signupWithEmailPassword(
+      String name, String email, String password) async {
+    try {
+      _errorMessage = null;
+
+      final response = await _supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {
+          'name': name,
+        },
+      );
+
+      if (response.user != null) {
+        _isAuthenticated = true;
+        _userEmail = response.user!.email;
+        _userId = response.user!.id;
+        _userName = name;
+
+        // Save user data to users table
+        await _saveUserToDatabase(response.user!.id, name, email);
+
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } on AuthException catch (e) {
+      _errorMessage = e.message;
+      print('Signup error: ${e.message}');
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = 'An unexpected error occurred';
+      print('Signup error: $e');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Login with Google
+  Future<bool> loginWithGoogle() async {
+    try {
+      _errorMessage = null;
+      print('Starting Google Sign-in process...');
+
+      // Initialize GoogleSignIn with required configuration
+      final scopes = ['email', 'profile'];
+      final googleSignIn = GoogleSignIn(
+        scopes: scopes,
+        serverClientId: null, // Set this to your web client ID from Google Cloud Console
+      );
+      
+      print('Attempting to sign in with Google...');
+      final googleUser = await googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        _errorMessage = 'Google sign-in cancelled by user';
+        print('Google sign-in cancelled');
+        notifyListeners();
+        return false;
+      }
+
+      print('Google user signed in: ${googleUser.email}');
+      
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+      
+      print('ID Token: ${idToken != null ? 'obtained' : 'failed'}');
+      print('Access Token: ${accessToken != null ? 'obtained' : 'failed'}');
+      
+      if (idToken == null) {
+        _errorMessage = 'Failed to obtain ID Token from Google';
+        print('No ID Token found');
+        notifyListeners();
+        return false;
+      }
+
+      print('Signing in to Supabase with Google credentials...');
+      await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        _isAuthenticated = true;
+        _userEmail = user.email;
+        _userId = user.id;
+        _userName = user.userMetadata?['name'] ?? 
+                   user.email?.split('@')[0] ?? 'User';
+        
+        print('Successfully authenticated: $_userName');
+        
+        await _saveUserToDatabase(
+          user.id,
+          _userName!,
+          user.email ?? '',
+          provider: 'google',
+        );
+
+        notifyListeners();
+        return true;
+      }
+      
+      _errorMessage = 'Failed to get user information from Supabase';
+      return false;
+    } on FormatException catch (e) {
+      _errorMessage = 'Invalid token format: ${e.message}';
+      print('FormatException in Google login: ${e.message}');
+      notifyListeners();
+      return false;
+    } on AuthException catch (e) {
+      _errorMessage = 'Supabase auth error: ${e.message}';
+      print('AuthException in Google login: ${e.message}');
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = 'Google login failed: $e';
+      print('Unexpected error in Google login: $e');
+      print('Error type: ${e.runtimeType}');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Signup with Google
+  Future<bool> signupWithGoogle() async {
+    try {
+      _errorMessage = null;
+      print('Starting Google Sign-up process...');
+
+      final scopes = ['email', 'profile'];
+      final googleSignIn = GoogleSignIn(
+        scopes: scopes,
+        serverClientId: null, // Set this to your web client ID from Google Cloud Console
+      );
+      
+      print('Attempting to sign in with Google...');
+      final googleUser = await googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        _errorMessage = 'Google sign-in cancelled by user';
+        print('Google sign-in cancelled');
+        notifyListeners();
+        return false;
+      }
+
+      print('Google user signed in: ${googleUser.email}');
+
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+      final accessToken = googleAuth.accessToken;
+      
+      if (idToken == null) {
+        _errorMessage = 'Failed to obtain ID Token from Google';
+        print('No ID Token found');
+        notifyListeners();
+        return false;
+      }
+
+      print('Signing in to Supabase with Google credentials...');
+      await _supabase.auth.signInWithIdToken(
+        provider: OAuthProvider.google,
+        idToken: idToken,
+        accessToken: accessToken,
+      );
+
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        _isAuthenticated = true;
+        _userEmail = user.email;
+        _userId = user.id;
+        _userName = user.userMetadata?['name'] ?? 
+                   user.email?.split('@')[0] ?? 'User';
+
+        print('Successfully signed up: $_userName');
+
+        await _saveUserToDatabase(
+          user.id,
+          _userName!,
+          user.email ?? '',
+          provider: 'google',
+        );
+
+        notifyListeners();
+        return true;
+      }
+      
+      _errorMessage = 'Failed to get user information from Supabase';
+      return false;
+    } on FormatException catch (e) {
+      _errorMessage = 'Invalid token format: ${e.message}';
+      print('FormatException in Google signup: ${e.message}');
+      notifyListeners();
+      return false;
+    } on AuthException catch (e) {
+      _errorMessage = 'Supabase auth error: ${e.message}';
+      print('AuthException in Google signup: ${e.message}');
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = 'Google signup failed: $e';
+      print('Unexpected error in Google signup: $e');
+      print('Error type: ${e.runtimeType}');
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Save user data to database
+  Future<void> _saveUserToDatabase(
+    String userId,
+    String name,
+    String email, {
+    String provider = 'email',
+  }) async {
+    try {
+      await _supabase.from('users').upsert(
+        {
+          'id': userId,
+          'name': name,
+          'email': email,
+          'provider': provider,
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      print('Error saving user data: $e');
+    }
+  }
+
+  /// Logout
+  Future<void> logout() async {
+    try {
+      await _supabase.auth.signOut();
+      _isAuthenticated = false;
+      _userName = null;
+      _userEmail = null;
+      _userId = null;
+      _errorMessage = null;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Logout error: $e';
+      print('Logout error: $e');
+      notifyListeners();
+    }
+  }
+
+  /// Skip authentication (guest mode)
+  void skipAuthentication() {
+    _isAuthenticated = false;
+    _userName = 'Guest';
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Check if user is already authenticated
+  Future<bool> checkAuthStatus() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        _isAuthenticated = true;
+        _userEmail = user.email;
+        _userId = user.id;
+        _userName = user.userMetadata?['name'] ?? 
+                   user.email?.split('@')[0] ?? 'User';
+        notifyListeners();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error checking auth status: $e');
+      return false;
+    }
+  }
+}

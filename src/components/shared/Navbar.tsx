@@ -1,103 +1,168 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 
 export default function Navbar() {
   const pathname = usePathname();
-  
-  // Logic nhận diện Role: GUEST | CANDIDATE | HR
-  const isCandidate = pathname.startsWith("/candidate");
-  const isHR = pathname.startsWith("/hr");
-  
-  const isLoggedIn = isCandidate || isHR; 
-  const role = isHR ? "HR" : (isCandidate ? "CANDIDATE" : "GUEST");
+  const router = useRouter();
+  const supabase = createClient();
 
-  const [isOpen, setIsOpen] = useState(false); 
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false); 
-  const [showMoreDropdown, setShowMoreDropdown] = useState(false); 
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
-  const navLinks = {
-    GUEST: [
-      { name: "Tìm việc làm", href: "/jobs" },
-      { name: "Công ty", href: "/companies" },
-      { name: "Liên hệ", href: "/contact" }
-    ],
-    CANDIDATE: [
-      { name: "Tìm việc", href: "/jobs" },
-      { name: "Tổng quan", href: "/candidate/dashboard" }
-      // Các mục khác nằm trong dropdown "Khác"
-    ],
-    HR: [
-      { name: "Bảng điều khiển", href: "/hr/dashboard" },
-      { name: "Tin tuyển dụng", href: "/hr/jobs" },
-      { name: "Ứng viên", href: "/hr/candidates" },
-      { name: "Lịch phỏng vấn", href: "/hr/calendar" }
-    ]
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUser(user);
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+        setProfile(profileData);
+      }
+      setLoading(false);
+    };
+    fetchUser();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/");
+    window.location.reload();
   };
 
+  const role = profile?.role || "GUEST";
+  const isLoggedIn = !!user && !loading;
+
+  // 1. Định nghĩa các tập Menu
+  const guestLinks = [
+    { name: "Tìm việc làm", href: "/jobs" },
+    { name: "Công ty", href: "/companies" },
+    { name: "Liên hệ", href: "/contact" },
+  ];
+
+  const candidateInternalLinks = [
+    { name: "Tổng quan", href: "/candidate/dashboard" },
+    { name: "Hồ sơ cá nhân", href: "/candidate/profile" },
+    { name: "CV của tôi", href: "/candidate/cv-builder" },
+    { name: "Việc đã ứng tuyển", href: "/candidate/applications" },
+  ];
+
+  const hrLinks = [
+    { name: "Bảng điều khiển", href: "/hr/dashboard" },
+    { name: "Tin tuyển dụng", href: "/hr/jobs" },
+    { name: "Ứng viên", href: "/hr/candidates" },
+  ];
+
+  // 2. Chọn menu hiển thị
+  let currentLinks = guestLinks;
+  if (isLoggedIn) {
+    if (role === "hr") currentLinks = hrLinks;
+    else if (role === "candidate" && pathname.startsWith("/candidate")) {
+      currentLinks = candidateInternalLinks;
+    }
+  }
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/90 backdrop-blur-md h-20 lg:h-24 flex items-center">
-      <div className="max-w-[1536px] w-[92%] mx-auto flex items-center justify-between relative">
+    <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/95 backdrop-blur-md h-20 lg:h-24 flex items-center font-['Manrope']">
+      <div className="max-w-[1536px] w-[92%] mx-auto flex items-center justify-between">
         
         {/* LOGO */}
-        <Link href="/" className="flex items-center gap-4 z-50">
-          <div className="size-10 lg:size-10 flex items-center justify-center">
+        <Link href="/" className="flex items-center gap-4 shrink-0">
+          <div className="size-10 lg:size-14 flex items-center justify-center">
             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain scale-150" />
           </div>
           <h2 className="text-slate-900 text-2xl lg:text-3xl font-black tracking-tighter">TalentFlow</h2>
         </Link>
 
-        {/* MENU TRUNG TÂM */}
-        <div className={`fixed lg:static top-0 right-0 h-screen lg:h-auto w-[75%] lg:w-auto bg-white lg:bg-transparent flex flex-col lg:flex-row items-center gap-8 p-10 lg:p-0 pt-28 lg:pt-0 transition-all duration-300 ${isOpen ? "translate-x-0 shadow-2xl" : "translate-x-full lg:translate-x-0"}`}>
-          <nav className="flex flex-col lg:flex-row items-center gap-6 lg:gap-10">
-            {navLinks[role].map((link) => (
+        {/* CỤM MENU VÀ NÚT TÀI KHOẢN */}
+        <div className="flex items-center gap-6 lg:gap-10">
+          
+          <nav className="flex items-center gap-6 lg:gap-8">
+            {currentLinks.map((link) => (
               <Link 
-                key={link.name} 
+                key={link.href} 
                 href={link.href} 
-                className={`text-lg lg:text-[17px] font-bold transition-colors whitespace-nowrap ${pathname === link.href ? "text-primary" : "text-slate-700 hover:text-primary"}`}
+                className={`text-[17px] font-bold transition-colors whitespace-nowrap ${
+                  pathname === link.href ? "text-[#2563eb]" : "text-[#334155] hover:text-[#2563eb]"
+                }`}
               >
                 {link.name}
               </Link>
             ))}
-
-            {/* Dropdown "Khác" chỉ hiện cho Candidate */}
-            {role === "CANDIDATE" && (
-              <div className="relative">
-                <button onMouseEnter={() => setShowMoreDropdown(true)} className="flex items-center gap-1 font-bold text-slate-700 hover:text-primary">
-                  Khác <span className="material-symbols-outlined text-xl">expand_more</span>
-                </button>
-                {showMoreDropdown && (
-                  <div onMouseLeave={() => setShowMoreDropdown(false)} className="absolute left-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-50">
-                     <Link href="/candidate/profile" className="flex items-center gap-3 p-3 hover:bg-primary/5 rounded-xl font-bold text-sm">Hồ sơ cá nhân</Link>
-                     <Link href="/candidate/cv-builder" className="flex items-center gap-3 p-3 hover:bg-primary/5 rounded-xl font-bold text-sm">CV của tôi</Link>
-                  </div>
-                )}
-              </div>
-            )}
           </nav>
-          
-          {/* KHỐI TÀI KHOẢN */}
-          <div className="flex flex-col lg:flex-row items-center gap-4 w-full lg:w-auto ml-0 lg:ml-6">
-            {!isLoggedIn ? (
-              <Link href="/login" className="px-8 h-12 flex items-center bg-primary text-white rounded-xl font-bold">Đăng nhập</Link>
-            ) : (
-              <div className="relative">
-                <button onClick={() => setShowProfileDropdown(!showProfileDropdown)} className="flex items-center gap-2.5 p-1 pr-3 rounded-full border border-slate-200 hover:bg-white shadow-sm bg-slate-50">
-                  <img src="https://placehold.co/100x100?text=A" className="size-9 rounded-full border border-slate-200" alt="Admin" />
-                  <span className="hidden xl:block font-bold text-slate-700 text-sm">{role === "HR" ? "Admin HR" : "Minh Nguyễn"}</span>
-                  <span className="material-symbols-outlined text-slate-400">expand_more</span>
-                </button>
 
-                {showProfileDropdown && (
-                  <div className="absolute right-0 mt-3 w-52 bg-white rounded-2xl shadow-2xl border border-slate-100 p-1.5 z-50">
-                    <p className="px-4 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 mb-1">{role}</p>
-                    <button className="w-full flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl font-bold text-red-500 text-sm">Đăng xuất</button>
-                  </div>
-                )}
-              </div>
-            )}
+          <div className="flex items-center gap-4 justify-end min-w-[160px]">
+          {loading ? (
+            /* Trong lúc load thì hiện Spinner nhỏ thay vì để trắng cả header */
+            <div className="size-6 border-2 border-slate-200 border-t-primary rounded-full animate-spin"></div>
+          ) : !isLoggedIn ? (
+            /* CHƯA ĐĂNG NHẬP */
+            <div className="flex items-center gap-3">
+            {/* Nút Đăng nhập giờ đã giống nút Đăng ký */}
+            <Link 
+              href="/login" 
+            className="px-6 h-12 flex items-center border-2 border-primary text-primary rounded-xl font-bold hover:bg-primary/5 transition-all"
+            >
+              Đăng nhập
+            </Link>
+
+            <Link 
+              href="/register" 
+              className="px-7 h-12 flex items-center bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+            >
+              Đăng ký
+            </Link>
           </div>
+          ) : (
+            /* ĐÃ ĐĂNG NHẬP - Box Avatar nhỏ gọn */
+            <div className="relative">
+              <button 
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="flex items-center gap-2.5 p-1 pr-3 rounded-full border border-slate-200 hover:border-primary/50 transition-all bg-white"
+              >
+                <img 
+                  src={profile?.avatar_url || "https://placehold.co/100x100?text=U"} 
+                  className="size-9 rounded-full object-cover border border-slate-100" 
+                  alt="User" 
+                />
+                <span className="hidden xl:block font-bold text-slate-700 text-sm">
+                  {profile?.full_name?.split(" ").pop() || "Thành viên"}
+                </span>
+                <span className={`material-symbols-outlined text-slate-400 text-lg transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`}>
+                  expand_more
+                </span>
+              </button>
+
+              {showProfileDropdown && (
+                <>
+                  <div className="fixed inset-0 z-0" onClick={() => setShowProfileDropdown(false)}></div>
+                  <div className="absolute right-0 mt-3 w-52 bg-white rounded-2xl shadow-2xl border border-slate-100 p-1.5 z-50">
+                    <div className="px-4 py-2 mb-1 border-b border-slate-50">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{role}</p>
+                    </div>
+                    <Link href={`/${role}/dashboard`} onClick={() => setShowProfileDropdown(false)} className="flex items-center gap-3 p-3 hover:bg-primary/5 rounded-xl transition-all font-bold text-slate-600 text-sm">
+                      <span className="material-symbols-outlined text-lg">dashboard</span> Dashboard
+                    </Link>
+                    <hr className="my-1 border-slate-50" />
+                    <button 
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl transition-all font-bold text-red-500 text-sm"
+                    >
+                      <span className="material-symbols-outlined text-lg">logout</span> Đăng xuất
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
         </div>
       </div>
     </header>
