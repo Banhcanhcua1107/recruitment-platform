@@ -1,0 +1,1965 @@
+[{
+        "id": 1,
+        "title": "Marketing Executive",
+        "company_name": "Sun Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 2,
+        "title": "Giáo viên Tiếng Anh",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 3,
+        "title": "Thực tập sinh",
+        "company_name": "Viettel",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 4,
+        "title": "Công nhân may",
+        "company_name": "VinGroup",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 5,
+        "title": "Thực tập sinh",
+        "company_name": "Lazada",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-25"
+    },
+    {
+        "id": 6,
+        "title": "Lễ tân",
+        "company_name": "Toyota",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-28"
+    },
+    {
+        "id": 7,
+        "title": "Business Analyst",
+        "company_name": "Tiki",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 8,
+        "title": "Content Writer",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Bình Dương",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 9,
+        "title": "Lễ tân",
+        "company_name": "Masan",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Cần Thơ",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 10,
+        "title": "Tài xế",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-20"
+    },
+    {
+        "id": 11,
+        "title": "Business Analyst",
+        "company_name": "Sun Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Cần Thơ",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 12,
+        "title": "Business Analyst",
+        "company_name": "Viettel",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-25"
+    },
+    {
+        "id": 13,
+        "title": "Content Writer",
+        "company_name": "Zalo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 14,
+        "title": "Kỹ sư xây dựng",
+        "company_name": "Honda",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 15,
+        "title": "Bác sĩ",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-28"
+    },
+    {
+        "id": 16,
+        "title": "Lễ tân",
+        "company_name": "Samsung",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Cần Thơ",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 17,
+        "title": "Nhân viên Sales",
+        "company_name": "VNG",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 18,
+        "title": "Tester",
+        "company_name": "Momo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Vũng Tàu",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 19,
+        "title": "Thực tập sinh",
+        "company_name": "Viettel",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Vũng Tàu",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 20,
+        "title": "Giáo viên Tiếng Anh",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 21,
+        "title": "Marketing Executive",
+        "company_name": "VNPT",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 22,
+        "title": "Designer",
+        "company_name": "Unilever",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 23,
+        "title": "Công nhân may",
+        "company_name": "Zalo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 24,
+        "title": "Bảo vệ",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 25,
+        "title": "Marketing Executive",
+        "company_name": "Zalo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 26,
+        "title": "Nhân viên Sales",
+        "company_name": "Tiki",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 27,
+        "title": "Content Writer",
+        "company_name": "Toyota",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 28,
+        "title": "Tester",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Vũng Tàu",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 29,
+        "title": "Kỹ sư xây dựng",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 30,
+        "title": "Frontend Dev",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-25"
+    },
+    {
+        "id": 31,
+        "title": "Designer",
+        "company_name": "Lazada",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 32,
+        "title": "Giáo viên Tiếng Anh",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-25"
+    },
+    {
+        "id": 33,
+        "title": "Kế toán",
+        "company_name": "Samsung",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-25"
+    },
+    {
+        "id": 34,
+        "title": "Nhân viên Sales",
+        "company_name": "Samsung",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 35,
+        "title": "Tester",
+        "company_name": "VinGroup",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-20"
+    },
+    {
+        "id": 36,
+        "title": "Tài xế",
+        "company_name": "Sun Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 37,
+        "title": "Content Writer",
+        "company_name": "Toyota",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Bình Dương",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 38,
+        "title": "Tester",
+        "company_name": "FPT",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-19"
+    },
+    {
+        "id": 39,
+        "title": "Kỹ sư xây dựng",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 40,
+        "title": "Business Analyst",
+        "company_name": "VNG",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-18"
+    },
+    {
+        "id": 41,
+        "title": "Trưởng phòng KD",
+        "company_name": "Masan",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 42,
+        "title": "Content Writer",
+        "company_name": "Masan",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-25"
+    },
+    {
+        "id": 43,
+        "title": "Lễ tân",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 44,
+        "title": "HR Manager",
+        "company_name": "Tiki",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 45,
+        "title": "Tester",
+        "company_name": "Honda",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 46,
+        "title": "Trưởng phòng KD",
+        "company_name": "Unilever",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-28"
+    },
+    {
+        "id": 47,
+        "title": "Công nhân may",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-28"
+    },
+    {
+        "id": 48,
+        "title": "Nhân viên Sales",
+        "company_name": "Momo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 49,
+        "title": "Nhân viên Sales",
+        "company_name": "VNPT",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 50,
+        "title": "Kỹ sư xây dựng",
+        "company_name": "Sun Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-20"
+    },
+    {
+        "id": 51,
+        "title": "HR Manager",
+        "company_name": "P&G",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-20"
+    },
+    {
+        "id": 52,
+        "title": "Business Analyst",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 53,
+        "title": "Nhân viên Sales",
+        "company_name": "VNPT",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Bình Dương",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 54,
+        "title": "Lễ tân",
+        "company_name": "Lazada",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Vũng Tàu",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 55,
+        "title": "Dược sĩ",
+        "company_name": "Toyota",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-25"
+    },
+    {
+        "id": 56,
+        "title": "Frontend Dev",
+        "company_name": "Unilever",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-29"
+    },
+    {
+        "id": 57,
+        "title": "Tài xế",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 58,
+        "title": "Lễ tân",
+        "company_name": "Momo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-20"
+    },
+    {
+        "id": 59,
+        "title": "Frontend Dev",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 60,
+        "title": "Dược sĩ",
+        "company_name": "VinGroup",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 61,
+        "title": "Trưởng phòng KD",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 62,
+        "title": "Dược sĩ",
+        "company_name": "Zalo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-30"
+    },
+    {
+        "id": 63,
+        "title": "Kế toán",
+        "company_name": "Sun Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-19"
+    },
+    {
+        "id": 64,
+        "title": "Business Analyst",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 65,
+        "title": "Backend Dev",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-29"
+    },
+    {
+        "id": 66,
+        "title": "Designer",
+        "company_name": "Masan",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 67,
+        "title": "Bác sĩ",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-19"
+    },
+    {
+        "id": 68,
+        "title": "Giáo viên Tiếng Anh",
+        "company_name": "Sun Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 69,
+        "title": "Thực tập sinh",
+        "company_name": "VinGroup",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Vũng Tàu",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 70,
+        "title": "Dược sĩ",
+        "company_name": "Zalo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 71,
+        "title": "Content Writer",
+        "company_name": "Samsung",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-29"
+    },
+    {
+        "id": 72,
+        "title": "Marketing Executive",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 73,
+        "title": "Frontend Dev",
+        "company_name": "P&G",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 74,
+        "title": "Trưởng phòng KD",
+        "company_name": "Techcombank",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 75,
+        "title": "Dược sĩ",
+        "company_name": "Masan",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 76,
+        "title": "Tester",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-29"
+    },
+    {
+        "id": 77,
+        "title": "Công nhân may",
+        "company_name": "Sun Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 78,
+        "title": "Backend Dev",
+        "company_name": "Zalo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 79,
+        "title": "Dược sĩ",
+        "company_name": "FPT",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Cần Thơ",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-29"
+    },
+    {
+        "id": 80,
+        "title": "Nhân viên Sales",
+        "company_name": "Toyota",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 81,
+        "title": "Thực tập sinh",
+        "company_name": "Viettel",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-28"
+    },
+    {
+        "id": 82,
+        "title": "Tài xế",
+        "company_name": "Tiki",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Vũng Tàu",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 83,
+        "title": "Lễ tân",
+        "company_name": "Momo",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 84,
+        "title": "Designer",
+        "company_name": "Masan",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 85,
+        "title": "Trưởng phòng KD",
+        "company_name": "Tiki",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Huế",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-24"
+    },
+    {
+        "id": 86,
+        "title": "Content Writer",
+        "company_name": "Tiki",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-28"
+    },
+    {
+        "id": 87,
+        "title": "Bác sĩ",
+        "company_name": "Masan",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 88,
+        "title": "Thực tập sinh",
+        "company_name": "Honda",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 89,
+        "title": "Frontend Dev",
+        "company_name": "Shopee",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-21"
+    },
+    {
+        "id": 90,
+        "title": "Lễ tân",
+        "company_name": "FPT",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8-12 triệu",
+        "location": "Remote",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 91,
+        "title": "Tester",
+        "company_name": "FPT",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Hải Phòng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-27"
+    },
+    {
+        "id": 92,
+        "title": "Tài xế",
+        "company_name": "Toyota",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15-20 triệu",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 93,
+        "title": "Bác sĩ",
+        "company_name": "Viettel",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20-30 triệu",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-20"
+    },
+    {
+        "id": 94,
+        "title": "Bảo vệ",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10-15 triệu",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-19"
+    },
+    {
+        "id": 95,
+        "title": "Công nhân may",
+        "company_name": "Acecook",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-22"
+    },
+    {
+        "id": 96,
+        "title": "Nhân viên Sales",
+        "company_name": "P&G",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 1000 USD",
+        "location": "Bình Dương",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-19"
+    },
+    {
+        "id": 97,
+        "title": "Content Writer",
+        "company_name": "Thế Giới Di Động",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-26"
+    },
+    {
+        "id": 98,
+        "title": "Dược sĩ",
+        "company_name": "P&G",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Cần Thơ",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-23"
+    },
+    {
+        "id": 99,
+        "title": "HR Manager",
+        "company_name": "P&G",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Up to 2000$",
+        "location": "Hà Nội",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-19"
+    },
+    {
+        "id": 100,
+        "title": "Lễ tân",
+        "company_name": "Tiki",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Cạnh tranh",
+        "location": "Nha Trang",
+        "requirements": [
+            "Kinh nghiệm từ 1 năm trở lên",
+            "Có trách nhiệm với công việc",
+            "Kỹ năng giao tiếp tốt"
+        ],
+        "posted_date": "2026-01-20"
+    },
+    {
+        "id": 101,
+        "title": "Senior Frontend Developer (ReactJS)",
+        "company_name": "VinTech Solutions",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "30.000.000 - 50.000.000 VND",
+        "location": "Quận 1, TP. Hồ Chí Minh",
+        "requirements": [
+            "3+ năm kinh nghiệm ReactJS",
+            "Thành thạo Redux, Webpack",
+            "Tiếng Anh giao tiếp tốt"
+        ],
+        "posted_date": "2023-10-25"
+    },
+    {
+        "id": 102,
+        "title": "Nhân Viên Kinh Doanh Bất Động Sản",
+        "company_name": "Sun Group Realty",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10.000.000 VND + Hoa hồng",
+        "location": "Cầu Giấy, Hà Nội",
+        "requirements": [
+            "Đam mê kinh doanh",
+            "Kỹ năng giao tiếp tốt",
+            "Không yêu cầu kinh nghiệm"
+        ],
+        "posted_date": "2023-10-26"
+    },
+    {
+        "id": 103,
+        "title": "Kế Toán Tổng Hợp",
+        "company_name": "Công ty CP Thực Phẩm Á Châu",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "12.000.000 - 15.000.000 VND",
+        "location": "Hải Châu, Đà Nẵng",
+        "requirements": [
+            "Tốt nghiệp Đại học chuyên ngành Tài chính - Kế toán",
+            "Có chứng chỉ kế toán trưởng là lợi thế",
+            "Thành thạo Excel, phần mềm MISA"
+        ],
+        "posted_date": "2023-10-24"
+    },
+    {
+        "id": 104,
+        "title": "Digital Marketing Executive",
+        "company_name": "Agency Sáng Tạo VietAd",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15.000.000 - 20.000.000 VND",
+        "location": "Bình Thạnh, TP. Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm chạy Facebook Ads, Google Ads",
+            "Tư duy sáng tạo nội dung",
+            "Biết thiết kế cơ bản là điểm cộng"
+        ],
+        "posted_date": "2023-10-27"
+    },
+    {
+        "id": 105,
+        "title": "Kỹ Sư Xây Dựng Dân Dụng",
+        "company_name": "Tổng Công ty Xây Dựng Hòa Bình",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Thỏa thuận",
+        "location": "Thủ Đức, TP. Hồ Chí Minh",
+        "requirements": [
+            "Tốt nghiệp ĐH Xây dựng",
+            "Biết sử dụng AutoCAD, Revit",
+            "Chấp nhận đi công tác xa"
+        ],
+        "posted_date": "2023-10-20"
+    },
+    {
+        "id": 106,
+        "title": "Chuyên Viên Tuyển Dụng (HR Recruiter)",
+        "company_name": "TopCV Vietnam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "10.000.000 - 18.000.000 VND",
+        "location": "Thanh Xuân, Hà Nội",
+        "requirements": [
+            "Kỹ năng phỏng vấn, đánh giá ứng viên",
+            "Có network rộng trong ngành IT",
+            "Nhanh nhẹn, chịu được áp lực KPI"
+        ],
+        "posted_date": "2023-10-28"
+    },
+    {
+        "id": 107,
+        "title": "Nhân Viên Phục Vụ / Barista",
+        "company_name": "Chuỗi The Coffee House",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "25.000 - 30.000 VND/giờ",
+        "location": "Ninh Kiều, Cần Thơ",
+        "requirements": [
+            "Vui vẻ, hoạt bát",
+            "Có thể làm việc xoay ca",
+            "Trung thực, trách nhiệm"
+        ],
+        "posted_date": "2023-10-29"
+    },
+    {
+        "id": 108,
+        "title": "Trưởng Phòng Kinh Doanh (Sales Manager)",
+        "company_name": "Tập đoàn Bảo Hiểm Manulife",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "40.000.000 VND + Bonus",
+        "location": "Quận 3, TP. Hồ Chí Minh",
+        "requirements": [
+            "5 năm kinh nghiệm quản lý đội nhóm",
+            "Kỹ năng đào tạo nhân sự",
+            "Tư duy chiến lược kinh doanh"
+        ],
+        "posted_date": "2023-10-22"
+    },
+    {
+        "id": 109,
+        "title": "Graphic Designer 2D",
+        "company_name": "Shopee Vietnam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "18.000.000 - 25.000.000 VND",
+        "location": "Ba Đình, Hà Nội",
+        "requirements": [
+            "Thành thạo Adobe Creative Suite",
+            "Có Portfolio ấn tượng",
+            "Có kinh nghiệm làm việc trong môi trường E-commerce"
+        ],
+        "posted_date": "2023-10-25"
+    },
+    {
+        "id": 110,
+        "title": "Tài Xế Xe Tải Hạng C",
+        "company_name": "Giao Hàng Tiết Kiệm",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "12.000.000 - 16.000.000 VND",
+        "location": "Biên Hòa, Đồng Nai",
+        "requirements": [
+            "Có bằng lái hạng C trở lên",
+            "Rành đường khu vực miền Nam",
+            "Sức khỏe tốt"
+        ],
+        "posted_date": "2023-10-23"
+    },
+    {
+        "id": 111,
+        "title": "Backend Developer (Golang/Java)",
+        "company_name": "Zalo Group",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "2.000 - 4.000 USD",
+        "location": "Quận 7, TP. Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm thiết kế hệ thống chịu tải cao",
+            "Thành thạo Microservices",
+            "Tư duy logic tốt"
+        ],
+        "posted_date": "2023-10-26"
+    },
+    {
+        "id": 112,
+        "title": "Dược Sĩ Bán Thuốc",
+        "company_name": "Nhà Thuốc Long Châu",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8.000.000 - 12.000.000 VND",
+        "location": "Nha Trang, Khánh Hòa",
+        "requirements": [
+            "Tốt nghiệp Trung cấp Dược trở lên",
+            "Cẩn thận, trung thực",
+            "Kỹ năng tư vấn khách hàng"
+        ],
+        "posted_date": "2023-10-21"
+    },
+    {
+        "id": 113,
+        "title": "Giáo Viên Tiếng Anh (IELTS)",
+        "company_name": "Trung Tâm Anh Ngữ VUS",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "200.000 - 500.000 VND/giờ",
+        "location": "Quận 10, TP. Hồ Chí Minh",
+        "requirements": [
+            "IELTS 8.0 trở lên",
+            "Có chứng chỉ giảng dạy TESOL/CELTA",
+            "Yêu thích trẻ em"
+        ],
+        "posted_date": "2023-10-27"
+    },
+    {
+        "id": 114,
+        "title": "Công Nhân May Mặc",
+        "company_name": "May Việt Tiến",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "7.000.000 - 10.000.000 VND",
+        "location": "Tân Bình, TP. Hồ Chí Minh",
+        "requirements": [
+            "Biết sử dụng máy may công nghiệp",
+            "Chăm chỉ, cần cù",
+            "Không yêu cầu bằng cấp"
+        ],
+        "posted_date": "2023-10-28"
+    },
+    {
+        "id": 115,
+        "title": "Content Creator (TikTok/Youtube)",
+        "company_name": "Metub Network",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15.000.000 - 25.000.000 VND",
+        "location": "Đống Đa, Hà Nội",
+        "requirements": [
+            "Có khả năng biên tập video cơ bản",
+            "Nắm bắt xu hướng nhanh",
+            "Ngoại hình ưa nhìn là lợi thế"
+        ],
+        "posted_date": "2023-10-24"
+    },
+    {
+        "id": 116,
+        "title": "Biên Phiên Dịch Tiếng Nhật (N2)",
+        "company_name": "FPT Software",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "15.000.000 - 22.000.000 VND",
+        "location": "Hòa Lạc, Hà Nội",
+        "requirements": [
+            "Tiếng Nhật N2 trở lên",
+            "Kỹ năng dịch thuật văn bản kỹ thuật",
+            "Giao tiếp tốt"
+        ],
+        "posted_date": "2023-10-29"
+    },
+    {
+        "id": 117,
+        "title": "Bếp Trưởng (Head Chef)",
+        "company_name": "Khách sạn Sheraton",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Trên 40.000.000 VND",
+        "location": "Quận 1, TP. Hồ Chí Minh",
+        "requirements": [
+            "Kinh nghiệm 10 năm trong ngành F&B",
+            "Chuyên món Âu",
+            "Kỹ năng quản lý bếp"
+        ],
+        "posted_date": "2023-10-20"
+    },
+    {
+        "id": 118,
+        "title": "Nhân Viên Chăm Sóc Khách Hàng",
+        "company_name": "Viettel Telecom",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "8.000.000 - 10.000.000 VND",
+        "location": "Thanh Khê, Đà Nẵng",
+        "requirements": [
+            "Giọng nói chuẩn, dễ nghe",
+            "Kiên nhẫn, lắng nghe khách hàng",
+            "Làm việc theo ca"
+        ],
+        "posted_date": "2023-10-28"
+    },
+    {
+        "id": 119,
+        "title": "Kỹ Sư Điện - Tự Động Hóa",
+        "company_name": "VinFast",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "20.000.000 - 30.000.000 VND",
+        "location": "Cát Hải, Hải Phòng",
+        "requirements": [
+            "Tốt nghiệp ĐH Bách Khoa",
+            "Thành thạo PLC, SCADA",
+            "Tiếng Anh đọc hiểu tài liệu"
+        ],
+        "posted_date": "2023-10-25"
+    },
+    {
+        "id": 120,
+        "title": "Thực Tập Sinh Marketing (Intern)",
+        "company_name": "Lazada Vietnam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "3.000.000 - 5.000.000 VND (Hỗ trợ)",
+        "location": "Bình Thạnh, TP. Hồ Chí Minh",
+        "requirements": [
+            "Sinh viên năm cuối chuyên ngành Marketing",
+            "Có laptop cá nhân",
+            "Chủ động học hỏi"
+        ],
+        "posted_date": "2023-10-30"
+    },
+    {
+        "id": 121,
+        "title": "Phó Phòng Phát Triển Sản Phẩm Vay Thế Chấp - Secured Loan Deputy Manager (Mới)",
+        "company_name": "Công Ty Tài Chính Mirae Asset (Việt Nam)",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 122,
+        "title": "SALES MANAGER / ASSISTANT MANAGER - Citadines Central Binh Duong (Mới)",
+        "company_name": "SOMERSET SERVICED RESIDENCE",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Bình Dương Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 31-03-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 123,
+        "title": "Điều Dưỡng (Mới)",
+        "company_name": "CÔNG TY TNHH DOHYUN BEAUTY CENTER",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: 10 Tr - 20 Tr VND",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 31-03-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 124,
+        "title": "Kỹ Sư Thiết Kế Hệ Thống Lạnh Công Nghiệp (Mới)",
+        "company_name": "Công ty TNHH Thiết bị lạnh và Cách nhiệt TST",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 125,
+        "title": "Logistics - Equipment Control Staff - HoChiMinh Office (Mới)",
+        "company_name": "EVERGREEN SHIPPING AGENCY (VIETNAM) CO., LTD",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 126,
+        "title": "Trợ lý Giám đốc Kinh doanh - Tiếng Trung (Mới)",
+        "company_name": "Green Asia Food Việt Nam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: 14 Tr - 22 Tr VND",
+        "location": "Hà Nội",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 127,
+        "title": "QA/QC (Mới)",
+        "company_name": "Seditex Vietnam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 128,
+        "title": "Senior Application Engineer cum Site Engineer (Mới)",
+        "company_name": "Toan Thang Engineering Corporation",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: 15 Tr - 36 Tr VND",
+        "location": "Hà Nội Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 31-03-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 129,
+        "title": "Business Development Staff (Mới)",
+        "company_name": "Công ty TNHH Olam Việt Nam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Đồng Nai",
+        "requirements": [
+            "Education: Bachelor's degree (preferred) in Business, Food science, Agriculture, IMEX or a related field;",
+            "Experience: 1-2 years of professional experience, ideally in Sales, Customer service, Food industry, FMCG. Recent graduates are encouraged to apply;",
+            "Communication Skills: Good verbal and written communication skills with the ability to articulate our value proposition clearly and persuasively;",
+            "Drive & Persistence: Highly self-motivated, persistent, innovation and competitive with a strong desire to learn and succeed in a fast-paced environment;",
+            "Organizational Skills: time management and organizational skills with the ability to manage multiple tasks simultaneously;",
+            "Location: Phuoc Tan ward, Dong Nai province.",
+            "Willing to work in Dong Nai."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 130,
+        "title": "Trưởng Phòng Thu Mua (Mới)",
+        "company_name": "CÔNG TY CỔ PHẦN THẾ THẢO PHARMA",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: 16 Tr - 22 Tr VND",
+        "location": "Hà Nội",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 131,
+        "title": "Trưởng Phòng Kinh Doanh (Mới)",
+        "company_name": "CÔNG TY CỔ PHẦN THẾ THẢO PHARMA",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: 25 Tr - 60 Tr VND",
+        "location": "Hà Nội",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 132,
+        "title": "Nhân Viên Kinh Doanh Phân Phối Mỹ Phẩm – Hàng Tiêu Dùng (Mới)",
+        "company_name": "CÔNG TY TNHH ARATA VIỆT NAM",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: 10 Tr - 20 Tr VND",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 133,
+        "title": "[Hà Nội] Pull Sales Manager (Mới)",
+        "company_name": "Saint-Gobain Vietnam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hà Nội",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 10-03-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 134,
+        "title": "Nhân viên kinh doanh Vật liệu xây dựng/ Bán hàng kỹ thuật (lương cứng upto 20 triệu) (Mới)",
+        "company_name": "Công Ty Cổ Phần MC-Bifi Bauchemie",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hà Nội Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 01-03-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 135,
+        "title": "Chuyên viên chính sách và giám sát tài sản đảm bảo, Phòng chính sách và giám sát tài sản đảm bảo, Khối Tái thẩm và phê duyệt (Mới)",
+        "company_name": "Ngân hàng TMCP Đại Chúng Việt Nam - PVcomBank",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hà Nội KV Bắc Trung Bộ",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 28-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 136,
+        "title": "Junior BIM Engineer (Mới)",
+        "company_name": "Công Ty TNHH gbc engineers Vietnam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Đà Nẵng",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 31-03-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 137,
+        "title": "Application Manager (Mới)",
+        "company_name": "Công Ty Cổ Phần Vacxin Việt Nam",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hồ Chí Minh",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 02-04-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 138,
+        "title": "CVC CVCC Bán Sản Phẩm Cho Vay (Thế chấp)",
+        "company_name": "Ngân Hàng TMCP Việt Nam Thịnh Vượng - VPBANK",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hồ Chí Minh Đà Nẵng Quảng Trị",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 22-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 139,
+        "title": "CVC/CVCC Quan Hệ Khách Hàng Ưu Tiên",
+        "company_name": "Ngân Hàng TMCP Việt Nam Thịnh Vượng - VPBANK",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hồ Chí Minh Đà Nẵng Thừa Thiên- Huế",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 22-02-2026Cập nhật:30-01-2026"
+    },
+    {
+        "id": 140,
+        "title": "Chuyên gia/CVCC Chiến lược rủi ro tích hợp - ID397",
+        "company_name": "Ngân Hàng TMCP Việt Nam Thịnh Vượng - VPBANK",
+        "logo_url": "https://via.placeholder.com/150",
+        "salary": "Lương: Cạnh tranh",
+        "location": "Hà Nội",
+        "requirements": [
+            "Có kinh nghiệm làm việc ở vị trí tương đương.",
+            "Chủ động, nhiệt tình trong công việc.",
+            "Kỹ năng giao tiếp và làm việc nhóm tốt."
+        ],
+        "posted_date": "Hạn nộp: 23-02-2026Cập nhật:30-01-2026"
+    }
+]
