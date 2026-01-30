@@ -1,62 +1,61 @@
-import jobs from "@/data/jobs.json";
+import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
 
-type Job = {
-  id: number;
-  title: string;
-  company_name: string;
-  logo_url: string;
-  salary: string;
-  location: string;
-  requirements: string[];
-  posted_date: string;
-};
-
-function toInt(v: string | null, fallback: number) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 export async function GET(req: Request) {
+  const supabase = await createClient(); // Đảm bảo có await cho Next.js 15
   const { searchParams } = new URL(req.url);
 
-  const q = (searchParams.get("q") || "").toLowerCase().trim();
-  const location = (searchParams.get("location") || "").toLowerCase().trim();
-  const company = (searchParams.get("company") || "").toLowerCase().trim();
+  // Lấy các tham số lọc từ URL
+  const q = searchParams.get("q") || "";
+  const location = searchParams.get("location") || "";
+  const company = searchParams.get("company") || "";
+  const page = Math.max(1, Number(searchParams.get("page") || 1));
+  const limit = Math.min(50, Number(searchParams.get("limit") || 10));
+  const sort = searchParams.get("sort") || "newest";
 
-  const page = Math.max(1, toInt(searchParams.get("page"), 1));
-  const limit = Math.min(50, Math.max(1, toInt(searchParams.get("limit"), 12)));
-  const sort = (searchParams.get("sort") || "newest").toLowerCase(); // newest | oldest
+  // Tạo query cơ bản
+  let query = supabase
+    .from("jobs")
+    .select("*", { count: "exact" });
 
-  let data = (jobs as Job[]).slice();
-
-  // filter
+  // 1. Lọc theo từ khóa (Tiêu đề hoặc Mô tả)
   if (q) {
-    data = data.filter((j) => {
-      const hay = `${j.title} ${j.company_name} ${j.salary} ${j.location} ${j.requirements.join(" ")}`.toLowerCase();
-      return hay.includes(q);
-    });
+    query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
   }
-  if (location) data = data.filter((j) => j.location.toLowerCase().includes(location));
-  if (company) data = data.filter((j) => j.company_name.toLowerCase().includes(company));
 
-  // sort by posted_date
-  data.sort((a, b) => {
-    const da = new Date(a.posted_date).getTime();
-    const db = new Date(b.posted_date).getTime();
-    return sort === "oldest" ? da - db : db - da;
-  });
+  // 2. Lọc theo Địa điểm
+  if (location) {
+    query = query.ilike("location", `%${location}%`);
+  }
 
-  // paginate
-  const total = data.length;
-  const start = (page - 1) * limit;
-  const items = data.slice(start, start + limit);
+  // 3. Lọc theo Công ty
+  if (company) {
+    query = query.ilike("company_name", `%${company}%`);
+  }
+
+  // 4. Sắp xếp
+  if (sort === "newest") {
+    query = query.order("posted_date", { ascending: false });
+  } else {
+    query = query.order("posted_date", { ascending: true });
+  }
+
+  // 5. Phân trang (Pagination)
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+  query = query.range(from, to);
+
+  const { data, count, error } = await query;
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({
     page,
     limit,
-    total,
-    totalPages: Math.ceil(total / limit),
-    items,
+    total: count,
+    totalPages: Math.ceil((count || 0) / limit),
+    items: data,
   });
 }

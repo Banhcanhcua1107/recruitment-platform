@@ -42,7 +42,7 @@ export default function Navbar() {
         
         {/* LOGO */}
         <Link href="/" className="flex items-center gap-4 z-50">
-          <div className="size-10 lg:size-14 flex items-center justify-center">
+          <div className="size-10 lg:size-10 flex items-center justify-center">
             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain scale-150" />
           </div>
           <h2 className="text-slate-900 text-2xl lg:text-3xl font-black tracking-tighter">TalentFlow</h2>
