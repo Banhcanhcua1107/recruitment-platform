@@ -1,11 +1,10 @@
 "use client";
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation"; // Thêm router để chuyển trang
 import { createClient } from "@/utils/supabase/client";
+import { signup } from "@/app/(auth)/actions";
 
 export default function RegisterPage() {
-  const router = useRouter();
   const supabase = createClient();
 
   // 1. Quản lý trạng thái
@@ -14,30 +13,24 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [role, setRole] = useState("candidate"); 
 
-  // 2. Quản lý dữ liệu form
-  const [fullname, setFullname] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-
-  // 3. Xử lý Đăng ký bằng Google
+  // 2. Google Register
   const handleGoogleRegister = async () => {
-    // Lưu role vào localStorage để sau khi Google callback về, 
-    // trang chọn role hoặc API sẽ biết user này muốn làm gì.
-    localStorage.setItem("pending_role", role);
-    
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
   };
 
-  // 4. Xử lý Đăng ký bằng Email
-  const handleEmailRegister = async (e: React.FormEvent) => {
+  // 3. Xử lý Đăng ký bằng Email
+  const handleEmailRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
+    const formData = new FormData(e.currentTarget);
+    const password = formData.get("password") as string;
+    const confirmPassword = formData.get("confirmPassword") as string;
+
     if (password !== confirmPassword) {
       alert("Mật khẩu nhập lại không khớp!");
       return;
@@ -45,27 +38,16 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    // signUp sẽ tạo user trong Auth, và Trigger SQL sẽ tự copy sang bảng profiles
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullname, // Key này phải khớp với Trigger SQL
-          role: role,          // Key này phải khớp với Trigger SQL
-        },
-      },
-    });
+    // Mặc định signup action đã handle việc tạo profile với role
+    // Chúng ta cần append role vào formData (vì input role là state button, không phải hidden input form chuẩn)
+    formData.append("role", role);
 
-    if (error) {
-      alert("Lỗi: " + error.message);
-    } else {
-      if (data.user?.identities?.length === 0) {
-        alert("Email này đã được đăng ký trước đó.");
-      } else {
-        alert("Đăng ký thành công! Vui lòng kiểm tra email để xác nhận.");
-        router.push("/login");
-      }
+    const result = await signup(formData);
+
+    if (result?.error) {
+       alert("Lỗi: " + result.error);
+    } else if (result?.success) {
+       alert(result.success);
     }
     setLoading(false);
   };
@@ -105,9 +87,9 @@ export default function RegisterPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setRole("hr")}
+                onClick={() => setRole("employer")}
                 className={`py-5 rounded-[24px] font-black text-[17px] border-2 transition-all flex flex-col items-center gap-2 ${
-                  role === "hr" ? "border-primary bg-primary/5 text-primary shadow-lg" : "border-slate-100 bg-slate-50 text-slate-400"
+                  role === "employer" ? "border-primary bg-primary/5 text-primary shadow-lg" : "border-slate-100 bg-slate-50 text-slate-400"
                 }`}
               >
                 <span className="material-symbols-outlined text-3xl">corporate_fare</span> Nhà tuyển dụng
@@ -118,8 +100,7 @@ export default function RegisterPage() {
             <div className="space-y-2.5">
               <label htmlFor="fullname" className="block text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Họ và tên</label>
               <input 
-                id="fullname" type="text" required placeholder="Nguyễn Văn A" 
-                value={fullname} onChange={(e) => setFullname(e.target.value)}
+                id="fullname" name="fullName" type="text" required placeholder="Nguyễn Văn A" 
                 className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 py-4 px-6 text-lg font-bold focus:ring-2 focus:ring-primary focus:bg-white outline-none transition-all shadow-sm" 
               />
             </div>
@@ -128,8 +109,7 @@ export default function RegisterPage() {
             <div className="space-y-2.5">
               <label htmlFor="email" className="block text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Địa chỉ Email</label>
               <input 
-                id="email" type="email" required placeholder="vidu@gmail.com" 
-                value={email} onChange={(e) => setEmail(e.target.value)}
+                id="email" name="email" type="email" required placeholder="vidu@gmail.com" 
                 className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 py-4 px-6 text-lg font-bold focus:ring-2 focus:ring-primary focus:bg-white outline-none transition-all shadow-sm" 
               />
             </div>
@@ -139,8 +119,7 @@ export default function RegisterPage() {
               <label htmlFor="password" className="block text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Mật khẩu</label>
               <div className="relative">
                 <input 
-                  id="password" type={showPassword ? "text" : "password"} required placeholder="Tối thiểu 8 ký tự" 
-                  value={password} onChange={(e) => setPassword(e.target.value)}
+                  id="password" name="password" type={showPassword ? "text" : "password"} required placeholder="Tối thiểu 8 ký tự" 
                   className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 py-4.5 px-6 text-lg font-bold focus:ring-2 focus:ring-primary focus:bg-white outline-none transition-all shadow-sm" 
                 />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors">
@@ -154,8 +133,7 @@ export default function RegisterPage() {
               <label htmlFor="confirmPassword" className="block text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Xác nhận mật khẩu</label>
               <div className="relative">
                 <input 
-                  id="confirmPassword" type={showConfirmPassword ? "text" : "password"} required placeholder="Nhập lại mật khẩu" 
-                  value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                  id="confirmPassword" name="confirmPassword" type={showConfirmPassword ? "text" : "password"} required placeholder="Nhập lại mật khẩu" 
                   className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 py-4.5 px-6 text-lg font-bold focus:ring-2 focus:ring-primary focus:bg-white outline-none transition-all shadow-sm" 
                 />
                 <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors">
@@ -192,7 +170,32 @@ export default function RegisterPage() {
 
       {/* PHẦN BÊN PHẢI GIỮ NGUYÊN... */}
       <div className="hidden lg:block relative flex-1 bg-slate-100">
-         {/* Giữ nguyên code ảnh và quote từ file cũ của bạn */}
+         <img 
+          src="https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=2070&auto=format&fit=crop" 
+          className="absolute inset-0 w-full h-full object-cover" 
+          alt="Office space"
+        />
+        {/* Navy Blue Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-primary/90 via-primary/20 to-transparent"></div>
+        
+        {/* Nội dung bên trong ảnh */}
+        <div className="absolute bottom-20 left-20 text-white max-w-xl">
+          <div className="flex gap-1 mb-6 text-yellow-400">
+             {[...Array(5)].map((_, i) => <span key={i} className="material-symbols-outlined filled text-3xl">star</span>)}
+          </div>
+          <blockquote className="text-4xl font-black leading-[1.2] mb-10 tracking-tight">
+            &quot;TalentFlow không chỉ giúp tôi tìm thấy công việc, mà còn giúp tôi xây dựng một hồ sơ chuyên nghiệp để tự tin tỏa sáng.&quot;
+          </blockquote>
+          <div className="flex items-center gap-5 bg-white/10 backdrop-blur-md p-5 rounded-[24px] border border-white/20">
+            <div className="h-16 w-16 rounded-2xl border-2 border-white overflow-hidden shadow-lg shrink-0">
+                <img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=1976" className="w-full h-full object-cover" alt="User" />
+            </div>
+            <div>
+                <p className="text-xl font-black tracking-tight">Nguyễn Thị Thu Hà</p>
+                <p className="text-white/70 font-bold text-base italic uppercase tracking-wider">HR Manager @ TechCorp</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

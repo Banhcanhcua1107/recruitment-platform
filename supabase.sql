@@ -3,14 +3,16 @@
 CREATE TYPE user_role AS ENUM ('candidate', 'hr');
 
 -- 2. Tạo bảng profiles (Hồ sơ người dùng)
-CREATE TABLE profiles (
-  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
-  full_name TEXT,
-  email TEXT,
-  avatar_url TEXT,
-  role user_role DEFAULT 'candidate',
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
-);
+create table public.profiles (
+  id uuid not null,
+  full_name text null,
+  email text null,
+  avatar_url text null,
+  role public.user_role null default 'candidate'::user_role,
+  updated_at timestamp with time zone null default timezone ('utc'::text, now()),
+  constraint profiles_pkey primary key (id),
+  constraint profiles_id_fkey foreign KEY (id) references auth.users (id) on delete CASCADE
+) TABLESPACE pg_default;
 
 -- 3. Bật Row Level Security (RLS) để bảo mật
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

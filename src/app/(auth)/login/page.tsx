@@ -2,29 +2,36 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import { login } from "@/app/(auth)/actions";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
 
-  // 1. Xử lý Đăng nhập bằng Google
+  // 1. Google Login
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
   };
 
   // 2. Xử lý Đăng nhập bằng Email/Password
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleEmailLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
-    // Logic Supabase signIn sẽ được thực hiện ở đây
-    alert("Hệ thống đang kết nối Database để kiểm tra thông tin...");
-    setLoading(false);
+
+    const formData = new FormData(e.currentTarget);
+    const result = await login(formData);
+
+    if (result?.error) {
+       alert("Đăng nhập thất bại: " + result.error);
+       setLoading(false);
+    }
+    // Thành công sẽ tự redirect trong server action
   };
 
   return (
@@ -64,6 +71,7 @@ export default function LoginPage() {
               <label htmlFor="email" className="block text-sm font-black text-slate-400 uppercase tracking-widest ml-1">Địa chỉ Email</label>
               <input 
                 id="email"
+                name="email"
                 type="email" 
                 required
                 placeholder="vidu@gmail.com" 
@@ -80,6 +88,7 @@ export default function LoginPage() {
               <div className="relative">
                 <input 
                   id="password"
+                  name="password"
                   type={showPassword ? "text" : "password"} 
                   required
                   placeholder="••••••••" 
@@ -148,7 +157,7 @@ export default function LoginPage() {
              {[...Array(5)].map((_, i) => <span key={i} className="material-symbols-outlined filled text-3xl">star</span>)}
           </div>
           <blockquote className="text-4xl font-black leading-[1.2] mb-10 tracking-tight">
-            "TalentFlow không chỉ giúp tôi tìm thấy công việc, mà còn giúp tôi xây dựng một hồ sơ chuyên nghiệp để tự tin tỏa sáng."
+            &quot;TalentFlow không chỉ giúp tôi tìm thấy công việc, mà còn giúp tôi xây dựng một hồ sơ chuyên nghiệp để tự tin tỏa sáng.&quot;
           </blockquote>
           <div className="flex items-center gap-5 bg-white/10 backdrop-blur-md p-5 rounded-[24px] border border-white/20">
             <div className="h-16 w-16 rounded-2xl border-2 border-white overflow-hidden shadow-lg shrink-0">

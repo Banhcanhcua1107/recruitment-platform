@@ -25,12 +25,12 @@ export async function GET(req: Request) {
 
   // 2. Lọc theo Địa điểm
   if (location) {
-    query = query.ilike("location", `%${location}%`);
+    query = query.filter("location", "ilike", `%${location}%`);
   }
 
   // 3. Lọc theo Công ty
   if (company) {
-    query = query.ilike("company_name", `%${company}%`);
+    query = query.filter("company_name", "ilike", `%${company}%`);
   }
 
   // 4. Sắp xếp

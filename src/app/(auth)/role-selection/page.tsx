@@ -1,37 +1,25 @@
 "use client";
 import React, { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { updateRole } from "@/app/(auth)/actions";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 export default function RoleSelectionPage() {
-  const [role, setRole] = useState<"candidate" | "hr">("candidate");
+  const [role, setRole] = useState<"candidate" | "employer">("candidate");
   const [loading, setLoading] = useState(false);
-  const supabase = createClient();
   const router = useRouter();
+  const supabase = createClient();
 
   const handleConfirm = async () => {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (user) {
-      // Sử dụng Upsert: Nếu chưa có profile (do lỗi trigger) thì tạo mới, nếu có rồi thì update
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({ 
-            id: user.id, 
-            role: role,
-            email: user.email, // Cập nhật email luôn cho chắc
-            full_name: user.user_metadata?.full_name // Cố gắng lấy tên
-        });
-
-      if (!error) {
-        router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
-      } else {
-        alert("Có lỗi xảy ra, vui lòng thử lại!");
-      }
+    // Use Server Action for strict flow
+    const result = await updateRole(role);
+    
+    if (result?.error) {
+        alert(result.error);
+        setLoading(false);
     }
-    setLoading(false);
+    // Success redirect is handled by action
   };
 
   const handleLogout = async () => {
@@ -101,22 +89,22 @@ export default function RoleSelectionPage() {
 
         {/* Card: Employer */}
         <div 
-          onClick={() => setRole("hr")}
+          onClick={() => setRole("employer")}
           className={`group relative overflow-hidden p-8 rounded-[32px] cursor-pointer border-2 transition-all duration-300 flex flex-col items-center text-center ${
-            role === "hr" 
+            role === "employer" 
             ? "border-indigo-600 bg-white shadow-2xl shadow-indigo-900/10 scale-[1.02]" 
             : "border-white bg-white/60 hover:bg-white hover:border-indigo-200 hover:shadow-xl hover:shadow-indigo-900/5 hover:scale-[1.01]"
           }`}
         >
           {/* Active Indicator */}
           <div className={`absolute top-6 right-6 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${
-            role === "hr" ? "border-indigo-600 bg-indigo-600" : "border-slate-300"
+            role === "employer" ? "border-indigo-600 bg-indigo-600" : "border-slate-300"
           }`}>
-            {role === "hr" && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
+            {role === "employer" && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
           </div>
 
           <div className={`w-24 h-24 rounded-3xl flex items-center justify-center mb-6 transition-colors ${
-            role === "hr" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600"
+            role === "employer" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600"
           }`}>
              <span className="material-symbols-outlined text-5xl">corporate_fare</span>
           </div>
@@ -127,7 +115,7 @@ export default function RoleSelectionPage() {
           </p>
 
           <div className={`mt-8 px-6 py-3 rounded-xl font-bold text-sm transition-all ${
-            role === "hr" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+            role === "employer" ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
           }`}>
             Chọn Nhà tuyển dụng
           </div>
