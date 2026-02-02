@@ -57,15 +57,15 @@ export async function signup(formData: FormData) {
   }
 
   // Manual Profile Creation (Critical requirement)
+  // Manual Profile Creation (Critical requirement)
   if (data.user) {
-    const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-            id: data.user.id,
-            email: email,
-            full_name: fullName,
-            role: role
-        })
+    // Use RPC to bypass RLS issues when session is not yet active (e.g. email needs confirmation)
+    const { error: profileError } = await supabase.rpc('create_profile_for_user', {
+        _id: data.user.id,
+        _email: email,
+        _full_name: fullName,
+        _role: role
+    })
     
     // Log error but generally we proceed if auth succeeded. 
     // Ideally we should handle this gracefully.
@@ -77,13 +77,31 @@ export async function signup(formData: FormData) {
 
   // Redirect to Home is implicit success for direct login-after-signup
   // If email confirmation is off, this works. If on, user sees checking email.
-  // Assuming auto-confirm or session exists.
   if (data.session) {
     revalidatePath('/', 'layout')
     redirect('/')
   }
 
-  return { success: 'Check your email to confirm your account.' }
+  // Return success to frontend to trigger OTP Step
+  return { success: true, email: email }
+}
+
+// 5. VERIFY OTP
+export async function verifyOtp(email: string, token: string) {
+    const supabase = await createClient()
+    const { error: verifyError, data } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'signup'
+    })
+
+    if (verifyError) {
+        return { error: verifyError.message }
+    }
+
+    // Success -> Redirect Home
+    revalidatePath('/', 'layout')
+    redirect('/')
 }
 
 // 3. UPDATE ROLE (For /role-selection)

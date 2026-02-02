@@ -1,19 +1,26 @@
-import jobs from "@/data/jobs.json";
+import { createClient } from "@/utils/supabase/server";
 import { NextResponse, NextRequest } from "next/server";
 
 export async function GET(
   _: NextRequest,
-  ctx: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> } // Fix type signature for Next.js 15
 ) {
-  const params = await ctx.params;
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ message: "Invalid id" }, { status: 400 });
+  const { id } = await params;
+  const supabase = await createClient();
+
+  // Validate ID (Supabase id is bigint, user passes string number)
+  if (!id) {
+      return NextResponse.json({ message: "Invalid ID" }, { status: 400 });
   }
 
-  const job = (jobs as any[]).find((j) => j.id === id);
-  if (!job) {
-    return NextResponse.json({ message: "Not found" }, { status: 404 });
+  const { data: job, error } = await supabase
+    .from("jobs")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !job) {
+    return NextResponse.json({ message: "Job not found" }, { status: 404 });
   }
 
   return NextResponse.json(job);

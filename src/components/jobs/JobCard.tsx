@@ -47,16 +47,16 @@ export default function JobCard({
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-3 mb-3">
           <div>
             {/* Click vào tiêu đề để xem chi tiết */}
-            <Link href={`/jobs/${id}`}>
-              <h3 className="font-black text-xl lg:text-2xl text-slate-900 group-hover:text-primary transition-colors truncate tracking-tight cursor-pointer">
+            <Link href={`/jobs/${id}`} className="block">
+              <h3 className="font-black text-xl lg:text-2xl text-slate-900 group-hover:text-primary transition-colors line-clamp-1 tracking-tight cursor-pointer" title={title}>
                 {title}
               </h3>
             </Link>
-            <p className="text-[17px] font-bold text-slate-500 mt-1">{company}</p>
+            <p className="text-[17px] font-bold text-slate-500 mt-1 line-clamp-1">{company}</p>
           </div>
           
           {/* Mức lương nổi bật */}
-          <span className="text-primary font-black text-xl lg:text-2xl whitespace-nowrap bg-primary/5 px-4 py-1 rounded-xl">
+          <span className="text-primary font-black text-xl lg:text-2xl whitespace-nowrap bg-primary/5 px-4 py-1 rounded-xl shrink-0">
             {salary}
           </span>
         </div>
@@ -81,14 +81,20 @@ export default function JobCard({
           <span className="px-3 py-1 rounded-lg bg-slate-100 text-xs font-black text-slate-500 uppercase tracking-wider">
             Kinh nghiệm: 2 năm
           </span>
-          {tags.map((tag) => (
+          {tags.slice(0, 2).map((tag) => (
             <span 
               key={tag} 
-              className="px-3 py-1 rounded-lg bg-primary/5 text-xs font-black text-primary italic transition-colors group-hover:bg-primary group-hover:text-white"
+              className="px-3 py-1 rounded-lg bg-primary/5 text-xs font-black text-primary italic transition-colors group-hover:bg-primary group-hover:text-white max-w-[200px] truncate"
+              title={tag}
             >
               {tag}
             </span>
           ))}
+          {tags.length > 2 && (
+             <span className="px-3 py-1 rounded-lg bg-slate-50 text-xs font-black text-slate-400 border border-slate-100">
+               +{tags.length - 2}
+             </span>
+          )}
         </div>
       </div>
 
