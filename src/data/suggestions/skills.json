@@ -1,0 +1,78 @@
+{
+  "frontend": [
+    "ReactJS", "Vue.js", "Angular", "Next.js", "Nuxt.js", "Svelte", "SolidJS",
+    "TypeScript", "JavaScript", "HTML5", "CSS3", "SASS/SCSS", "Less",
+    "Tailwind CSS", "Bootstrap", "Material UI", "Ant Design", "Chakra UI",
+    "Redux", "Zustand", "Recoil", "MobX", "Jotai", "Pinia", "Vuex",
+    "React Query", "SWR", "Apollo Client", "RTK Query",
+    "Webpack", "Vite", "Rollup", "Parcel", "ESBuild",
+    "Jest", "Vitest", "Cypress", "Playwright", "Testing Library",
+    "Storybook", "Figma", "Framer Motion", "GSAP", "Three.js"
+  ],
+  "backend": [
+    "Node.js", "Express.js", "NestJS", "Fastify", "Koa",
+    "Python", "Django", "Flask", "FastAPI",
+    "Java", "Spring Boot", "Spring MVC",
+    "C#", ".NET Core", "ASP.NET",
+    "Go", "Gin", "Echo", "Fiber",
+    "PHP", "Laravel", "Symfony",
+    "Ruby", "Ruby on Rails",
+    "Rust", "Actix", "Axum",
+    "GraphQL", "REST API", "gRPC", "WebSocket", "tRPC"
+  ],
+  "database": [
+    "PostgreSQL", "MySQL", "MariaDB", "SQL Server", "Oracle",
+    "MongoDB", "Redis", "Elasticsearch", "Cassandra", "DynamoDB",
+    "Firebase", "Supabase", "PlanetScale", "Neon",
+    "Prisma", "TypeORM", "Sequelize", "Drizzle", "Mongoose",
+    "SQLite", "CouchDB", "Neo4j", "InfluxDB"
+  ],
+  "devops": [
+    "Docker", "Kubernetes", "Docker Compose",
+    "AWS", "GCP", "Azure", "Vercel", "Netlify", "Railway", "Render",
+    "CI/CD", "GitHub Actions", "GitLab CI", "Jenkins", "CircleCI",
+    "Terraform", "Ansible", "Pulumi",
+    "Linux", "Ubuntu", "CentOS", "Nginx", "Apache",
+    "Prometheus", "Grafana", "DataDog", "New Relic"
+  ],
+  "mobile": [
+    "React Native", "Flutter", "Swift", "SwiftUI",
+    "Kotlin", "Jetpack Compose", "Objective-C",
+    "Expo", "Ionic", "Capacitor",
+    "Android Studio", "Xcode", "Firebase", "App Store Connect"
+  ],
+  "data": [
+    "Python", "Pandas", "NumPy", "Scikit-learn",
+    "TensorFlow", "PyTorch", "Keras",
+    "SQL", "Apache Spark", "Hadoop",
+    "Tableau", "Power BI", "Looker", "Metabase",
+    "Jupyter Notebook", "Google Colab",
+    "Data Analysis", "Machine Learning", "Deep Learning", "NLP", "Computer Vision"
+  ],
+  "design": [
+    "Figma", "Adobe XD", "Sketch", "InVision",
+    "Adobe Photoshop", "Adobe Illustrator", "Canva",
+    "UI Design", "UX Design", "Wireframing", "Prototyping",
+    "Design System", "Responsive Design", "Mobile-first Design"
+  ],
+  "soft_skills": [
+    "Làm việc nhóm", "Giao tiếp", "Thuyết trình",
+    "Quản lý thời gian", "Giải quyết vấn đề", "Tư duy phản biện",
+    "Lãnh đạo", "Quản lý dự án", "Đàm phán",
+    "Khả năng thích ứng", "Sáng tạo", "Tự học",
+    "Chịu áp lực", "Chi tiết", "Cẩn thận"
+  ],
+  "tools": [
+    "Git", "GitHub", "GitLab", "Bitbucket",
+    "Jira", "Trello", "Asana", "Notion", "Confluence",
+    "Slack", "Microsoft Teams", "Discord",
+    "VS Code", "WebStorm", "IntelliJ IDEA", "Vim", "Neovim",
+    "Postman", "Insomnia", "Swagger"
+  ],
+  "marketing": [
+    "SEO", "SEM", "Google Ads", "Facebook Ads", "TikTok Ads",
+    "Content Marketing", "Social Media Marketing", "Email Marketing",
+    "Google Analytics", "Google Tag Manager", "Hotjar",
+    "Copywriting", "Brand Strategy", "Market Research"
+  ]
+}

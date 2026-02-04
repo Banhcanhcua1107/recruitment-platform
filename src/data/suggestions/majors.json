@@ -1,0 +1,87 @@
+{
+  "it": [
+    "Kỹ thuật Phần mềm",
+    "Khoa học Máy tính",
+    "Công nghệ Thông tin",
+    "Hệ thống Thông tin",
+    "An toàn Thông tin",
+    "Mạng Máy tính và Truyền thông",
+    "Trí tuệ Nhân tạo",
+    "Khoa học Dữ liệu"
+  ],
+  "engineering": [
+    "Kỹ thuật Điện",
+    "Kỹ thuật Điện tử",
+    "Kỹ thuật Cơ khí",
+    "Kỹ thuật Ô tô",
+    "Kỹ thuật Xây dựng",
+    "Kỹ thuật Môi trường",
+    "Kỹ thuật Hóa học",
+    "Kỹ thuật Vật liệu"
+  ],
+  "business": [
+    "Quản trị Kinh doanh",
+    "Marketing",
+    "Tài chính - Ngân hàng",
+    "Kế toán",
+    "Kiểm toán",
+    "Kinh tế",
+    "Thương mại Quốc tế",
+    "Quản trị Nhân sự",
+    "Logistics",
+    "Khởi nghiệp"
+  ],
+  "design": [
+    "Thiết kế Đồ họa",
+    "Thiết kế Nội thất",
+    "Thiết kế Thời trang",
+    "Thiết kế Công nghiệp",
+    "Kiến trúc",
+    "Mỹ thuật Ứng dụng"
+  ],
+  "humanities": [
+    "Ngôn ngữ Anh",
+    "Ngôn ngữ Nhật",
+    "Ngôn ngữ Hàn",
+    "Ngôn ngữ Trung",
+    "Văn học",
+    "Lịch sử",
+    "Triết học",
+    "Tâm lý học",
+    "Xã hội học",
+    "Báo chí",
+    "Quan hệ Công chúng"
+  ],
+  "law": [
+    "Luật",
+    "Luật Kinh tế",
+    "Luật Quốc tế"
+  ],
+  "medicine": [
+    "Y khoa",
+    "Dược học",
+    "Điều dưỡng",
+    "Răng Hàm Mặt",
+    "Y tế Công cộng"
+  ],
+  "education": [
+    "Sư phạm Toán",
+    "Sư phạm Văn",
+    "Sư phạm Anh",
+    "Giáo dục Tiểu học",
+    "Giáo dục Mầm non"
+  ],
+  "agriculture": [
+    "Nông nghiệp",
+    "Thủy sản",
+    "Lâm nghiệp",
+    "Chăn nuôi",
+    "Thú y"
+  ],
+  "tourism": [
+    "Du lịch",
+    "Quản trị Khách sạn",
+    "Quản trị Nhà hàng",
+    "Hướng dẫn Du lịch"
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "languages": [
+    {
+      "name": "Tiếng Anh",
+      "code": "en",
+      "certifications": ["IELTS", "TOEIC", "TOEFL", "Cambridge (FCE/CAE/CPE)"]
+    },
+    {
+      "name": "Tiếng Nhật",
+      "code": "ja",
+      "certifications": ["JLPT N1", "JLPT N2", "JLPT N3", "JLPT N4", "JLPT N5", "NAT-TEST"]
+    },
+    {
+      "name": "Tiếng Hàn",
+      "code": "ko",
+      "certifications": ["TOPIK I", "TOPIK II", "EPS-TOPIK"]
+    },
+    {
+      "name": "Tiếng Trung",
+      "code": "zh",
+      "certifications": ["HSK 1", "HSK 2", "HSK 3", "HSK 4", "HSK 5", "HSK 6"]
+    },
+    {
+      "name": "Tiếng Pháp",
+      "code": "fr",
+      "certifications": ["DELF A1", "DELF A2", "DELF B1", "DELF B2", "DALF C1", "DALF C2"]
+    },
+    {
+      "name": "Tiếng Đức",
+      "code": "de",
+      "certifications": ["Goethe A1", "Goethe A2", "Goethe B1", "Goethe B2", "Goethe C1", "Goethe C2"]
+    },
+    {
+      "name": "Tiếng Tây Ban Nha",
+      "code": "es",
+      "certifications": ["DELE A1", "DELE A2", "DELE B1", "DELE B2", "DELE C1", "DELE C2"]
+    },
+    {
+      "name": "Tiếng Nga",
+      "code": "ru",
+      "certifications": ["TRKI-1", "TRKI-2", "TRKI-3", "TRKI-4"]
+    },
+    {
+      "name": "Tiếng Thái",
+      "code": "th",
+      "certifications": []
+    },
+    {
+      "name": "Tiếng Indonesia",
+      "code": "id",
+      "certifications": []
+    },
+    {
+      "name": "Tiếng Việt",
+      "code": "vi",
+      "certifications": []
+    }
+  ],
+  "levels": [
+    { "id": "beginner", "name": "Sơ cấp", "description": "Giao tiếp cơ bản" },
+    { "id": "intermediate", "name": "Trung cấp", "description": "Giao tiếp tốt trong công việc" },
+    { "id": "advanced", "name": "Thành thạo", "description": "Sử dụng thành thạo trong mọi tình huống" },
+    { "id": "native", "name": "Bản ngữ", "description": "Ngôn ngữ mẹ đẻ" }
+  ]
+}
