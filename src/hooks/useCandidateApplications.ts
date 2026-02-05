@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { Application, Job } from "@/types/dashboard";
+import { Application } from "@/types/dashboard";
 
 export interface ApplicationsState {
   applications: Application[];
@@ -42,20 +42,25 @@ export function useCandidateApplications() {
 
         if (error) throw error;
 
-        const applications: Application[] = (data || []).map((app: any) => ({
-          id: app.id,
-          job_id: app.job_id,
-          status: app.status,
-          created_at: app.created_at,
-          job: {
-            id: app.jobs.id,
-            title: app.jobs.title,
-            company_name: app.jobs.company_name,
-            logo_url: app.jobs.logo_url,
-            salary: app.jobs.salary,
-            location: app.jobs.location
-          }
-        }));
+
+
+        const applications: Application[] = (data || []).map((app) => {
+          const job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
+          return {
+            id: app.id,
+            job_id: app.job_id,
+            status: app.status as Application["status"],
+            created_at: app.created_at,
+            job: {
+              id: job.id,
+              title: job.title,
+              company_name: job.company_name,
+              logo_url: job.logo_url,
+              salary: job.salary,
+              location: job.location
+            }
+          };
+        });
 
         setState({
           applications,
@@ -63,9 +68,10 @@ export function useCandidateApplications() {
           error: null,
         });
 
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to load applications";
         console.error("Applications Fetch Error:", err);
-        setState(prev => ({ ...prev, isLoading: false, error: err.message || "Failed to load applications" }));
+        setState(prev => ({ ...prev, isLoading: false, error: message }));
       }
     }
 

@@ -59,7 +59,16 @@ export default function StatsGrid({ stats, loading }: StatsGridProps) {
   );
 }
 
-function StatCard({ label, value, sub, icon, color, bg }: any) {
+interface StatCardProps {
+  label: string;
+  value: number;
+  sub: string;
+  icon: string;
+  color: string;
+  bg: string;
+}
+
+function StatCard({ label, value, sub, icon, color, bg }: StatCardProps) {
   return (
     <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm flex flex-col gap-6 group hover:border-primary transition-all">
       <div className="flex justify-between items-center">

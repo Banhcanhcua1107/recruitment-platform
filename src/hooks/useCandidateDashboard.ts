@@ -79,27 +79,31 @@ export function useCandidateDashboard() {
                .eq("candidate_id", authUser.id)
         ]);
 
+
         // Process Applications
-        const applications = applicationsResponse.data || [];
-        const recentApplications: Application[] = applications.slice(0, 5).map((app: any) => ({
-          id: app.id,
-          job_id: app.job_id,
-          status: app.status,
-          created_at: app.created_at,
-          job: {
-            id: app.jobs.id,
-            title: app.jobs.title,
-            company_name: app.jobs.company_name,
-            logo_url: app.jobs.logo_url,
-            salary: app.jobs.salary,
-            location: app.jobs.location
-          }
-        }));
+        const applicationsRaw = applicationsResponse.data || [];
+        const recentApplications: Application[] = applicationsRaw.slice(0, 5).map((app) => {
+          const job = Array.isArray(app.jobs) ? app.jobs[0] : app.jobs;
+          return {
+            id: app.id,
+            job_id: app.job_id,
+            status: app.status as Application["status"],
+            created_at: app.created_at,
+            job: {
+              id: job.id,
+              title: job.title,
+              company_name: job.company_name,
+              logo_url: job.logo_url,
+              salary: job.salary,
+              location: job.location
+            }
+          };
+        });
 
         // Calculate Stats
         const stats: DashboardStats = {
-          totalApplied: applications.length,
-          interviews: applications.filter((app: any) => app.status === 'interviewing').length,
+          totalApplied: applicationsRaw.length,
+          interviews: applicationsRaw.filter((app) => app.status === 'interviewing').length,
           savedJobs: savedJobsResponse.count || 0,
           profileViews: viewsResponse.count || 0,
         };
@@ -123,7 +127,7 @@ export function useCandidateDashboard() {
             .limit(4)
             .order("created_at", { ascending: false });
         
-        const recommendedJobs: Job[] = (recommendedJobsData || []).map((job: any) => ({
+        const recommendedJobs: Job[] = (recommendedJobsData || []).map((job) => ({
             id: job.id,
             title: job.title,
             company_name: job.company_name,
@@ -133,7 +137,7 @@ export function useCandidateDashboard() {
             requirements: job.requirements
         }));
 
-        const cvs: CV[] = (cvsResponse.data || []).map((cv: any) => ({
+        const cvs: CV[] = (cvsResponse.data || []).map((cv) => ({
             id: cv.id,
             title: cv.title || "Untitled CV",
             thumbnail_url: cv.thumbnail_url,
@@ -151,9 +155,10 @@ export function useCandidateDashboard() {
           error: null,
         });
 
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to load dashboard data";
         console.error("Dashboard Fetch Error:", err);
-        setData(prev => ({ ...prev, isLoading: false, error: err.message || "Failed to load dashboard data" }));
+        setData(prev => ({ ...prev, isLoading: false, error: message }));
       }
     }
 
