@@ -242,7 +242,7 @@ export function getDefaultContent(type: SectionType): SectionContent {
       return { content: '' } as CareerGoalContent;
     
     default:
-      return {};
+      return {} as any;
   }
 }
 

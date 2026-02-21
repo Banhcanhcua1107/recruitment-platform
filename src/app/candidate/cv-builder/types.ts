@@ -41,12 +41,14 @@ export interface CVContent {
 }
 
 export type SectionType = 
+  | 'header' // New Header type
   | 'personal_info' 
   | 'summary' 
   | 'experience_list' 
   | 'education_list' 
   | 'skill_list' 
   | 'project_list' 
+  | 'award_list'
   | 'custom_text'
   | 'custom_image';
 
@@ -78,13 +80,17 @@ export interface CVSection {
 
 // -- Specific Data Interfaces for standardized sections --
 
-export interface PersonalInfoData {
+export interface HeaderData {
   fullName: string;
   title: string;
+  avatarUrl?: string;
+}
+
+export interface PersonalInfoData {
   email: string;
   phone: string;
   address: string;
-  avatarUrl?: string;
+  dob?: string;
   socials?: { network: string; url: string }[];
 }
 
@@ -113,6 +119,29 @@ export interface SkillItem {
 
 // -- Section Data Unions --
 
+export interface ProjectItem {
+  id: string;
+  name: string;
+  role: string;
+  startDate: string;
+  endDate: string | 'Present';
+  description: string;
+  technologies: string; // "React, Node.js"
+  link?: string;
+  customer?: string;
+  teamSize?: number;
+}
+
+export interface AwardItem {
+  id: string;
+  title: string;
+  date: string;
+  issuer: string;
+  description: string;
+}
+
+// -- Section Data Unions --
+
 export interface ExperienceListSectionData {
   items: ExperienceItem[];
 }
@@ -125,14 +154,25 @@ export interface SkillListSectionData {
   items: SkillItem[];
 }
 
+export interface ProjectListSectionData {
+  items: ProjectItem[];
+}
+
+export interface AwardListSectionData {
+  items: AwardItem[];
+}
+
 export interface SummarySectionData {
   text: string;
 }
 
 export type AnySectionData = 
+  | HeaderData
   | PersonalInfoData 
   | ExperienceListSectionData 
   | EducationListSectionData 
   | SkillListSectionData
+  | ProjectListSectionData
+  | AwardListSectionData
   | SummarySectionData
   | Record<string, unknown>; // Fallback for custom sections

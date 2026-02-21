@@ -13,7 +13,7 @@ export const FixedTemplate = () => {
     <div className="w-full h-full bg-white text-slate-900 p-12 space-y-8">
         {cv.sections.map(section => (
             <div key={section.id} className="relative group hover:bg-slate-50 transition-colors p-2 -m-2 rounded-lg border border-transparent hover:border-slate-100">
-                <CVComponentRenderer section={section} />
+                <CVComponentRenderer section={section} theme={cv.theme} />
             </div>
         ))}
 

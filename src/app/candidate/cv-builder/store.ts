@@ -17,6 +17,7 @@ interface EditorState {
   isDirty: boolean;
   history: CVContent[]; // Simple history stack for undo
   historyIndex: number;
+  aiSuggestions: string[]; // For the AI panel
 
   // Actions
   initCV: (mode: CVMode, templateId?: string) => void;
@@ -36,22 +37,158 @@ interface EditorState {
   setSelectedSection: (id: string | null) => void;
   toggleSidebar: () => void;
   setScale: (scale: number) => void;
+  setAISuggestions: (suggestions: string[]) => void;
   undo: () => void;
   redo: () => void;
 }
 
 const DEFAULT_THEME = {
-  colors: { primary: '#2563eb', text: '#0f172a', background: '#ffffff' },
-  fonts: { heading: 'Inter', body: 'Inter' },
+  colors: { primary: '#00b14f', text: '#111827', background: '#ffffff' }, // User requested Green
+  fonts: { heading: 'Manrope', body: 'Manrope' }, // Clean sans-serif
   spacing: 4,
 };
 
 const INITIAL_TEMPLATE_SECTIONS: CVSection[] = [
-  { id: '1', type: 'personal_info', isVisible: true, containerId: 'main-column', data: { fullName: 'Your Name', email: 'email@example.com' } },
-  { id: '2', type: 'summary', isVisible: true, containerId: 'main-column', data: { text: 'Professional summary goes here...' } },
-  { id: '3', type: 'experience_list', isVisible: true, containerId: 'main-column', data: { items: [] } },
-  { id: '4', type: 'education_list', isVisible: true, containerId: 'main-column', data: { items: [] } },
-  { id: '5', type: 'skill_list', isVisible: true, containerId: 'main-column', data: { items: [] } },
+  { 
+    id: '1', 
+    type: 'header', 
+    isVisible: true, 
+    containerId: 'main-column', 
+    data: { 
+      fullName: 'Nguyễn Văn A', 
+      title: 'Fullstack Developer', 
+      avatarUrl: '/avatars/default-avatar.png' // We'll need a real placeholder
+    } 
+  },
+  { 
+    id: '2', 
+    type: 'personal_info', 
+    isVisible: true, 
+    containerId: 'main-column', 
+    data: { 
+      email: 'nguyenvana@gmail.com', 
+      phone: '0123 456 789', 
+      address: 'Hà Nội, Việt Nam', 
+      dob: '01/01/2000' 
+    } 
+  },
+  { 
+    id: '3', 
+    type: 'summary', 
+    title: 'Giới thiệu chung',
+    isVisible: true, 
+    containerId: 'main-column', 
+    data: { 
+      text: '- Hơn 2 năm kinh nghiệm lập trình với khả năng giao tiếp tốt và học hỏi nhanh.\n- Điểm mạnh: Công nghệ Front-end và phát triển ứng dụng web Back-end.\n- Thành thạo HTML, CSS, JavaScript.\n- Có kiến thức sâu về ReactJS và các nguyên lý cốt lõi.\n- Có kinh nghiệm với các quy trình React.js phổ biến (như Flux hoặc Redux).' 
+    } 
+  },
+  { 
+    id: '4', 
+    type: 'experience_list', 
+    title: 'Kinh nghiệm làm việc',
+    isVisible: true, 
+    containerId: 'main-column', 
+    data: { 
+      items: [
+        { 
+          id: 'exp-1', 
+          company: 'F8 TECHNOLOGY EDUCATION.,JSC', 
+          position: 'Full-stack Developer', 
+          startDate: '01/2018', 
+          endDate: 'Present', 
+          description: '- Lập trình các dự án outsourcing.\n- Tạo khung coding và thiết kế cơ sở dữ liệu dựa trên mô tả dự án.' 
+        },
+        { 
+          id: 'exp-2', 
+          company: 'AI&T JSC', 
+          position: 'Full-stack Developer', 
+          startDate: '07/2015', 
+          endDate: '03/2018', 
+          description: '- Tham gia phát triển dự án thương mại điện tử.\n- Tối ưu hóa hiệu năng website.' 
+        }
+      ] 
+    } 
+  },
+  { 
+    id: '5', 
+    type: 'education_list', 
+    title: 'Học vấn',
+    isVisible: true, 
+    containerId: 'main-column', 
+    data: { 
+      items: [
+        { 
+          id: 'edu-1', 
+          institution: 'FPT Polytechnic', 
+          degree: 'Chuyên ngành - Lập trình Website, Mobile', 
+          startDate: '10/2011', 
+          endDate: '09/2014' 
+        }
+      ] 
+    } 
+  },
+  { 
+    id: '6', 
+    type: 'skill_list', 
+    title: 'Kỹ năng',
+    isVisible: true, 
+    containerId: 'main-column', 
+    data: { 
+      items: [
+        { id: 'skill-1', name: 'HTML, CSS, JavaScript (ReactJS, React-Native, Lit)', level: 90 },
+        { id: 'skill-2', name: 'PHP (Laravel, Symfony, Codeigniter, Yii)', level: 85 },
+        { id: 'skill-3', name: 'Node (ExpressJS)', level: 80 },
+        { id: 'skill-4', name: 'RESTful API, GraphQL', level: 85 },
+        { id: 'skill-5', name: 'MySQL, PostgreSQL, NoSQL (MongoDB)', level: 80 }
+      ] 
+    } 
+  },
+  {
+    id: '7',
+    type: 'award_list',
+    title: 'Giải thưởng',
+    isVisible: true,
+    containerId: 'main-column',
+    data: {
+      items: [
+        { id: 'aw-1', title: 'Giải nhất cuộc thi Poly', date: '06/2016', issuer: 'Poly Creative Competition 2016', description: 'Cuộc thi sáng tạo Poly' },
+        { id: 'aw-2', title: 'Nhân viên xuất sắc', date: '02/2016', issuer: 'AI&T JSC', description: 'Giải thưởng nhân viên của năm' }
+      ]
+    }
+  },
+  {
+    id: '8',
+    type: 'project_list',
+    title: 'Dự án',
+    isVisible: true,
+    containerId: 'main-column',
+    data: {
+      items: [
+        { 
+          id: 'proj-1', 
+          name: 'FULLSTACK.EDU.VN', 
+          role: 'Product Owner, BA, Developer', 
+          startDate: '01/2019', 
+          endDate: 'Present', 
+          customer: 'F8 TECHNOLOGY EDUCATION.,JSC',
+          teamSize: 1,
+          technologies: 'Frontend: ReactJS\nBackend: PHP (Laravel), NodeJS, MySQL',
+          description: 'Học lập trình online tại f8.edu.vn' 
+        },
+        { 
+          id: 'proj-2', 
+          name: 'MYCV.VN', 
+          role: 'Developer', 
+          startDate: '06/2018', 
+          endDate: 'Present', 
+          customer: 'MyCV JSC.',
+          teamSize: 1,
+          technologies: 'Frontend: ReactJS\nBackend: Node.js, MongolDB',
+          description: 'Ứng dụng viết CV chuẩn, hỗ trợ tải PDF miễn phí.' 
+        }
+      ]
+    }
+  }
 ];
 
 export const useCVStore = create<EditorState>((set, get) => ({
@@ -71,6 +208,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
   isDirty: false,
   history: [],
   historyIndex: -1,
+  aiSuggestions: [],
 
   initCV: (mode, templateId) => {
     const sections = mode === 'template' 
@@ -98,7 +236,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
       type,
       isVisible: true,
       containerId: 'main-column',
-      data: {}, 
+      data: type === 'experience_list' ? { items: [] } : type === 'education_list' ? { items: [] } : {}, 
     };
     
     set((state) => {
@@ -121,7 +259,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
           s.id === sectionId ? { ...s, ...updates } : s
         ),
       };
-      return { cv: newCV, isDirty: true }; // Should optimize history push here (debounce?)
+      return { cv: newCV, isDirty: true }; 
   }),
 
   updateSectionData: (sectionId, dataUpdates) => set((state) => {
@@ -156,7 +294,6 @@ export const useCVStore = create<EditorState>((set, get) => ({
     sections.splice(newIndex, 0, movedSection);
     
     const newCV = { ...state.cv, sections };
-    // Creating history point for reordering
     const newHistory = [...state.history.slice(0, state.historyIndex + 1), newCV];
 
     return {
@@ -180,6 +317,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
   setSelectedSection: (id) => set({ selectedSectionId: id }),
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   setScale: (scale) => set({ scale }),
+  setAISuggestions: (suggestions) => set({ aiSuggestions: suggestions }),
 
   undo: () => set((state) => {
       if (state.historyIndex > 0) {
