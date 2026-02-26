@@ -21,6 +21,7 @@ interface EditorState {
 
   // Actions
   initCV: (mode: CVMode, templateId?: string) => void;
+  loadResumeIntoStore: (sections: CVSection[], styling?: Partial<CVContent['theme']>, templateId?: string) => void;
   
   // Section Management
   addSection: (type: SectionType) => void;
@@ -209,6 +210,29 @@ export const useCVStore = create<EditorState>((set, get) => ({
   history: [],
   historyIndex: -1,
   aiSuggestions: [],
+
+  loadResumeIntoStore: (sections, styling, templateId) => {
+    const initialCV: CVContent = {
+      meta: { pageSize: 'A4', version: '1.0', templateId },
+      theme: styling
+        ? { ...DEFAULT_THEME, ...styling }
+        : DEFAULT_THEME,
+      layout: { type: 'fixed', columns: 12 },
+      sections: sections.map((s) => ({
+        ...s,
+        id: s.id || uuidv4(),
+        containerId: s.containerId || 'main-column',
+      })),
+    };
+    set({
+      cv: initialCV,
+      mode: 'template',
+      history: [initialCV],
+      historyIndex: 0,
+      isDirty: false,
+      selectedSectionId: null,
+    });
+  },
 
   initCV: (mode, templateId) => {
     const sections = mode === 'template' 
