@@ -50,7 +50,7 @@ export const InlineTextarea = ({
           onChange={(e) => onChange(e.target.value)}
           onBlur={handleBlur}
           className={cn(
-            "w-full bg-transparent border-none outline-none resize-none overflow-hidden p-0 text-inherit font-inherit focus:ring-0",
+            "w-full bg-blue-50/60 border border-blue-400 rounded outline-none resize-none overflow-hidden px-2 py-1 text-inherit font-inherit focus:ring-1 focus:ring-blue-400 transition-all",
             className
           )}
           autoFocus

@@ -84,8 +84,8 @@ export default function CVDashboardPage() {
           // Skeleton loading
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-2xl border border-slate-200 h-[320px] animate-pulse">
-                <div className="h-[180px] bg-slate-100 rounded-t-2xl" />
+              <div key={i} className="bg-white rounded-2xl border border-slate-200 h-80 animate-pulse">
+                <div className="h-45 bg-slate-100 rounded-t-2xl" />
                 <div className="p-5 space-y-3">
                   <div className="h-4 bg-slate-100 rounded w-3/4" />
                   <div className="h-3 bg-slate-100 rounded w-1/2" />
@@ -98,7 +98,7 @@ export default function CVDashboardPage() {
             {/* CREATE NEW CARD */}
             <Link
               href="/candidate/cv-builder/new"
-              className="group flex flex-col items-center justify-center h-[320px] rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-white hover:border-emerald-400 hover:shadow-xl transition-all cursor-pointer"
+              className="group flex flex-col items-center justify-center h-80 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-white hover:border-emerald-400 hover:shadow-xl transition-all cursor-pointer"
             >
               <div className="size-16 rounded-full bg-slate-100 group-hover:bg-emerald-50 flex items-center justify-center transition-colors mb-4">
                 <Plus size={28} className="text-slate-400 group-hover:text-emerald-500 transition-colors" />
@@ -111,10 +111,10 @@ export default function CVDashboardPage() {
             {resumes.map((resume) => (
               <div
                 key={resume.id}
-                className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col h-[320px] relative"
+                className="group bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col h-80 relative"
               >
                 {/* THUMBNAIL */}
-                <div className="h-[180px] bg-gradient-to-br from-slate-100 to-slate-200 relative overflow-hidden flex items-center justify-center">
+                <div className="h-45 bg-linear-to-br from-slate-100 to-slate-200 relative overflow-hidden flex items-center justify-center">
                   <FileText size={64} className="text-slate-300 group-hover:scale-110 transition-transform duration-500" />
 
                   {/* STATUS BADGE */}
@@ -129,8 +129,11 @@ export default function CVDashboardPage() {
                   </div>
 
                   {/* MENU BUTTON */}
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 right-3 z-10">
                     <button
+                      type="button"
+                      title="Menu"
+                      aria-label="Menu CV"
                       onClick={(e) => {
                         e.preventDefault();
                         setOpenMenuId(openMenuId === resume.id ? null : resume.id);
@@ -173,10 +176,10 @@ export default function CVDashboardPage() {
                   </div>
 
                   {/* HOVER OVERLAY */}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                     <Link
                       href={`/candidate/cv-builder/${resume.id}/edit`}
-                      className="flex items-center gap-2 px-4 py-2 bg-white text-slate-800 rounded-lg text-sm font-bold hover:bg-emerald-500 hover:text-white transition-colors shadow-lg"
+                      className="flex items-center gap-2 px-4 py-2 bg-white text-slate-800 rounded-lg text-sm font-bold hover:bg-emerald-500 hover:text-white transition-colors shadow-lg pointer-events-auto"
                     >
                       <Pencil size={14} />
                       Chỉnh sửa
@@ -191,6 +194,8 @@ export default function CVDashboardPage() {
                     <div className="flex gap-2 mb-2">
                       <input
                         autoFocus
+                        placeholder="Tên CV"
+                        title="Đổi tên CV"
                         value={renameValue}
                         onChange={(e) => setRenameValue(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") handleRename(resume.id); if (e.key === "Escape") setRenamingId(null); }}

@@ -17,6 +17,8 @@ export const FloatingToolbar = () => {
             <div className="flex items-center gap-2 border-r border-slate-200 pr-4">
                 <Type size={18} className="text-slate-400" />
                 <select 
+                    title="Chọn font chữ"
+                    aria-label="Chọn font chữ"
                     className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
                     value={cv.theme.fonts.body}
                     onChange={(e) => updateTheme({ fonts: { ...cv.theme.fonts, body: e.target.value, heading: e.target.value } })}
@@ -34,7 +36,10 @@ export const FloatingToolbar = () => {
                 <div className="flex gap-2">
                     {['#10B981', '#3B82F6', '#EF4444', '#F59E0B', '#6366F1', '#111827'].map(color => (
                         <button
+                            type="button"
                             key={color}
+                            title={`Chọn màu ${color}`}
+                            aria-label={`Chọn màu ${color}`}
                             className={`w-5 h-5 rounded-full border border-slate-100 transition-transform hover:scale-110 ${cv.theme.colors.primary === color ? 'ring-2 ring-offset-1 ring-slate-400 scale-110' : ''}`}
                             style={{ backgroundColor: color }}
                             onClick={() => updateTheme({ colors: { ...cv.theme.colors, primary: color } })}
@@ -45,11 +50,11 @@ export const FloatingToolbar = () => {
 
             {/* Page View */}
             <div className="flex items-center gap-2">
-                <button onClick={handleZoomOut} className="p-1 hover:bg-slate-100 rounded text-slate-500">
+                <button type="button" title="Thu nhỏ" aria-label="Thu nhỏ" onClick={handleZoomOut} className="p-1 hover:bg-slate-100 rounded text-slate-500">
                     <ZoomOut size={18} />
                 </button>
                 <span className="text-xs font-bold w-8 text-center">{Math.round(scale * 100)}%</span>
-                <button onClick={handleZoomIn} className="p-1 hover:bg-slate-100 rounded text-slate-500">
+                <button type="button" title="Phóng to" aria-label="Phóng to" onClick={handleZoomIn} className="p-1 hover:bg-slate-100 rounded text-slate-500">
                     <ZoomIn size={18} />
                 </button>
             </div>

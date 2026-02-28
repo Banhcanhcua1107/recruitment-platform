@@ -68,7 +68,7 @@ export const InlineText = ({
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           autoFocus
-          className="bg-transparent border-none outline-none p-0 m-0 w-full text-inherit font-inherit placeholder:opacity-50 focus:ring-0"
+          className="bg-blue-50/60 border border-blue-400 rounded outline-none px-2 py-0.5 m-0 w-full text-inherit font-inherit placeholder:opacity-50 focus:ring-1 focus:ring-blue-400 transition-all"
           style={{ width: width, minWidth: '20px' }}
           placeholder={placeholder}
         />

@@ -4,7 +4,8 @@ import React from "react";
 import { useCVStore } from "../store";
 import { CVSection, SummarySectionData, ExperienceListSectionData, EducationListSectionData, SkillListSectionData, HeaderData, PersonalInfoData } from "../types";
 import { RichTextEditor } from "./RichTextEditor";
-import { Plus, GripVertical, Trash2, Eye, EyeOff } from "lucide-react";
+import { GripVertical, Trash2, Eye, EyeOff } from "lucide-react";
+import { AddSectionButton } from "./AddSectionModal";
 
 // Section type → display label mapping
 const SECTION_LABELS: Record<string, string> = {
@@ -59,13 +60,7 @@ export function CVWorkspacePanel() {
       ))}
 
       {/* Add Section Button */}
-      <button
-        onClick={() => {}}
-        className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-emerald-400 hover:bg-emerald-50 rounded-xl py-4 text-slate-400 hover:text-emerald-600 transition-all text-sm font-semibold"
-      >
-        <Plus size={18} />
-        Thêm mục mới
-      </button>
+      <AddSectionButton />
     </div>
   );
 }

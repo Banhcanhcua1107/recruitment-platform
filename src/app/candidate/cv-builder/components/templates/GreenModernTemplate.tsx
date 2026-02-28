@@ -1,414 +1,649 @@
 "use client";
 
-import React from 'react';
-import { useCVStore } from '../../store';
-import { InlineText } from '../inline/InlineText';
-import { InlineTextarea } from '../inline/InlineTextarea';
-import { 
-  User, 
-  Briefcase, 
-  GraduationCap, 
-  Award, 
-  Code, 
-  Layers, 
-} from 'lucide-react';
-import { 
-  HeaderData, 
-  PersonalInfoData, 
-  ExperienceListSectionData, 
-  EducationListSectionData, 
-  SkillListSectionData, 
-  SummarySectionData, 
-  ProjectListSectionData, 
+import React from "react";
+import { useCVStore } from "../../store";
+import { InlineText } from "../inline/InlineText";
+import { InlineRichText } from "../inline/InlineRichText";
+import { SectionWrapper } from "../SectionWrapper";
+import { AddSectionButton } from "../AddSectionModal";
+import {
+  HeaderData,
+  PersonalInfoData,
+  ExperienceListSectionData,
+  EducationListSectionData,
+  SkillListSectionData,
+  SummarySectionData,
+  ProjectListSectionData,
   AwardListSectionData,
-  CVSection 
-} from '../../types';
+  CertificateListSectionData,
+  CVSection,
+} from "../../types";
+import { Plus, X } from "lucide-react";
 
-// --- Icons Mapping ---
-const getSectionIcon = (type: string) => {
-  switch (type) {
-    case 'summary': return <User size={20} />;
-    case 'experience_list': return <Briefcase size={20} />;
-    case 'education_list': return <GraduationCap size={20} />;
-    case 'skill_list': return <Code size={20} />;
-    case 'project_list': return <Layers size={20} />;
-    case 'award_list': return <Award size={20} />;
-    default: return <User size={20} />;
-  }
-};
-
-// --- Section Header Component ---
-const SectionHeader = ({ title, icon }: { title: string, icon: React.ReactNode }) => (
-  <div className="flex items-center gap-3 mb-4 pb-2 border-b-2 border-slate-100">
-    <div className="text-emerald-600 bg-emerald-50 p-1.5 rounded-full">
-        {icon}
-    </div>
-    <h2 className="text-xl font-bold text-emerald-600 uppercase tracking-wide">
-      {title}
-    </h2>
-  </div>
+/* ───────────────────────────────────────────────────────
+   Icon hình tròn xanh lá (giống f8.edu.vn mẫu CV)
+   ─────────────────────────────────────────────────────── */
+const GreenCircleIcon = () => (
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="14" cy="14" r="14" fill="#4CAF50" />
+    <circle cx="14" cy="14" r="7" fill="white" fillOpacity="0.3" />
+    <circle cx="14" cy="7" r="2.5" fill="white" fillOpacity="0.5" />
+    <circle cx="14" cy="21" r="2.5" fill="white" fillOpacity="0.5" />
+    <circle cx="7" cy="14" r="2.5" fill="white" fillOpacity="0.5" />
+    <circle cx="21" cy="14" r="2.5" fill="white" fillOpacity="0.5" />
+    <circle cx="9" cy="9" r="2" fill="white" fillOpacity="0.35" />
+    <circle cx="19" cy="9" r="2" fill="white" fillOpacity="0.35" />
+    <circle cx="9" cy="19" r="2" fill="white" fillOpacity="0.35" />
+    <circle cx="19" cy="19" r="2" fill="white" fillOpacity="0.35" />
+  </svg>
 );
 
-export const GreenModernTemplate = () => {
-  const { cv, updateSection, updateSectionData } = useCVStore();
+/* ───────────────────────────────────────────────────────
+   Section Title (Tổng quan, Kinh nghiệm, Học vấn…)
+   ─────────────────────────────────────────────────────── */
+const SectionTitle = ({ sectionId, title }: { sectionId: string; title: string }) => {
+  const { updateSection } = useCVStore();
+  return (
+    <div className="flex items-center gap-2.5 mb-2 mt-1">
+      <GreenCircleIcon />
+      <h2 className="text-[17px] font-bold tracking-wide cv-green">
+        <InlineText
+          value={title}
+          onChange={(v) => updateSection(sectionId, { title: v })}
+          placeholder="Tên mục"
+        />
+      </h2>
+    </div>
+  );
+};
 
-  const handleUpdateData = (sectionId: string, data: Record<string, unknown>) => {
-    updateSectionData(sectionId, data);
+/* ───────────────────────────────────────────────────────
+   Add / Remove item button helpers
+   ─────────────────────────────────────────────────────── */
+const AddItemBtn = ({ sectionId, label }: { sectionId: string; label: string }) => {
+  const { addListItem } = useCVStore();
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); addListItem(sectionId); }}
+      className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700 mt-2 print:hidden transition-colors"
+    >
+      <Plus size={14} />
+      {label}
+    </button>
+  );
+};
+
+const RemoveItemBtn = ({ sectionId, index }: { sectionId: string; index: number }) => {
+  const { removeListItem } = useCVStore();
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); removeListItem(sectionId, index); }}
+      title="Xóa mục này"
+      className="absolute -right-1 -top-1 size-5 flex items-center justify-center rounded-full bg-red-100 text-red-500 hover:bg-red-200 opacity-0 group-hover/item:opacity-100 transition-opacity print:hidden z-10"
+    >
+      <X size={10} />
+    </button>
+  );
+};
+
+/* ═══════════════════════════════════════════════════════
+   SECTION RENDERERS — each type has its own component
+   ═══════════════════════════════════════════════════════ */
+
+/* ── Header ────────────────────────────────────────── */
+function HeaderSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as HeaderData;
+  const update = (d: Partial<HeaderData>) => updateSectionData(section.id, d);
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Header" disableDelete>
+      <div className="mb-1">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <div className="text-[32px] font-bold leading-tight cv-green">
+              <InlineText value={data.fullName} onChange={(v) => update({ fullName: v })} placeholder="Nguyễn Văn A" />
+            </div>
+            <div className="text-[15px] text-gray-600 mt-0.5">
+              <InlineText value={data.title} onChange={(v) => update({ title: v })} placeholder="Lập trình viên Fullstack" />
+            </div>
+          </div>
+          <div className="w-25 h-30 bg-gray-200 border border-gray-300 flex items-center justify-center shrink-0 ml-4 overflow-hidden">
+            {data.avatarUrl && data.avatarUrl !== "/avatars/default-avatar.png" ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={data.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+            ) : (
+              <svg width="48" height="56" viewBox="0 0 48 56" fill="none">
+                <circle cx="24" cy="18" r="10" fill="#bdbdbd" />
+                <ellipse cx="24" cy="44" rx="16" ry="12" fill="#bdbdbd" />
+              </svg>
+            )}
+          </div>
+        </div>
+      </div>
+    </SectionWrapper>
+  );
+}
+
+/* ── Personal Info ─────────────────────────────────── */
+function PersonalInfoSection({ section, headerSection }: { section: CVSection; headerSection?: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as PersonalInfoData;
+  const header = headerSection?.data as HeaderData | undefined;
+  const update = (d: Partial<PersonalInfoData>) => updateSectionData(section.id, d);
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Thông tin">
+      <div className="grid grid-cols-2 gap-y-1 gap-x-6 mb-3 text-[12.5px] mt-1">
+        <div className="flex">
+          <span className="font-bold w-18 shrink-0 text-gray-700">Họ tên</span>
+          <InlineText
+            value={header?.fullName || ""}
+            onChange={(v) => headerSection && updateSectionData(headerSection.id, { fullName: v })}
+            placeholder="Nguyễn Văn A"
+          />
+        </div>
+        <div className="flex">
+          <span className="font-bold w-18 shrink-0 text-gray-700">Ngày sinh</span>
+          <InlineText value={data.dob || ""} onChange={(v) => update({ dob: v })} placeholder="01/01/2000" />
+        </div>
+        <div className="flex">
+          <span className="font-bold w-18 shrink-0 text-gray-700">Điện thoại</span>
+          <InlineText value={data.phone} onChange={(v) => update({ phone: v })} placeholder="+84 1234567890" />
+        </div>
+        <div className="flex">
+          <span className="font-bold w-18 shrink-0 text-gray-700">Email</span>
+          <InlineText value={data.email} onChange={(v) => update({ email: v })} placeholder="email@gmail.com" />
+        </div>
+        <div className="flex">
+          <span className="font-bold w-18 shrink-0 text-gray-700">Địa chỉ</span>
+          <InlineText value={data.address} onChange={(v) => update({ address: v })} placeholder="Hà Nội, Việt Nam" />
+        </div>
+      </div>
+      <hr className="border-gray-200 mb-2" />
+    </SectionWrapper>
+  );
+}
+
+/* ── Summary / Overview ────────────────────────────── */
+function SummarySection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as SummarySectionData;
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Tổng quan">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Tổng quan"} />
+        <div className="text-[12.5px] leading-relaxed pl-1">
+          <InlineRichText
+            value={data.text}
+            onChange={(v) => updateSectionData(section.id, { text: v })}
+            placeholder="- Hơn 2 năm kinh nghiệm lập trình..."
+          />
+        </div>
+      </div>
+    </SectionWrapper>
+  );
+}
+
+/* ── Work Experience ───────────────────────────────── */
+function ExperienceSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as ExperienceListSectionData;
+
+  const updateItem = (items: typeof data.items, index: number, field: string, value: unknown) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    updateSectionData(section.id, { items: newItems });
   };
 
-  const renderSection = (section: CVSection) => {
-    switch (section.type) {
-      case 'header': {
-        const data = section.data as HeaderData;
-        return (
-          <div className="mb-8">
-            <div className="flex justify-between items-start">
-                <div className="flex-1 space-y-2">
-                    <div className="text-4xl font-extrabold text-emerald-600 leading-tight uppercase">
-                        <InlineText 
-                            value={data.fullName} 
-                            onChange={(v) => handleUpdateData(section.id, { fullName: v })} 
-                            className="font-extrabold"
-                        />
-                    </div>
-                    <div className="text-xl font-medium text-slate-800">
-                        <InlineText 
-                            value={data.title} 
-                            onChange={(v) => handleUpdateData(section.id, { title: v })} 
-                        />
-                    </div>
+  return (
+    <SectionWrapper sectionId={section.id} label="Kinh nghiệm">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Kinh nghiệm làm việc"} />
+        <div className="space-y-2.5">
+          {data.items.map((item, idx) => (
+            <div key={item.id} className="group/item relative grid grid-cols-[135px_1fr] gap-x-4">
+              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <div className="text-[12px] font-bold pt-0.5 cv-date-accent">
+                <InlineText value={item.startDate} onChange={(v) => updateItem(data.items, idx, "startDate", v)} placeholder="MM/YYYY" />
+                <span className="mx-0.5">-</span>
+                <InlineText value={item.endDate} onChange={(v) => updateItem(data.items, idx, "endDate", v)} placeholder="Hiện tại" />
+              </div>
+              <div>
+                <div className="font-bold text-[13px] uppercase text-gray-900">
+                  <InlineText value={item.company} onChange={(v) => updateItem(data.items, idx, "company", v)} placeholder="TÊN CÔNG TY" />
                 </div>
-                {data.avatarUrl && (
-                    <div className="w-32 h-32 ml-6 rounded-md overflow-hidden bg-slate-200 border-2 border-emerald-100 shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={data.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
-                    </div>
-                )}
+                <div className="italic text-[12.5px] text-gray-600 mb-1">
+                  <InlineText value={item.position} onChange={(v) => updateItem(data.items, idx, "position", v)} placeholder="Vị trí của bạn" />
+                </div>
+                <div className="text-[12px] text-gray-700 leading-relaxed">
+                  <InlineRichText value={item.description} onChange={(v) => updateItem(data.items, idx, "description", v)} placeholder="• Mô tả công việc..." />
+                </div>
+              </div>
             </div>
-          </div>
-        );
-      }
+          ))}
+        </div>
+        <AddItemBtn sectionId={section.id} label="Thêm kinh nghiệm" />
+      </div>
+    </SectionWrapper>
+  );
+}
 
-      case 'personal_info': {
-        const data = section.data as PersonalInfoData;
-        return (
-          <div className="grid grid-cols-2 gap-y-2 gap-x-8 mb-8 text-sm text-slate-700">
-             <div className="flex items-center gap-3">
-                <span className="font-bold w-16 shrink-0">Ngày sinh</span>
-                <InlineText value={data.dob || ''} onChange={(v) => handleUpdateData(section.id, { dob: v })} />
-             </div>
-             <div className="flex items-center gap-3">
-                <span className="font-bold w-16 shrink-0">Email</span>
-                <InlineText value={data.email} onChange={(v) => handleUpdateData(section.id, { email: v })} />
-             </div>
-             <div className="flex items-center gap-3">
-                <span className="font-bold w-16 shrink-0">SĐT</span>
-                <InlineText value={data.phone} onChange={(v) => handleUpdateData(section.id, { phone: v })} />
-             </div>
-             <div className="flex items-center gap-3">
-                <span className="font-bold w-16 shrink-0">Địa chỉ</span>
-                <InlineText value={data.address} onChange={(v) => handleUpdateData(section.id, { address: v })} />
-             </div>
-             {/* Website / Socials could go here */}
-          </div>
-        );
-      }
+/* ── Education ─────────────────────────────────────── */
+function EducationSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as EducationListSectionData;
 
-      case 'summary': {
-        const data = section.data as SummarySectionData;
-        return (
-          <div className="mb-8 group">
-            <SectionHeader title={section.title || "Overview"} icon={getSectionIcon(section.type)} />
-            <div className="text-sm text-slate-700 leading-relaxed">
-                <InlineTextarea 
-                    value={data.text} 
-                    onChange={(v) => handleUpdateData(section.id, { text: v })} 
-                    className="min-h-[100px]"
-                />
+  const updateItem = (items: typeof data.items, index: number, field: string, value: unknown) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    updateSectionData(section.id, { items: newItems });
+  };
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Học vấn">
+      <div className="mb-2">
+        <SectionTitle sectionId={section.id} title={section.title || "Học vấn"} />
+        <div className="space-y-2">
+          {data.items.map((item, idx) => (
+            <div key={item.id} className="group/item relative grid grid-cols-[135px_1fr] gap-x-4">
+              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <div className="text-[12px] font-bold pt-0.5 text-gray-700">
+                <InlineText value={item.startDate} onChange={(v) => updateItem(data.items, idx, "startDate", v)} placeholder="YYYY" />
+                <span className="mx-0.5">–</span>
+                <InlineText value={item.endDate} onChange={(v) => updateItem(data.items, idx, "endDate", v)} placeholder="YYYY" />
+              </div>
+              <div>
+                <div className="font-bold text-[13px] text-gray-900">
+                  <InlineText value={item.institution} onChange={(v) => updateItem(data.items, idx, "institution", v)} placeholder="Tên trường" />
+                </div>
+                <div className="text-[12px] text-gray-700">
+                  <span className="font-bold">Chuyên ngành</span> -{" "}
+                  <InlineText value={item.degree} onChange={(v) => updateItem(data.items, idx, "degree", v)} placeholder="Chuyên ngành" />
+                </div>
+              </div>
             </div>
-          </div>
-        );
-      }
+          ))}
+        </div>
+        <AddItemBtn sectionId={section.id} label="Thêm học vấn" />
+      </div>
+    </SectionWrapper>
+  );
+}
 
-      case 'experience_list': {
-        const data = section.data as ExperienceListSectionData;
-        return (
-          <div className="mb-8">
-            <SectionHeader title={section.title || "Experience"} icon={getSectionIcon(section.type)} />
-            <div className="space-y-6">
-                {data.items.map((item, index) => (
-                    <div key={item.id} className="relative pl-6 border-l-2 border-slate-200">
-                        {/* Dot */}
-                        <div className="absolute -left-[5px] top-1.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white"></div>
-                        
-                        <div className="flex justify-between items-baseline mb-1">
-                            <div className="font-bold text-slate-900 uppercase text-sm">
-                                <InlineText 
-                                    value={item.startDate} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].startDate = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                    className="inline"
-                                /> 
-                                <span className="mx-1">-</span>
-                                <InlineText 
-                                    value={item.endDate} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].endDate = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                    className="inline"
-                                />
-                            </div>
-                            <div className="font-bold text-slate-900 uppercase">
-                                <InlineText 
-                                    value={item.company} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].company = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </div>
-                        </div>
-                        
-                        <div className="text-sm font-bold text-slate-700 italic mb-2">
-                             <InlineText 
-                                value={item.position} 
-                                onChange={(v) => {
-                                    const newItems = [...data.items];
-                                    newItems[index].position = v;
-                                    handleUpdateData(section.id, { items: newItems });
-                                }} 
-                            />
-                        </div>
+/* ── Skills ────────────────────────────────────────── */
+function SkillSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as SkillListSectionData;
+  const mainSkills = data.items.filter((s) => (s.level ?? 0) >= 75);
+  const otherSkills = data.items.filter((s) => (s.level ?? 0) < 75);
 
-                        <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                            <InlineTextarea 
-                                value={item.description} 
-                                onChange={(v) => {
-                                    const newItems = [...data.items];
-                                    newItems[index].description = v;
-                                    handleUpdateData(section.id, { items: newItems });
-                                }} 
-                            />
-                        </div>
-                    </div>
-                ))}
-            </div>
-          </div>
-        );
-      }
+  const updateItem = (id: string, field: string, value: unknown) => {
+    const allItems = [...data.items];
+    const idx = allItems.findIndex((s) => s.id === id);
+    if (idx >= 0) {
+      allItems[idx] = { ...allItems[idx], [field]: value };
+      updateSectionData(section.id, { items: allItems });
+    }
+  };
 
-      case 'education_list': {
-        const data = section.data as EducationListSectionData;
-        return (
-          <div className="mb-8">
-            <SectionHeader title={section.title || "Education"} icon={getSectionIcon(section.type)} />
-            <div className="space-y-4">
-                {data.items.map((item, index) => (
-                    <div key={item.id} className="flex justify-between items-start border-b border-dashed border-slate-200 pb-3">
-                        <div className="w-32 font-bold text-sm text-slate-700 shrink-0">
-                             <InlineText 
-                                value={`${item.startDate} - ${item.endDate}`} 
-                                onChange={(v) => {
-                                    // Complex split logic omitted for simplicity unless requested
-                                }}
-                                placeholder="YYYY - YYYY"
-                            />
-                        </div>
-                        <div className="flex-1">
-                            <h4 className="font-bold text-slate-900 uppercase text-sm">
-                                <InlineText 
-                                    value={item.institution} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].institution = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </h4>
-                            <p className="text-sm text-slate-600">
-                                <InlineText 
-                                    value={item.degree} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].degree = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </p>
-                        </div>
-                    </div>
-                ))}
-            </div>
-          </div>
-        );
-      }
-
-      case 'skill_list': {
-        const data = section.data as SkillListSectionData;
-        return (
-          <div className="mb-8">
-            <SectionHeader title={section.title || "Skills"} icon={getSectionIcon(section.type)} />
-            <ul className="list-disc pl-5 space-y-2 text-sm text-slate-700">
-                {data.items.map((item, index) => (
-                    <li key={item.id}>
-                        <span className="font-bold mr-2">{item.name.split(':')[0]}:</span> 
-                        {/* Naive split for "Main: HTML, CSS" style */}
-                        <InlineText 
-                            value={item.name} 
-                            onChange={(v) => {
-                                const newItems = [...data.items];
-                                newItems[index].name = v;
-                                handleUpdateData(section.id, { items: newItems });
-                            }} 
-                        />
-                    </li>
-                ))}
-            </ul>
-          </div>
-        );
-      }
-
-      case 'project_list': {
-        const data = section.data as ProjectListSectionData;
-        return (
-          <div className="mb-8">
-            <SectionHeader title={section.title || "Projects"} icon={getSectionIcon(section.type)} />
-            <div className="space-y-6">
-                {data.items.map((item, index) => (
-                    <div key={item.id} className="border border-slate-200 rounded-lg p-4 bg-white shadow-sm">
-                        <div className="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
-                            <h3 className="font-bold text-emerald-600 uppercase">
-                                <InlineText 
-                                    value={item.name} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].name = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </h3>
-                            <span className="text-xs font-semibold text-slate-500 bg-slate-50 px-2 py-1 rounded">
-                                {item.startDate} - {item.endDate}
-                            </span>
-                        </div>
-                        
-                        <div className="grid grid-cols-[140px_1fr] gap-2 text-sm">
-                            <div className="font-bold text-slate-700">Client</div>
-                            <div>
-                                <InlineText 
-                                    value={item.customer || ''} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].customer = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </div>
-
-                            <div className="font-bold text-slate-700">Descriptions</div>
-                            <div>
-                                <InlineTextarea
-                                    value={item.description} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].description = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </div>
-
-                            <div className="font-bold text-slate-700">Team Size</div>
-                            <div>{item.teamSize}</div>
-
-                            <div className="font-bold text-slate-700">Position</div>
-                            <div>
-                                <InlineText 
-                                    value={item.role} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].role = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </div>
-
-                            <div className="font-bold text-slate-700">Technology</div>
-                            <div className="whitespace-pre-wrap">
-                                <InlineTextarea
-                                    value={item.technologies} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].technologies = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-          </div>
-        );
-      }
-
-      case 'award_list': {
-        const data = section.data as AwardListSectionData;
-        return (
-          <div className="mb-8">
-            <SectionHeader title={section.title || "Awards"} icon={getSectionIcon(section.type)} />
-            <div className="space-y-3">
-                {data.items.map((item, index) => (
-                    <div key={item.id} className="grid grid-cols-[80px_1fr] gap-4 text-sm">
-                        <div className="font-bold text-slate-900 border-r border-slate-200 pr-4 text-right">
-                            {item.date}
-                        </div>
-                        <div>
-                            <h4 className="font-bold text-emerald-700">
-                                <InlineText 
-                                    value={item.title} 
-                                    onChange={(v) => {
-                                        const newItems = [...data.items];
-                                        newItems[index].title = v;
-                                        handleUpdateData(section.id, { items: newItems });
-                                    }} 
-                                />
-                            </h4>
-                            <p className="text-slate-600 italic">
-                                {item.issuer}
-                            </p>
-                        </div>
-                    </div>
-                ))}
-            </div>
-          </div>
-        );
-      }
-
-      default:
-        return null;
+  const removeByGlobalIndex = (skillId: string) => {
+    const idx = data.items.findIndex((s) => s.id === skillId);
+    if (idx >= 0) {
+      const items = [...data.items];
+      if (items.length <= 1) return;
+      items.splice(idx, 1);
+      updateSectionData(section.id, { items });
     }
   };
 
   return (
-    <div 
-        className="w-full min-h-[297mm] p-[15mm] bg-white shadow-lg mx-auto print:shadow-none print:p-0 print:m-0"
-        style={{ fontFamily: "'Manrope', sans-serif" }}
-    >
-      {cv.sections.map(section => (
-        <div key={section.id} className="group relative">
-            {/* Render Component */}
-            {renderSection(section)}
-            
-            {/* Focus Indicator (Optional) */}
-            <div className="absolute inset-0 border border-transparent group-hover:border-slate-100 pointer-events-none rounded-lg -m-2"></div>
+    <SectionWrapper sectionId={section.id} label="Kỹ năng">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Kỹ năng"} />
+        <div className="pl-1 text-[12.5px]">
+          {mainSkills.length > 0 && (
+            <div className="flex gap-4 mb-3">
+              <span className="font-bold text-gray-700 w-14 shrink-0 pt-0.5">Chính</span>
+              <ul className="list-disc ml-4 space-y-0.5 flex-1">
+                {mainSkills.map((item) => (
+                  <li key={item.id} className="group/item relative">
+                    <InlineText value={item.name} onChange={(v) => updateItem(item.id, "name", v)} placeholder="Tên kỹ năng" />
+                    <button
+                      type="button"
+                      title="Xóa kỹ năng"
+                      onClick={(e) => { e.stopPropagation(); removeByGlobalIndex(item.id); }}
+                      className="absolute -right-4 top-0.5 size-4 flex items-center justify-center rounded-full bg-red-100 text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity print:hidden"
+                    >
+                      <X size={8} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {otherSkills.length > 0 && (
+            <div className="flex gap-4">
+              <span className="font-bold text-gray-700 w-14 shrink-0 pt-0.5">Khác</span>
+              <ul className="list-disc ml-4 space-y-0.5 flex-1">
+                {otherSkills.map((item) => (
+                  <li key={item.id} className="group/item relative">
+                    <InlineText value={item.name} onChange={(v) => updateItem(item.id, "name", v)} placeholder="Tên kỹ năng" />
+                    <button
+                      type="button"
+                      title="Xóa kỹ năng"
+                      onClick={(e) => { e.stopPropagation(); removeByGlobalIndex(item.id); }}
+                      className="absolute -right-4 top-0.5 size-4 flex items-center justify-center rounded-full bg-red-100 text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity print:hidden"
+                    >
+                      <X size={8} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
-      ))}
+        <AddItemBtn sectionId={section.id} label="Thêm kỹ năng" />
+      </div>
+    </SectionWrapper>
+  );
+}
+
+/* ── Awards ─────────────────────────────────────────── */
+function AwardSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as AwardListSectionData;
+
+  const updateItem = (items: typeof data.items, index: number, field: string, value: unknown) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    updateSectionData(section.id, { items: newItems });
+  };
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Giải thưởng">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Giải thưởng"} />
+        {data.items.length > 0 && (
+          <div className="text-[12px] text-gray-700 mb-2 pl-1 leading-relaxed">
+            <InlineRichText
+              value={data.items[0].description || ""}
+              onChange={(v) => updateItem(data.items, 0, "description", v)}
+              placeholder="Tóm tắt giải thưởng..."
+            />
+          </div>
+        )}
+        <div className="space-y-2.5 pl-1">
+          {data.items.map((item, idx) => (
+            <div key={item.id} className="group/item relative grid grid-cols-[80px_1fr] gap-x-4 text-[12.5px]">
+              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <div className="font-bold text-gray-900">
+                <InlineText value={item.date} onChange={(v) => updateItem(data.items, idx, "date", v)} placeholder="MM/YYYY" />
+              </div>
+              <div>
+                <div className="font-bold text-gray-900">
+                  <InlineText value={item.title} onChange={(v) => updateItem(data.items, idx, "title", v)} placeholder="Tên giải thưởng" />
+                </div>
+                {item.issuer && (
+                  <div className="text-gray-500 text-[11.5px]">
+                    <InlineText value={item.issuer} onChange={(v) => updateItem(data.items, idx, "issuer", v)} placeholder="Đơn vị trao" />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+        <AddItemBtn sectionId={section.id} label="Thêm giải thưởng" />
+      </div>
+    </SectionWrapper>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PROJECT BLOCK — Table-style layout
+   ═══════════════════════════════════════════════════════════ */
+interface ProjectBlockProps {
+  item: {
+    id: string;
+    name: string;
+    role: string;
+    startDate: string;
+    endDate: string | "Present";
+    description: string;
+    technologies: string;
+    customer?: string;
+    teamSize?: number;
+  };
+  idx: number;
+  sectionId: string;
+  allItems: unknown[];
+  updateListItem: (sectionId: string, items: unknown[], index: number, field: string, value: unknown) => void;
+}
+
+const ProjectBlock = ({ item, idx, sectionId, allItems, updateListItem }: ProjectBlockProps) => {
+  const techLines = item.technologies.split("\n").filter(Boolean);
+
+  return (
+    <div className="group/item relative text-[12.5px]">
+      <RemoveItemBtn sectionId={sectionId} index={idx} />
+
+      <div className="font-bold text-[13px] text-gray-900 uppercase mb-0.5">
+        <InlineText value={item.name} onChange={(v) => updateListItem(sectionId, allItems, idx, "name", v)} placeholder="TÊN DỰ ÁN" />
+      </div>
+      <div className="text-[11.5px] text-gray-500 mb-2">
+        (<InlineText value={item.startDate} onChange={(v) => updateListItem(sectionId, allItems, idx, "startDate", v)} placeholder="MM/YYYY" />
+        {" – "}
+        <InlineText value={typeof item.endDate === "string" ? item.endDate : "Present"} onChange={(v) => updateListItem(sectionId, allItems, idx, "endDate", v)} placeholder="Hiện tại" />)
+      </div>
+
+      <table className="w-full border-collapse text-[12px]">
+        <tbody>
+          <tr>
+            <td className="border border-gray-300 px-3 py-1.5 font-bold text-gray-700 bg-gray-50 w-35 align-top">Khách hàng</td>
+            <td className="border border-gray-300 px-3 py-1.5">
+              <InlineText value={item.customer || ""} onChange={(v) => updateListItem(sectionId, allItems, idx, "customer", v)} placeholder="Tên khách hàng" />
+            </td>
+          </tr>
+          <tr>
+            <td className="border border-gray-300 px-3 py-1.5 font-bold text-gray-700 bg-gray-50 align-top">Mô tả</td>
+            <td className="border border-gray-300 px-3 py-1.5">
+              <InlineText value={item.description} onChange={(v) => updateListItem(sectionId, allItems, idx, "description", v)} placeholder="Mô tả dự án" />
+            </td>
+          </tr>
+          <tr>
+            <td className="border border-gray-300 px-3 py-1.5 font-bold text-gray-700 bg-gray-50 align-top">Số thành viên</td>
+            <td className="border border-gray-300 px-3 py-1.5">{item.teamSize ?? 1}</td>
+          </tr>
+          <tr>
+            <td className="border border-gray-300 px-3 py-1.5 font-bold text-gray-700 bg-gray-50 align-top">Vị trí</td>
+            <td className="border border-gray-300 px-3 py-1.5">
+              <InlineText value={item.role} onChange={(v) => updateListItem(sectionId, allItems, idx, "role", v)} placeholder="Vị trí của bạn" />
+            </td>
+          </tr>
+          <tr>
+            <td className="border border-gray-300 px-3 py-1.5 font-bold text-gray-700 bg-gray-50 align-top">Trách nhiệm</td>
+            <td className="border border-gray-300 px-3 py-1.5 whitespace-pre-wrap">
+              <InlineRichText value={item.description} onChange={(v) => updateListItem(sectionId, allItems, idx, "description", v)} placeholder="- Trách nhiệm 1" />
+            </td>
+          </tr>
+          <tr>
+            <td className="border border-gray-300 px-3 py-1.5 font-bold text-gray-700 bg-gray-50 align-top">Công nghệ sử dụng</td>
+            <td className="border border-gray-300 px-3 py-1.5">
+              {techLines.length > 0 ? (
+                <div className="space-y-0.5">
+                  {techLines.map((line, i) => (
+                    <div key={i} className="text-[12px]">- {line.replace(/^-\s*/, "")}</div>
+                  ))}
+                </div>
+              ) : (
+                <InlineRichText value={item.technologies} onChange={(v) => updateListItem(sectionId, allItems, idx, "technologies", v)} placeholder="- Frontend: React" />
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 };
+
+/* ── Projects ──────────────────────────────────────── */
+function ProjectSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as ProjectListSectionData;
+
+  const updateItem = (_sectionId: string, items: unknown[], index: number, field: string, value: unknown) => {
+    const newItems = [...items] as Record<string, unknown>[];
+    newItems[index] = { ...newItems[index], [field]: value };
+    updateSectionData(section.id, { items: newItems });
+  };
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Dự án">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Dự án"} />
+        <div className="space-y-4">
+          {data.items.map((item, idx) => (
+            <ProjectBlock
+              key={item.id}
+              item={item}
+              idx={idx}
+              sectionId={section.id}
+              allItems={data.items}
+              updateListItem={updateItem}
+            />
+          ))}
+        </div>
+        <AddItemBtn sectionId={section.id} label="Thêm dự án" />
+      </div>
+    </SectionWrapper>
+  );
+}
+
+/* ── Certificates ──────────────────────────────────── */
+function CertificateSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as CertificateListSectionData;
+
+  const updateItem = (items: typeof data.items, index: number, field: string, value: unknown) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    updateSectionData(section.id, { items: newItems });
+  };
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Chứng chỉ">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Chứng chỉ"} />
+        <div className="space-y-2 pl-1">
+          {data.items.map((item, idx) => (
+            <div key={item.id} className="group/item relative grid grid-cols-[80px_1fr] gap-x-4 text-[12.5px]">
+              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <div className="font-bold text-gray-900">
+                <InlineText value={item.date} onChange={(v) => updateItem(data.items, idx, "date", v)} placeholder="MM/YYYY" />
+              </div>
+              <div>
+                <div className="font-bold text-gray-900">
+                  <InlineText value={item.name} onChange={(v) => updateItem(data.items, idx, "name", v)} placeholder="Tên chứng chỉ" />
+                </div>
+                <div className="text-gray-500 text-[11.5px]">
+                  <InlineText value={item.issuer} onChange={(v) => updateItem(data.items, idx, "issuer", v)} placeholder="Đơn vị cấp" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <AddItemBtn sectionId={section.id} label="Thêm chứng chỉ" />
+      </div>
+    </SectionWrapper>
+  );
+}
+
+/* ── Custom Text ───────────────────────────────────── */
+function CustomTextSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as { text?: string };
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Tùy chỉnh">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Mục tùy chỉnh"} />
+        <div className="text-[12.5px] leading-relaxed pl-1">
+          <InlineRichText
+            value={data.text || ""}
+            onChange={(v) => updateSectionData(section.id, { text: v })}
+            placeholder="Nhập nội dung..."
+          />
+        </div>
+      </div>
+    </SectionWrapper>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SECTION RENDERER — dispatches to the right component
+   ═══════════════════════════════════════════════════════════ */
+function RenderSection({ section, allSections }: { section: CVSection; allSections: CVSection[] }) {
+  if (!section.isVisible) return null;
+
+  switch (section.type) {
+    case "header":
+      return <HeaderSection section={section} />;
+    case "personal_info": {
+      const headerSection = allSections.find((s) => s.type === "header");
+      return <PersonalInfoSection section={section} headerSection={headerSection} />;
+    }
+    case "summary":
+      return <SummarySection section={section} />;
+    case "experience_list":
+      return <ExperienceSection section={section} />;
+    case "education_list":
+      return <EducationSection section={section} />;
+    case "skill_list":
+      return <SkillSection section={section} />;
+    case "award_list":
+      return <AwardSection section={section} />;
+    case "project_list":
+      return <ProjectSection section={section} />;
+    case "certificate_list":
+      return <CertificateSection section={section} />;
+    case "custom_text":
+      return <CustomTextSection section={section} />;
+    default:
+      return (
+        <SectionWrapper sectionId={section.id} label={section.type}>
+          <div className="mb-3 p-3 border border-dashed border-gray-300 rounded text-sm text-gray-400 italic">
+            Mục chưa được hỗ trợ: {section.type}
+          </div>
+        </SectionWrapper>
+      );
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MAIN TEMPLATE — Dynamic section rendering
+   ═══════════════════════════════════════════════════════════ */
+export const GreenModernTemplate = () => {
+  const { cv, setSelectedSection } = useCVStore();
+  const sections = cv.sections;
+
+  return (
+    <div className="cv-f8-green bg-white" onClick={() => setSelectedSection(null)}>
+      {/* Single continuous page (auto-paginated for print) */}
+      <div className="cv-page relative">
+        {sections.map((section) => (
+          <RenderSection key={section.id} section={section} allSections={sections} />
+        ))}
+
+        {/* Add Section Button */}
+        <div className="mt-4" onClick={(e) => e.stopPropagation()}>
+          <AddSectionButton />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default GreenModernTemplate;

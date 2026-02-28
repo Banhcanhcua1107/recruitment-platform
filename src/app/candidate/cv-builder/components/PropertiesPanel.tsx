@@ -42,6 +42,7 @@ export const PropertiesPanel = () => {
              <div>
                 <label className="text-xs font-bold text-slate-700">Full Name</label>
                 <input 
+                    placeholder="Họ và tên"
                     className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:border-emerald-500 focus:ring-emerald-500 outline-none"
                     value={data.fullName || ''}
                     onChange={(e) => updateSectionData(section.id, { fullName: e.target.value })}
@@ -50,6 +51,7 @@ export const PropertiesPanel = () => {
             <div>
                 <label className="text-xs font-bold text-slate-700">Professional Title</label>
                 <input 
+                    placeholder="Chức danh"
                     className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:border-emerald-500 focus:ring-emerald-500 outline-none"
                     value={data.title || ''}
                     onChange={(e) => updateSectionData(section.id, { title: e.target.value })}
@@ -73,6 +75,7 @@ export const PropertiesPanel = () => {
                 <div key={field}>
                     <label className="text-xs font-bold text-slate-700 capitalize">{field}</label>
                     <input 
+                        placeholder={field}
                         className="w-full h-9 px-3 text-sm border border-slate-200 rounded-md focus:border-emerald-500 focus:ring-emerald-500 outline-none"
                         value={data[field] || ''}
                         onChange={(e) => updateSectionData(section.id, { [field]: e.target.value })}
@@ -111,6 +114,9 @@ export const PropertiesPanel = () => {
                 {items.map((item, idx) => (
                     <div key={item.id} className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3 relative group">
                         <button 
+                            type="button"
+                            title="Xóa mục này"
+                            aria-label="Xóa mục này"
                             onClick={() => removeItem(item.id)}
                             className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
                         >
@@ -119,12 +125,14 @@ export const PropertiesPanel = () => {
                         
                         <div className="grid grid-cols-2 gap-2 pr-6">
                              <input 
+                                title="Vị trí"
                                 className="text-sm font-bold bg-white border border-slate-200 rounded px-2 py-1" 
                                 value={item.position}
                                 onChange={(e) => updateItem(item.id, { position: e.target.value })}
                                 placeholder="Position"
                              />
                              <input 
+                                title="Công ty"
                                 className="text-sm bg-white border border-slate-200 rounded px-2 py-1" 
                                 value={item.company}
                                 onChange={(e) => updateItem(item.id, { company: e.target.value })}
@@ -146,7 +154,8 @@ export const PropertiesPanel = () => {
                              />
                         </div>
                         <textarea 
-                             className="w-full text-xs bg-white border border-slate-200 rounded px-2 py-1 min-h-[60px]"
+                             title="Mô tả"
+                             className="w-full text-xs bg-white border border-slate-200 rounded px-2 py-1 min-h-15"
                              value={item.description}
                              onChange={(e) => updateItem(item.id, { description: e.target.value })}
                              placeholder="Description..."
@@ -186,11 +195,13 @@ export const PropertiesPanel = () => {
                     {items.map(item => (
                         <div key={item.id} className="flex items-center gap-1 bg-white border border-slate-200 rounded-full pl-3 pr-1 py-1 text-sm">
                             <input 
+                                placeholder="Kỹ năng"
+                                title="Tên kỹ năng"
                                 className="bg-transparent outline-none w-20"
                                 value={item.name}
                                 onChange={(e) => updateItem(item.id, e.target.value)}
                             />
-                             <button onClick={() => removeItem(item.id)} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
+                             <button type="button" title="Xóa kỹ năng" aria-label="Xóa kỹ năng" onClick={() => removeItem(item.id)} className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
                                 <Trash size={12} />
                             </button>
                         </div>
@@ -258,6 +269,8 @@ export const PropertiesPanel = () => {
                          <div>
                             <label className="text-xs font-bold text-slate-700 block mb-1">Summary Text</label>
                             <textarea 
+                                title="Giới thiệu bản thân"
+                                placeholder="Viết giới thiệu bản thân..."
                                 className="w-full h-40 p-3 text-sm border border-slate-200 rounded-md focus:border-emerald-500 focus:ring-emerald-500 outline-none resize-none leading-relaxed"
                                 value={(section.data as SummarySectionData).text || ''}
                                 onChange={(e) => updateSectionData(section.id, { text: e.target.value })}
@@ -301,6 +314,8 @@ export const PropertiesPanel = () => {
                         </div>
                         <input 
                             type="range" 
+                            title="Khoảng cách dưới"
+                            aria-label="Khoảng cách dưới"
                             min="0" max="64" step="4"
                             className="w-full accent-emerald-500 h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                             value={section.styles?.marginBottom ?? 16}

@@ -4,10 +4,18 @@ import React, { useEffect, useRef, useState, use } from "react";
 import { useCVStore } from "../../store";
 import { CVWorkspacePanel } from "../../components/CVWorkspacePanel";
 import { SuggestionPanel } from "../../components/SuggestionPanel";
+import { GreenModernTemplate } from "../../components/templates/GreenModernTemplate";
 import { getResumeById, saveResume, ResumeRow, ResumeBlock } from "../../api";
 import { CVContent, CVSection } from "../../types";
-import { ArrowLeft, Save, Download, Undo2, Redo2, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Download, Undo2, Redo2, CheckCircle2, Loader2, LayoutTemplate, ListChecks } from "lucide-react";
 import Link from "next/link";
+
+// Registry: template_id → visual component
+const TEMPLATE_COMPONENTS: Record<string, React.ComponentType> = {
+  "a1b2c3d4-e5f6-7890-abcd-ef1234567890": GreenModernTemplate,
+};
+
+type ViewMode = "template" | "form";
 
 // Auto-save debounce delay (ms)
 const AUTOSAVE_DELAY = 1500;
@@ -20,6 +28,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
   const [resume, setResume] = useState<ResumeRow | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [viewMode, setViewMode] = useState<ViewMode>("template");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load resume từ Supabase
@@ -32,14 +41,51 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
           return;
         }
         setResume(data);
+        // Map DB block_id → frontend SectionType (DB dùng tên ngắn, frontend dùng _list suffix)
+        const BLOCK_ID_MAP: Record<string, string> = {
+          header: 'header',
+          contact: 'personal_info',
+          personal_info: 'personal_info',
+          summary: 'summary',
+          experience: 'experience_list',
+          experience_list: 'experience_list',
+          education: 'education_list',
+          education_list: 'education_list',
+          skills: 'skill_list',
+          skill_list: 'skill_list',
+          awards: 'award_list',
+          award_list: 'award_list',
+          projects: 'project_list',
+          project_list: 'project_list',
+          certificates: 'certificate_list',
+          certificate_list: 'certificate_list',
+        };
+
+        // Section title defaults
+        const SECTION_TITLES: Record<string, string> = {
+          header: '',
+          personal_info: '',
+          summary: 'Overview',
+          experience_list: 'Work experience',
+          education_list: 'Education',
+          skill_list: 'Skills',
+          award_list: 'Awards',
+          project_list: 'Projects',
+          certificate_list: 'Chứng chỉ',
+        };
+
         // Init store với data từ Supabase
-        const mappedSections: CVSection[] = data.resume_data.map((block: ResumeBlock) => ({
-          id: crypto.randomUUID(),
-          type: block.block_id as unknown as CVSection["type"],
-          isVisible: block.is_visible,
-          containerId: 'main-column',
-          data: block.data as unknown as CVSection["data"],
-        }));
+        const mappedSections: CVSection[] = data.resume_data.map((block: ResumeBlock) => {
+          const mappedType = BLOCK_ID_MAP[block.block_id] || block.block_id;
+          return {
+            id: crypto.randomUUID(),
+            type: mappedType as CVSection["type"],
+            title: SECTION_TITLES[mappedType] || '',
+            isVisible: block.is_visible,
+            containerId: 'main-column',
+            data: block.data as unknown as CVSection["data"],
+          };
+        });
 
         loadResumeIntoStore(
           mappedSections, 
@@ -250,17 +296,64 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
       {/* ── SPLIT-SCREEN ──────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* LEFT (60%): CV Form Workspace */}
+        {/* LEFT: Visual Template or Form Editor */}
         <div className="flex flex-col w-[60%] min-w-0 border-r border-slate-200 bg-slate-50">
+          {/* Sub-header with view toggle */}
           <div className="flex items-center gap-2 px-5 py-3 bg-white border-b border-slate-200 shrink-0">
             <span className="material-symbols-outlined text-lg text-emerald-500">edit_document</span>
             <h2 className="text-sm font-bold text-slate-800">Nội dung CV</h2>
-            <span className="ml-auto text-[10px] text-slate-400 font-medium">
-              {cv.sections.filter((s) => s.isVisible).length}/{cv.sections.length} mục
-            </span>
+
+            {/* View mode toggle — only show if template exists */}
+            {resume?.template_id && TEMPLATE_COMPONENTS[resume.template_id] && (
+              <div className="ml-auto flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("template")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    viewMode === "template"
+                      ? "bg-white shadow-sm text-emerald-700"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <LayoutTemplate size={13} />
+                  Xem mẫu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("form")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                    viewMode === "form"
+                      ? "bg-white shadow-sm text-emerald-700"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <ListChecks size={13} />
+                  Soạn nhanh
+                </button>
+              </div>
+            )}
+
+            {/* Section count — show when no template or in form mode */}
+            {(!resume?.template_id || !TEMPLATE_COMPONENTS[resume.template_id] || viewMode === "form") && (
+              <span className="ml-auto text-[10px] text-slate-400 font-medium">
+                {cv.sections.filter((s) => s.isVisible).length}/{cv.sections.length} mục
+              </span>
+            )}
           </div>
-          <div className="flex-1 overflow-hidden">
-            <CVWorkspacePanel />
+
+          {/* Content area */}
+          <div className="flex-1 overflow-auto">
+            {resume?.template_id && TEMPLATE_COMPONENTS[resume.template_id] && viewMode === "template" ? (
+              /* Visual Template Preview (inline-editable) */
+              <div className="flex justify-center py-6 px-4">
+                <div className="shadow-2xl bg-white">
+                  {React.createElement(TEMPLATE_COMPONENTS[resume.template_id])}
+                </div>
+              </div>
+            ) : (
+              /* Form-based section editor */
+              <CVWorkspacePanel />
+            )}
           </div>
         </div>
 

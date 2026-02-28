@@ -65,6 +65,9 @@ export const AISuggestionSidebar = () => {
                     <span className="font-bold tracking-wide uppercase text-xs">AI Assistant</span>
                 </div>
                 <button 
+                    type="button"
+                    title="Đóng AI Assistant"
+                    aria-label="Đóng AI Assistant"
                     onClick={toggleSidebar}
                     className="text-slate-400 hover:text-white transition-colors"
                 >

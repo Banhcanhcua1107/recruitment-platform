@@ -49,6 +49,7 @@ export type SectionType =
   | 'skill_list' 
   | 'project_list' 
   | 'award_list'
+  | 'certificate_list'
   | 'custom_text'
   | 'custom_image';
 
@@ -140,7 +141,19 @@ export interface AwardItem {
   description: string;
 }
 
+export interface CertificateItem {
+  id: string;
+  name: string;
+  issuer: string;
+  date: string;
+  url?: string;
+}
+
 // -- Section Data Unions --
+
+export interface CertificateListSectionData {
+  items: CertificateItem[];
+}
 
 export interface ExperienceListSectionData {
   items: ExperienceItem[];
@@ -174,5 +187,6 @@ export type AnySectionData =
   | SkillListSectionData
   | ProjectListSectionData
   | AwardListSectionData
+  | CertificateListSectionData
   | SummarySectionData
   | Record<string, unknown>; // Fallback for custom sections
