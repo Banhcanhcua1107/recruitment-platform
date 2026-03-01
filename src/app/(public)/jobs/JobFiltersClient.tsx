@@ -378,53 +378,60 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
   return (
     <>
       {/* HERO */}
-      <section className="bg-white border-b border-slate-100 pt-12 pb-10 px-6">
-        <div className="max-w-7xl mx-auto text-center lg:text-left">
-          <h1 className="text-slate-900 text-4xl lg:text-5xl font-black leading-tight mb-3 tracking-tight">
-            Tìm kiếm công việc <span className="text-primary">mơ ước</span>
+      <section className="bg-white border-b border-slate-100 pt-14 pb-12 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-[800px] h-[600px] bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3 pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-6 text-center lg:text-left relative z-10">
+          <h1 className="text-slate-900 text-4xl lg:text-5xl font-black leading-tight mb-4 tracking-tight">
+            Tìm kiếm công việc <span className="text-primary relative inline-block">
+              mơ ước
+              <svg className="absolute -bottom-2 left-0 w-full h-3 text-primary/30" viewBox="0 0 100 10" preserveAspectRatio="none">
+                <path d="M0 5 Q 50 10 100 5" stroke="currentColor" strokeWidth="3" fill="transparent" />
+              </svg>
+            </span>
           </h1>
-          <p className="text-slate-500 text-lg lg:text-xl font-bold mb-8">
-            Khám phá hàng ngàn cơ hội nghề nghiệp và ứng tuyển ngay hôm nay.
+          <p className="text-slate-500 text-lg lg:text-xl font-bold mb-10 max-w-2xl">
+            Khám phá hàng ngàn cơ hội nghề nghiệp tốt nhất và ứng tuyển ngay hôm nay.
           </p>
 
           {/* hero search bar */}
-          <div className="max-w-5xl flex flex-col md:flex-row gap-3 bg-white p-3 rounded-[28px] shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-slate-100">
-            <div className="flex-1 relative flex items-center px-5 gap-4 bg-slate-50 rounded-2xl border border-transparent focus-within:bg-white focus-within:border-primary/20 transition-all">
-              <span className="material-symbols-outlined text-slate-400 text-2xl font-bold">search</span>
+          <div className="w-full max-w-5xl flex flex-col md:flex-row gap-3 bg-white p-3 rounded-[28px] shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 transition-shadow hover:shadow-[0_8px_30px_rgb(0,0,0,0.1)]">
+            <div className="flex-1 relative flex items-center px-6 gap-4 bg-slate-50 rounded-2xl border-2 border-transparent focus-within:bg-white focus-within:border-primary/20 transition-all">
+              <span className="material-symbols-outlined text-primary text-2xl font-bold">search</span>
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                className="w-full h-16 border-none bg-transparent focus:ring-0 text-lg font-bold placeholder:text-slate-400"
+                className="w-full h-16 border-none bg-transparent focus:ring-0 text-lg font-bold placeholder:text-slate-400 outline-none"
                 placeholder="Chức danh, từ khóa, công ty..."
               />
             </div>
-            <div className="flex-1 relative flex items-center px-5 gap-4 bg-slate-50 rounded-2xl border border-transparent focus-within:bg-white focus-within:border-primary/20 transition-all">
-              <span className="material-symbols-outlined text-slate-400 text-2xl font-bold">location_on</span>
+            <div className="flex-1 relative flex items-center px-6 gap-4 bg-slate-50 rounded-2xl border-2 border-transparent focus-within:bg-white focus-within:border-primary/20 transition-all">
+              <span className="material-symbols-outlined text-primary text-2xl font-bold">location_on</span>
               <select
                 aria-label="Chọn địa điểm"
                 value={selectedLocation}
                 onChange={(e) => setSelectedLocation(e.target.value)}
-                className="w-full h-16 border-none bg-transparent focus:ring-0 text-lg font-bold text-slate-700 cursor-pointer"
+                className="w-full h-16 border-none bg-transparent focus:ring-0 text-lg font-bold text-slate-700 cursor-pointer outline-none appearance-none"
               >
                 <option value="">Tất cả địa điểm</option>
                 {allLocations.map((loc) => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
               </select>
+              <span className="material-symbols-outlined text-slate-400 absolute right-6 pointer-events-none">expand_more</span>
             </div>
           </div>
 
           {/* chips */}
-          <div className="mt-6 flex flex-wrap gap-3 items-center">
-            <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Gợi ý:</span>
+          <div className="mt-8 flex flex-wrap gap-x-3 gap-y-3 justify-center lg:justify-start">
+            <span className="text-sm font-black text-slate-400 uppercase tracking-widest hidden lg:block lg:self-center">Gợi ý:</span>
             {SUGGESTION_CHIPS.map((tag) => (
               <button
                 key={tag}
                 onClick={() => setQ(tag)}
-                className={`px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${
+                className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
                   normalize(q) === normalize(tag)
-                    ? "bg-primary text-white"
-                    : "bg-slate-100 text-slate-700 hover:bg-primary hover:text-white"
+                    ? "bg-primary text-white shadow-md shadow-primary/25"
+                    : "bg-slate-50 border border-slate-100 text-slate-600 hover:border-slate-300 hover:bg-white"
                 }`}
               >
                 {tag}
@@ -454,8 +461,8 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
 
         <div className="flex gap-8">
           {/* DESKTOP SIDEBAR */}
-          <aside className="hidden lg:block w-75 shrink-0">
-            <div className="sticky top-6 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 max-h-[calc(100vh-3rem)] overflow-y-auto scrollbar-thin">
+          <aside className="hidden lg:block w-[300px] shrink-0">
+            <div className="sticky top-6 bg-white rounded-2xl border border-slate-100 shadow-sm p-6 overflow-hidden">
               {sidebarContent}
             </div>
           </aside>
@@ -513,17 +520,20 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
 
             {/* list */}
             {paged.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-3xl border border-slate-100">
-                <span className="material-symbols-outlined text-6xl text-slate-200 mb-4 block">search_off</span>
-                <p className="text-slate-500 font-bold text-xl">Không tìm thấy việc làm phù hợp</p>
+              <div className="text-center py-20 bg-white rounded-[28px] border border-slate-100 shadow-sm">
+                <div className="size-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-5">
+                  <span className="material-symbols-outlined text-4xl text-slate-300">search_off</span>
+                </div>
+                <p className="text-slate-600 font-black text-lg">Không tìm thấy việc làm phù hợp</p>
+                <p className="text-slate-400 font-medium text-sm mt-1 mb-6">Hãy thử thay đổi từ khóa hoặc xóa bớt bộ lọc.</p>
                 {activeFilterCount > 0 && (
-                  <button onClick={clearAll} className="mt-4 text-primary font-black text-sm hover:underline">
-                    Xóa bộ lọc và thử lại
+                  <button onClick={clearAll} className="px-6 py-2.5 bg-primary/10 text-primary font-black text-sm hover:bg-primary/20 transition-colors rounded-xl">
+                    Xóa tất cả bộ lọc
                   </button>
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {paged.map((job) => (
                   <JobCard key={job.id} job={job} />
                 ))}
@@ -536,7 +546,7 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="size-11 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-white transition-all disabled:opacity-30"
+                  className="size-11 rounded-xl border-2 border-slate-100 flex items-center justify-center hover:border-slate-300 hover:bg-slate-50 transition-all disabled:opacity-30"
                 >
                   <span className="material-symbols-outlined">chevron_left</span>
                 </button>
@@ -557,8 +567,8 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
                         onClick={() => setPage(p)}
                         className={`size-11 rounded-xl flex items-center justify-center font-black text-sm transition-all ${
                           page === p
-                            ? "bg-primary text-white shadow-md shadow-primary/20"
-                            : "border border-slate-200 text-slate-600 hover:bg-white"
+                            ? "bg-primary text-white shadow-lg shadow-primary/25 hover:-translate-y-0.5"
+                            : "border-2 border-slate-100 text-slate-600 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                       >
                         {p}
@@ -569,7 +579,7 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => p + 1)}
-                  className="size-11 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-white transition-all disabled:opacity-30"
+                  className="size-11 rounded-xl border-2 border-slate-100 flex items-center justify-center hover:border-slate-300 hover:bg-slate-50 transition-all disabled:opacity-30"
                 >
                   <span className="material-symbols-outlined">chevron_right</span>
                 </button>
@@ -667,53 +677,58 @@ function JobCard({ job }: { job: Job }) {
   return (
     <Link
       href={`/jobs/${job.id}`}
-      className="group flex flex-col h-full bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-primary/40 transition-all duration-300"
+      className="group flex flex-col h-full bg-white rounded-[20px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 hover:border-primary/30 transition-all duration-300"
     >
-      <div className="h-36 bg-slate-100 overflow-hidden relative">
+      <div className="h-40 bg-slate-100 overflow-hidden relative shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={job.cover_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-        <span className="absolute bottom-3 right-3 bg-white/90 backdrop-blur text-primary font-black text-xs px-3 py-1.5 rounded-lg shadow">
-          {job.salary}
-        </span>
+        <div className="absolute inset-0 bg-linear-to-t from-slate-900/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
 
-      <div className="flex-1 p-5 flex flex-col">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="size-10 rounded-xl border border-slate-100 bg-white p-1 flex items-center justify-center shrink-0 overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={job.logo_url} alt="" className="w-full h-full object-contain" />
-          </div>
-          <span className="text-sm font-bold text-slate-500 line-clamp-1">{job.company_name}</span>
+      <div className="flex-1 p-5 flex flex-col relative">
+        <div className="absolute -top-10 right-5 size-14 rounded-2xl border-4 border-white bg-white flex items-center justify-center shrink-0 shadow-sm overflow-hidden z-10">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={job.logo_url} alt="" className="w-full h-full object-contain p-1" />
         </div>
 
-        <h3 className="text-lg font-black text-slate-900 group-hover:text-primary transition-colors line-clamp-2 mb-2 leading-snug">
-          {job.title}
-        </h3>
+        <div className="pr-16 mb-3">
+          <h3 className="text-lg font-black text-slate-900 group-hover:text-primary transition-colors line-clamp-2 leading-snug">
+            {job.title}
+          </h3>
+          <p className="text-sm font-bold text-slate-500 mt-1 line-clamp-1">{job.company_name}</p>
+        </div>
 
-        <div className="mt-auto flex flex-wrap gap-2">
-          <span className="flex items-center gap-1 text-xs font-bold text-slate-400">
-            <span className="material-symbols-outlined text-base">location_on</span>
-            {job.location}
+        <div className="mb-4">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/5 text-primary font-black text-sm rounded-lg border border-primary/10">
+            {job.salary}
           </span>
-          {job.deadline && (
-            <span className="flex items-center gap-1 text-xs font-bold text-slate-400">
-              <span className="material-symbols-outlined text-base">schedule</span>
-              {job.deadline}
-            </span>
-          )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5 mt-2.5">
-          {job.employment_type && (
-            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[11px] font-black text-slate-500 uppercase tracking-wider">
-              {job.employment_type}
+        <div className="mt-auto flex flex-col gap-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <span className="flex items-center gap-1 text-xs font-semibold text-slate-500 truncate max-w-full">
+              <span className="material-symbols-outlined text-base">location_on</span>
+              <span className="truncate">{job.location}</span>
             </span>
-          )}
-          {job.level && (
-            <span className="px-2 py-0.5 rounded-md bg-primary/5 text-[11px] font-black text-primary uppercase tracking-wider">
-              {job.level}
-            </span>
-          )}
+            {job.deadline && (
+              <span className="flex items-center gap-1 text-xs font-semibold text-slate-500 truncate max-w-full">
+                <span className="material-symbols-outlined text-base">schedule</span>
+                <span className="truncate">{job.deadline}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {job.employment_type && (
+              <span className="px-2.5 py-1 rounded-md bg-slate-50 text-[11px] font-bold text-slate-600 uppercase tracking-wider border border-slate-100">
+                {job.employment_type}
+              </span>
+            )}
+            {job.level && (
+              <span className="px-2.5 py-1 rounded-md bg-slate-50 text-[11px] font-bold text-slate-600 uppercase tracking-wider border border-slate-100">
+                {job.level}
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </Link>
