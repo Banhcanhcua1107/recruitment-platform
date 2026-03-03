@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import type { Job } from "@/types/job";
+import { toSlug } from "@/lib/slug";
 
 // ────────────────────────────────────────────────
 //  HELPERS
@@ -674,6 +675,13 @@ function IndustryFilter({ industries, selected, onToggle }: { industries: string
 }
 
 function JobCard({ job }: { job: Job }) {
+  const companySlug = toSlug(job.company_name?.trim() ?? "");
+  const initial = job.company_name?.charAt(0) ?? "?";
+  const hasLogo =
+    job.logo_url &&
+    job.logo_url !== "https://via.placeholder.com/150" &&
+    !job.logo_url.includes("placeholder");
+
   return (
     <Link
       href={`/jobs/${job.id}`}
@@ -687,15 +695,37 @@ function JobCard({ job }: { job: Job }) {
 
       <div className="flex-1 p-5 flex flex-col relative">
         <div className="absolute -top-10 right-5 size-14 rounded-2xl border-4 border-white bg-white flex items-center justify-center shrink-0 shadow-sm overflow-hidden z-10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={job.logo_url} alt="" className="w-full h-full object-contain p-1" />
+          {hasLogo ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={job.logo_url} alt="" className="w-full h-full object-contain p-1" />
+          ) : (
+            <span className="text-xl font-black text-primary">{initial}</span>
+          )}
         </div>
 
         <div className="pr-16 mb-3">
           <h3 className="text-lg font-black text-slate-900 group-hover:text-primary transition-colors line-clamp-2 leading-snug">
             {job.title}
           </h3>
-          <p className="text-sm font-bold text-slate-500 mt-1 line-clamp-1">{job.company_name}</p>
+          <span
+            role="link"
+            tabIndex={0}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.location.href = `/companies/${companySlug}`;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                window.location.href = `/companies/${companySlug}`;
+              }
+            }}
+            className="text-sm font-bold text-slate-500 mt-1 line-clamp-1 hover:text-primary transition-colors cursor-pointer"
+          >
+            {job.company_name}
+          </span>
         </div>
 
         <div className="mb-4">

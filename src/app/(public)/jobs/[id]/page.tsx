@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getAllJobs, getJobById } from "@/lib/jobs";
+import { companySlug } from "@/lib/companies";
+import { getJobsByCompanySlug } from "@/lib/companies";
 
 // ── Static params for SSG ───────────────────────
 export function generateStaticParams() {
@@ -40,6 +42,15 @@ export default async function JobDetailPage({
   const job = getJobById(id);
   if (!job) notFound();
 
+  const slug = companySlug(job.company_name);
+  const relatedJobs = getJobsByCompanySlug(slug)
+    .filter((j) => j.id !== job.id)
+    .slice(0, 6);
+  const initial = job.company_name?.charAt(0) ?? "?";
+  const hasCompanyLogo =
+    job.logo_url &&
+    !job.logo_url.includes("placeholder");
+
   return (
     <main className="min-h-screen bg-[#f6f7f8]">
       {/* ── cover banner ── */}
@@ -72,9 +83,12 @@ export default async function JobDetailPage({
                 <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 leading-tight mb-2">
                   {job.title}
                 </h1>
-                <p className="text-lg md:text-xl font-bold text-slate-600">
+                <Link
+                  href={`/companies/${slug}`}
+                  className="text-lg md:text-xl font-bold text-slate-600 hover:text-primary transition-colors"
+                >
                   {job.company_name}
-                </p>
+                </Link>
 
                 {/* pills */}
                 <div className="mt-5 flex flex-wrap gap-2.5">
@@ -238,9 +252,87 @@ export default async function JobDetailPage({
                   Lưu tin
                 </button>
               </div>
+
+              {/* ── Company block ── */}
+              <Link
+                href={`/companies/${slug}`}
+                className="block mt-6 bg-white rounded-[24px] border border-slate-100 p-6 shadow-sm hover:border-primary/30 hover:shadow-md transition-all group"
+              >
+                <h3 className="font-black text-lg text-slate-900 flex items-center gap-2 mb-4">
+                  <span className="material-symbols-outlined text-primary">business</span>
+                  Về công ty
+                </h3>
+                <div className="flex items-center gap-4">
+                  <div className="size-14 rounded-xl border border-slate-100 bg-white flex items-center justify-center shrink-0 overflow-hidden">
+                    {hasCompanyLogo ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={job.logo_url}
+                        alt={job.company_name}
+                        className="w-full h-full object-contain p-1"
+                      />
+                    ) : (
+                      <span className="text-xl font-black text-primary">{initial}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
+                      {job.company_name}
+                    </p>
+                    <p className="text-xs font-bold text-slate-400 line-clamp-1 mt-0.5">
+                      {job.location || "Chưa cập nhật"}
+                    </p>
+                  </div>
+                  <span className="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors shrink-0">
+                    arrow_forward
+                  </span>
+                </div>
+              </Link>
             </div>
           </aside>
         </div>
+
+        {/* ── Related jobs at this company ── */}
+        {relatedJobs.length > 0 && (
+          <section className="mt-10">
+            <h2 className="flex items-center gap-3 text-2xl font-black text-slate-900 mb-6 tracking-tight">
+              <span className="flex items-center justify-center size-10 rounded-xl bg-primary/10 text-primary">
+                <span className="material-symbols-outlined text-2xl">business</span>
+              </span>
+              Các việc làm khác tại {job.company_name}
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {relatedJobs.map((rj) => (
+                <Link
+                  key={rj.id}
+                  href={`/jobs/${rj.id}`}
+                  className="group bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 transition-all duration-300 flex flex-col"
+                >
+                  <h4 className="text-base font-black text-slate-900 group-hover:text-primary transition-colors line-clamp-2 leading-snug mb-2">
+                    {rj.title}
+                  </h4>
+                  <div className="mb-3">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/5 text-primary font-black text-xs rounded-lg border border-primary/10">
+                      {rj.salary || "Thỏa thuận"}
+                    </span>
+                  </div>
+                  <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1.5">
+                    <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
+                      <span className="material-symbols-outlined text-base">location_on</span>
+                      {rj.location}
+                    </span>
+                    {rj.deadline && (
+                      <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
+                        <span className="material-symbols-outlined text-base">schedule</span>
+                        {rj.deadline}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── back link ── */}
         <div className="mt-14 inline-block">

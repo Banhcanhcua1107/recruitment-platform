@@ -1,77 +1,34 @@
-import jobs from "@/data/jobs.json";
 import { NextResponse } from "next/server";
-
-type Job = {
-  id: number;
-  title: string;
-  company_name: string;
-  logo_url: string;
-  location: string;
-  salary: string;
-  requirements: string[];
-  posted_date: string;
-};
-
-type Company = {
-  name: string;
-  logoUrl?: string;
-  location?: string;
-  industry?: string; // nếu dataset chưa có thì để "Chưa cập nhật"
-  size?: string;     // nếu dataset chưa có thì để "Chưa cập nhật"
-  jobCount: number;
-};
+import { getAllCompanies } from "@/lib/companies";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
   const q = (searchParams.get("q") || "").toLowerCase().trim();
-  const location = (searchParams.get("location") || "").toLowerCase().trim();
   const page = Math.max(1, Number(searchParams.get("page") || 1));
   const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 12)));
-  const sort = (searchParams.get("sort") || "jobs_desc").toLowerCase(); // jobs_desc | name_asc
+  const sort = (searchParams.get("sort") || "jobs_desc").toLowerCase();
 
-  const data = jobs as Job[];
-
-  // Group by company_name
-  const map = new Map<string, Company>();
-
-  for (const j of data) {
-    const key = j.company_name?.trim();
-    if (!key) continue;
-
-    const current = map.get(key) || {
-      name: key,
-      logoUrl: j.logo_url,
-      location: j.location,
-      industry: "Chưa cập nhật",
-      size: "Chưa cập nhật",
-      jobCount: 0,
-    };
-
-    current.jobCount += 1;
-
-    // cập nhật logo/location nếu thiếu
-    if (!current.logoUrl && j.logo_url) current.logoUrl = j.logo_url;
-    if (!current.location && j.location) current.location = j.location;
-
-    map.set(key, current);
-  }
-
-  let companies = Array.from(map.values());
+  let companies = getAllCompanies().map((c) => ({
+    slug: c.slug,
+    name: c.name,
+    logoUrl: c.logoUrl,
+    location: c.location ?? "Chưa cập nhật",
+    industry: c.industry.length > 0 ? c.industry.join(", ") : "Chưa cập nhật",
+    size: c.size ?? "Chưa cập nhật",
+    jobCount: c.jobCount,
+  }));
 
   // filters
   if (q) {
     companies = companies.filter((c) =>
-      `${c.name} ${c.location ?? ""}`.toLowerCase().includes(q)
+      `${c.name} ${c.location}`.toLowerCase().includes(q)
     );
-  }
-  if (location) {
-    companies = companies.filter((c) => (c.location ?? "").toLowerCase().includes(location));
   }
 
   // sort
   if (sort === "name_asc") {
-    companies.sort((a, b) => a.name.localeCompare(b.name));
+    companies.sort((a, b) => a.name.localeCompare(b.name, "vi"));
   } else {
     companies.sort((a, b) => b.jobCount - a.jobCount);
   }

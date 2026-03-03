@@ -7,7 +7,6 @@ import RecentApplications from "./components/RecentApplications";
 import RecommendedJobs from "./components/RecommendedJobs";
 import ProfileStrength from "./components/ProfileStrength";
 import CVList from "./components/CVList";
-import UpgradeBanner from "./components/UpgradeBanner";
 
 export default function CandidateDashboard() {
   const { user, stats, recentApplications, recommendedJobs, cvs, isLoading, error } = useCandidateDashboard();
@@ -38,7 +37,6 @@ export default function CandidateDashboard() {
         <div className="lg:col-span-4 space-y-8">
           <ProfileStrength profile={user} loading={isLoading} />
           <CVList cvs={cvs} loading={isLoading} />
-          <UpgradeBanner />
         </div>
 
       </div>

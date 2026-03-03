@@ -263,7 +263,7 @@ function SectionContent({
           ))}
           {isActive && (
             <button className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700">
-              <Plus size={14} />Thêm kinh nghiệm
+              <span className="material-symbols-outlined text-sm">add</span>Thêm kinh nghiệm
             </button>
           )}
         </div>
@@ -292,7 +292,7 @@ function SectionContent({
           ))}
           {isActive && (
             <button className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700">
-              <Plus size={14} />Thêm học vấn
+              <span className="material-symbols-outlined text-sm">add</span>Thêm học vấn
             </button>
           )}
         </div>
@@ -332,7 +332,7 @@ function SectionContent({
             </div>
           ))}
           <button className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700">
-            <Plus size={14} />Thêm kỹ năng
+            <span className="material-symbols-outlined text-sm">add</span>Thêm kỹ năng
           </button>
         </div>
       );

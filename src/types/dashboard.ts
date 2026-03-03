@@ -14,12 +14,12 @@ export interface DashboardStats {
 // Let's flatten Job to match the DB table
 
 export interface Job {
-  id: number; // Changed to number (BIGINT)
+  id: string; // UUID text (matches real_jobs_data.json)
   title: string;
-  company_name: string; // Flat field
+  company_name: string;
   logo_url?: string;
   location?: string;
-  salary?: string; // Changed from salary_range
+  salary?: string;
   requirements?: string[];
   posted_date?: string;
   created_at?: string;
@@ -27,7 +27,7 @@ export interface Job {
 
 export interface Application {
   id: string;
-  job_id: number; // Changed to number
+  job_id: string; // UUID text FK
   status: ApplicationStatus;
   created_at: string;
   job: Job;
