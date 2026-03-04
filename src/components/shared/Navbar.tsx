@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@supabase/supabase-js";
+import NotificationBell from "./NotificationBell";
 
 interface Profile {
   full_name: string | null;
@@ -175,12 +176,17 @@ export default function Navbar() {
             </Link>
           </div>
           ) : (
-            /* ĐÃ ĐĂNG NHẬP - Box Avatar nhỏ gọn */
-            <div className="relative">
-              <button 
-                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="flex items-center gap-2.5 p-1 pr-3 rounded-full border border-slate-200 hover:border-primary/50 transition-all bg-white"
-              >
+            /* ĐÃ ĐĂNG NHẬP */
+            <div className="flex items-center gap-2">
+              {/* Notification Bell */}
+              <NotificationBell />
+              
+              {/* Profile Dropdown */}
+              <div className="relative">
+                <button 
+                  onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                  className="flex items-center gap-2.5 p-1 pr-3 rounded-full border border-slate-200 hover:border-primary/50 transition-all bg-white"
+                >
                 <img 
                   src={profile?.avatar_url || "https://placehold.co/100x100?text=U"} 
                   className="size-9 rounded-full object-cover border border-slate-100" 
@@ -219,6 +225,7 @@ export default function Navbar() {
                   </div>
                 </>
               )}
+              </div>
             </div>
           )}
         </div>
