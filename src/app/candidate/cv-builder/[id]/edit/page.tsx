@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState, use } from "react";
 import { useCVStore } from "../../store";
 import { CVWorkspacePanel } from "../../components/CVWorkspacePanel";
-import { SuggestionPanel } from "../../components/SuggestionPanel";
+import { AISidebar } from "../../components/AISidebar";
 import { GreenModernTemplate } from "../../components/templates/GreenModernTemplate";
 import { getResumeById, saveResume, ResumeRow, ResumeBlock } from "../../api";
 import { CVContent, CVSection } from "../../types";
@@ -357,14 +357,10 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
           </div>
         </div>
 
-        {/* RIGHT (40%): Dynamic Suggestions */}
+        {/* RIGHT (40%): AI Writing Assistant */}
         <div className="flex flex-col w-[40%] min-w-0 bg-white">
-          <div className="flex items-center gap-2 px-5 py-3 bg-white border-b border-slate-200 shrink-0">
-            <span className="material-symbols-outlined text-lg text-amber-500">auto_awesome</span>
-            <h2 className="text-sm font-bold text-slate-800">Gợi ý &amp; Hướng dẫn</h2>
-          </div>
           <div className="flex-1 overflow-hidden">
-            <SuggestionPanel />
+            <AISidebar />
           </div>
         </div>
 
