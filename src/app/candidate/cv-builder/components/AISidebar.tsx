@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useTransition } from "react";
 import { useCVStore } from "../store";
-import { optimizeCVContent } from "@/app/actions/ai-actions";
+import { optimizeCVContent, type OptimizeResult } from "@/app/actions/ai-actions";
 import {
   Sparkles,
   Wand2,
@@ -438,7 +438,7 @@ export function AISidebar() {
                         initial="hidden"
                         animate="visible"
                         exit="exit"
-                        className="rounded-2xl border-2 border-dashed border-blue-200/50 bg-blue-50/40 backdrop-blur-md p-5 shadow-2xl shadow-blue-500/10"
+                        className="rounded-2xl border-2 border-dashed border-blue-200/50 bg-blue-50/40 backdrop-blur-md p-5 shadow-2xl shadow-blue-500/10 space-y-4"
                       >
                         {/* Header */}
                         <div className="flex items-center gap-2 mb-4">

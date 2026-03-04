@@ -261,6 +261,8 @@ export default function RecommendedJobs({
 }: RecommendedJobsProps) {
   const [geminiItems, setGeminiItems] = useState<RecommendedItem[]>([]);
   const [candidateSummary, setCandidateSummary] = useState("");
+  const [suggestedRoles, setSuggestedRoles] = useState<string[]>([]);
+  const [suggestedCompanies, setSuggestedCompanies] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -288,12 +290,14 @@ export default function RecommendedJobs({
           if (!cancelled && data.items?.length > 0) {
             setGeminiItems(data.items);
             setCandidateSummary(data.candidateSummary ?? "");
+            setSuggestedRoles(data.suggestedRoles ?? []);
+            setSuggestedCompanies(data.suggestedCompanies ?? []);
             setHasFetched(true);
             // Also mirror to localStorage
             try {
               localStorage.setItem(
                 "rec_jobs_cache",
-                JSON.stringify({ items: data.items, candidateSummary: data.candidateSummary })
+                JSON.stringify({ items: data.items, candidateSummary: data.candidateSummary, suggestedRoles: data.suggestedRoles, suggestedCompanies: data.suggestedCompanies })
               );
             } catch { /* quota exceeded */ }
             return;
@@ -311,6 +315,8 @@ export default function RecommendedJobs({
           if (cached.items?.length > 0) {
             setGeminiItems(cached.items);
             setCandidateSummary(cached.candidateSummary ?? "");
+            setSuggestedRoles(cached.suggestedRoles ?? []);
+            setSuggestedCompanies(cached.suggestedCompanies ?? []);
             setHasFetched(true);
           }
         }
@@ -338,6 +344,8 @@ export default function RecommendedJobs({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Lỗi không xác định");
       setCandidateSummary(data.candidateSummary ?? "");
+      setSuggestedRoles(data.suggestedRoles ?? []);
+      setSuggestedCompanies(data.suggestedCompanies ?? []);
       setGeminiItems(data.items ?? []);
       setHasFetched(true);
 
@@ -345,7 +353,7 @@ export default function RecommendedJobs({
       try {
         localStorage.setItem(
           "rec_jobs_cache",
-          JSON.stringify({ items: data.items, candidateSummary: data.candidateSummary })
+          JSON.stringify({ items: data.items, candidateSummary: data.candidateSummary, suggestedRoles: data.suggestedRoles, suggestedCompanies: data.suggestedCompanies })
         );
       } catch { /* quota exceeded */ }
     } catch (err: unknown) {
@@ -466,14 +474,62 @@ export default function RecommendedJobs({
         </div>
       )}
 
-      {/* Candidate summary from AI */}
+      {/* AI Analysis Panel */}
       {!isLoading && candidateSummary && (
-        <div className="flex items-start gap-3 p-4 bg-indigo-50/60 border border-indigo-100 rounded-xl">
-          <span className="material-symbols-outlined text-primary text-xl shrink-0 mt-0.5">psychology</span>
-          <div>
-            <p className="text-xs font-black text-primary uppercase tracking-wider mb-1">Nhận xét AI</p>
-            <p className="text-sm font-medium text-slate-700 leading-relaxed">{candidateSummary}</p>
+        <div className="space-y-4">
+          {/* Candidate summary */}
+          <div className="flex items-start gap-3 p-4 bg-indigo-50/60 border border-indigo-100 rounded-xl">
+            <span className="material-symbols-outlined text-primary text-xl shrink-0 mt-0.5">psychology</span>
+            <div>
+              <p className="text-xs font-black text-primary uppercase tracking-wider mb-1">Nhận xét AI</p>
+              <p className="text-sm font-medium text-slate-700 leading-relaxed">{candidateSummary}</p>
+            </div>
           </div>
+
+          {/* Suggested Roles + Companies row */}
+          {(suggestedRoles.length > 0 || suggestedCompanies.length > 0) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Suggested Roles */}
+              {suggestedRoles.length > 0 && (
+                <div className="p-4 bg-violet-50/60 border border-violet-100 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-violet-500 text-lg">target</span>
+                    <p className="text-xs font-black text-violet-600 uppercase tracking-wider">Vị trí phù hợp</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedRoles.map((role, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center px-3 py-1.5 bg-white border border-violet-100 rounded-lg text-xs font-bold text-violet-700 shadow-sm"
+                      >
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Suggested Companies */}
+              {suggestedCompanies.length > 0 && (
+                <div className="p-4 bg-amber-50/60 border border-amber-100 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-amber-500 text-lg">apartment</span>
+                    <p className="text-xs font-black text-amber-600 uppercase tracking-wider">Công ty / loại hình gợi ý</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedCompanies.map((company, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center px-3 py-1.5 bg-white border border-amber-100 rounded-lg text-xs font-bold text-amber-700 shadow-sm"
+                      >
+                        {company}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

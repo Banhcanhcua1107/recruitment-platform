@@ -115,17 +115,19 @@ export async function GET() {
 
     const { data: cached } = await supabase
       .from("job_recommendations")
-      .select("items, candidate_summary, updated_at")
+      .select("items, candidate_summary, suggested_roles, suggested_companies, updated_at")
       .eq("user_id", user.id)
       .single();
 
     if (!cached) {
-      return NextResponse.json({ items: [], candidateSummary: "" });
+      return NextResponse.json({ items: [], candidateSummary: "", suggestedRoles: [], suggestedCompanies: [] });
     }
 
     return NextResponse.json({
       items: cached.items ?? [],
       candidateSummary: cached.candidate_summary ?? "",
+      suggestedRoles: cached.suggested_roles ?? [],
+      suggestedCompanies: cached.suggested_companies ?? [],
       cachedAt: cached.updated_at,
     });
   } catch (err: unknown) {
@@ -200,11 +202,15 @@ export async function POST(request: Request) {
     // ---------- 2. Load all jobs ----------
     const allJobs: Job[] = getAllJobs();
 
-    // ---------- 3. Pre-filter + Gemini (with local pipeline fallback) ----------
+    // ---------- 3. Pre-filter + Ollama (with local pipeline fallback) ----------
     const TOP_K = 6;
     let candidateSummary = "";
+    let suggestedRoles: string[] = [];
+    let suggestedCompanies: string[] = [];
     let recommendations: {
       jobId: string;
+      jobTitle: string;
+      companyName: string;
       matchScore: number;
       fitLevel: "High" | "Medium" | "Low";
       reasons: string[];
@@ -213,21 +219,27 @@ export async function POST(request: Request) {
     }[];
 
     try {
-      // Pre-filter: send only relevant jobs to Gemini (saves tokens & avoids noise)
+      // Pre-filter: send only relevant jobs to Ollama (saves tokens & avoids noise)
       const { filteredJobs } = preFilterForGemini(candidateText, allJobs, 30);
 
-      const geminiResult = await rankJobsWithGemini({
+      const aiResult = await rankJobsWithGemini({
         candidateText,
         jobs: filteredJobs.length > 0 ? filteredJobs : allJobs,
         topK: TOP_K,
       });
-      candidateSummary = geminiResult.candidateSummary;
-      recommendations = geminiResult.recommendations;
-    } catch (geminiErr) {
-      console.warn("Gemini unavailable, using local recommendation pipeline:", geminiErr instanceof Error ? geminiErr.message : geminiErr);
+      candidateSummary = aiResult.candidateSummary;
+      suggestedRoles = aiResult.suggestedRoles ?? [];
+      suggestedCompanies = aiResult.suggestedCompanies ?? [];
+      recommendations = aiResult.recommendations;
+    } catch (aiErr) {
+      console.warn("Ollama unavailable, using local recommendation pipeline:", aiErr instanceof Error ? aiErr.message : aiErr);
       // Local pipeline fallback — uses hard filter + weighted scoring
       const result = recommendJobs(candidateText, allJobs, TOP_K);
-      recommendations = result.recommendations;
+      recommendations = result.recommendations.map((r) => ({
+        ...r,
+        jobTitle: "",
+        companyName: "",
+      }));
     }
 
     // ---------- 4. Map IDs back to full job objects ----------
@@ -261,6 +273,8 @@ export async function POST(request: Request) {
               user_id: authUser2.id,
               items,
               candidate_summary: candidateSummary,
+              suggested_roles: suggestedRoles,
+              suggested_companies: suggestedCompanies,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "user_id" }
@@ -271,7 +285,12 @@ export async function POST(request: Request) {
       console.warn("Failed to cache recommendations:", saveErr);
     }
 
-    return NextResponse.json({ candidateSummary, items });
+    return NextResponse.json({
+      candidateSummary,
+      suggestedRoles,
+      suggestedCompanies,
+      items,
+    });
   } catch (err: unknown) {
     console.error("recommend-jobs error:", err);
     const message = err instanceof Error ? err.message : "Internal error";
