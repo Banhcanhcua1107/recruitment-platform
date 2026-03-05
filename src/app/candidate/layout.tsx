@@ -2,8 +2,14 @@
 import React from "react";
 import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
+import { usePathname } from "next/navigation";
 
 export default function CandidateLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  
+  // Hide footer when in the full-screen CV editor
+  const isEditingCV = pathname?.includes("/cv-builder/") && pathname?.endsWith("/edit");
+
   return (
     <div className="flex min-h-screen flex-col bg-[#f6f7f8]">
       {/* Sử dụng Header chung duy nhất ở đây */}
@@ -14,8 +20,8 @@ export default function CandidateLayout({ children }: { children: React.ReactNod
         {children}
       </main>
 
-      {/* Thêm Footer cho đồng bộ với trang chủ */}
-      <Footer />
+      {/* Ẩn Footer khi đang ở trang Edit CV để tránh chiếm chỗ giao diện Full-screen */}
+      {!isEditingCV && <Footer />}
     </div>
   );
 }

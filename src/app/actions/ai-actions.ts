@@ -30,143 +30,143 @@ function detectFormat(text: string): ContentFormat {
 }
 
 // ── Extract actual output, stripping model reasoning ────────────────
-// qwen3:4b reasons in English even for Vietnamese tasks.
-// The actual Vietnamese output is always the LAST block of text with VI diacritics.
+// Models (qwen3, qwen2.5) often prepend English reasoning even for Vietnamese tasks.
+// This function aggressively strips all non-content text.
 function extractOutput(raw: string, lang: "vi" | "en"): string {
-  // 1. Strip properly matched <think>...</think> blocks
+  // 1. Strip <think>...</think> blocks (matched or orphaned)
   let text = raw.replace(/<think>[\s\S]*?<\/think>/gi, "");
-
-  // 2. If an orphaned </think> remains (model started reasoning without <think> opener),
-  //    everything before it is reasoning — take only what comes after it.
   const closeThinkIdx = text.lastIndexOf("</think>");
   if (closeThinkIdx !== -1) {
     text = text.slice(closeThinkIdx + "</think>".length);
   }
 
-  // 3. Strip markdown code fences
+  // 2. Strip markdown code fences
   text = text.replace(/```[\w]*\n?/g, "").replace(/```/g, "").trim();
 
   if (!text) return "";
 
-  const hasViDiacritics = (s: string) =>
-    /[àáảãạăắằẳẵặâấầẩẫậđèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ]/i.test(s);
+  // 3. Detect and strip leading reasoning block.
+  //    Models often output a big block of English reasoning before the actual content.
+  //    Strategy: find the first line that looks like actual CV content (starts with -)
+  //    or contains Vietnamese diacritics, and discard everything before it.
+  const lines = text.split("\n");
 
-  const isReasoningLine = (line: string): boolean =>
-    /^(okay|ok[,.\s]|let'?s|let me|first[,.\s]|so[,.\s]|now[,.\s]|wait[,.\s]|i need|i'll|i will|i have|i should|the user|the original|looking at|based on|note:|here'?s|alright|this means|for example|original:|rewritten:|draft:|attempt:|output:|result:|improved:|step\s*\d)/i
-      .test(line.trim());
-
-  const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
-
-  if (lang === "vi") {
-    // Find the LAST contiguous run of paragraphs that contain VI diacritics.
-    let lastVi = paragraphs.length - 1;
-    while (lastVi >= 0 && !hasViDiacritics(paragraphs[lastVi])) lastVi--;
-
-    if (lastVi >= 0) {
-      let firstVi = lastVi;
-      while (firstVi > 0 && hasViDiacritics(paragraphs[firstVi - 1])) firstVi--;
-      const output = paragraphs.slice(firstVi, lastVi + 1).join("\n\n");
-      if (output.length > 10) return output;
+  // Patterns that indicate model reasoning/thinking (not CV content)
+  const isReasoningLine = (line: string): boolean => {
+    const t = line.trim();
+    if (!t) return true; // blank lines in reasoning block
+    // English reasoning starters
+    if (/^(okay|ok[,.\s]|let'?s|let me|first[,.\s]|so[,.\s]|now[,.\s]|wait[,.\s]|hmm|i need|i'll|i will|i have|i should|the user|the original|looking at|based on|note:|here'?s|alright|this means|for example|original:|rewritten:|draft:|attempt:|output:|result:|improved:|step\s*\d|but |however |also |next |then |since |because |maybe |perhaps |actually )/i.test(t)) {
+      return true;
     }
-
-    // Fallback: strip leading English reasoning lines
-    const lines = text.split("\n");
-    let start = 0;
-    for (let i = 0; i < lines.length; i++) {
-      const t = lines[i].trim();
-      if (!t) { start = i + 1; continue; }
-      if (isReasoningLine(t)) { start = i + 1; } else { break; }
+    // Lines that are clearly meta-commentary about the task
+    if (/^(the (task|prompt|input|content|user|key|main|goal|rules?)|my (approach|plan|strategy)|i('m| am| was| will| need| should| have)|this (is|means|should|requires)|each (bullet|point|line|item)|looking|checking|reviewing|analyzing|let'?s)/i.test(t)) {
+      return true;
     }
-    return lines.slice(start).join("\n").trim() || text;
-  }
+    return false;
+  };
 
-  // English: remove leading reasoning paragraphs
+  // Find first non-reasoning line
   let startIdx = 0;
-  for (let i = 0; i < paragraphs.length; i++) {
-    if (isReasoningLine(paragraphs[i].split("\n")[0])) {
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    // If line starts with "- " it's a bullet point (CV content)
+    if (t.startsWith("- ")) break;
+    // If line contains Vietnamese diacritics, it's likely CV content
+    if (lang === "vi" && /[àáảãạăắằẳẵặâấầẩẫậđèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ]/i.test(t)) {
+      break;
+    }
+    if (isReasoningLine(t)) {
       startIdx = i + 1;
     } else {
       break;
     }
   }
-  return paragraphs.slice(startIdx).join("\n\n").trim() || text;
+
+  const result = lines.slice(startIdx).join("\n").trim();
+
+  // 4. Strip trailing reasoning/notes (model sometimes appends advice after content)
+  //    Remove lines after the last bullet point or after a blank line followed by reasoning
+  const resultLines = result.split("\n");
+  let endIdx = resultLines.length;
+  for (let i = resultLines.length - 1; i >= 0; i--) {
+    const t = resultLines[i].trim();
+    if (!t) { endIdx = i; continue; }
+    // If trailing line looks like a note/advice, cut it
+    if (/^(\*|note:|lưu ý:|chú thích:|tip:|→|=>|ps:|p\.s\.|remember|disclaimer)/i.test(t)) {
+      endIdx = i;
+      continue;
+    }
+    break;
+  }
+
+  return resultLines.slice(0, endIdx).join("\n").trim() || text;
 }
+
+// ── Similarity check ─────────────────────────────────────────
+// Simple word-overlap ratio to detect when model just copied the input
+function isTooSimilar(original: string, suggestion: string, threshold = 0.80): boolean {
+  const normalize = (s: string) =>
+    s.replace(/<[^>]*>/g, "").replace(/[\s\n\r]+/g, " ").trim().toLowerCase();
+
+  const a = normalize(original);
+  const b = normalize(suggestion);
+
+  if (!a || !b) return false;
+
+  // Character-level overlap (Sørensen–Dice on bigrams)
+  const bigrams = (s: string): Set<string> => {
+    const set = new Set<string>();
+    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+    return set;
+  };
+  const ba = bigrams(a);
+  const bb = bigrams(b);
+  let overlap = 0;
+  ba.forEach(g => { if (bb.has(g)) overlap++; });
+  const dice = (2 * overlap) / (ba.size + bb.size);
+
+  return dice > threshold;
+}
+
+import { CV_WRITER_SYSTEM_PROMPT_VI, CV_WRITER_SYSTEM_PROMPT_EN } from "./ai-config";
 
 // ── Build the system prompt ─────────────────────────────────
 function buildSystemPrompt(lang: "vi" | "en", format: ContentFormat): string {
   const formatRuleVi =
     format === "list"
-      ? `- Trả về danh sách bullet points (dùng dấu -).\n- Mỗi bullet ngắn gọn, súc tích, thể hiện năng lực thực tế.\n- Không viết thành đoạn văn.`
+      ? `- Trả về danh sách bullet points (dùng dấu -).\n- Mỗi bullet point cần tập trung phô diễn kỹ năng và thành tựu đo lường được.\n- KHÔNG viết thành đoạn văn.`
       : format === "paragraph"
-      ? `- Viết thành một đoạn văn liền mạch từ 5 đến 7 câu chuyên nghiệp.\n- Không dùng bullet points.\n- Tránh liệt kê kỹ năng kiểu danh sách tẽ.`
-      : `- Giữ dạng câu ngắn gọn.\n- Không viết thành đoạn văn dài.\n- Không dùng bullet points.`;
+      ? `- Viết thành một đoạn văn liền mạch từ 5 đến 7 câu sắc sảo, phô diễn trọn vẹn sức mạnh năng lực cá nhân.\n- Không dùng gạch đầu dòng.`
+      : `- Giữ dạng câu ngắn gọn, súc tích.\n- Trực diện vào vấn đề, không dài dòng.`;
 
   const formatRuleEn =
     format === "list"
-      ? `- Return a bullet list (use - prefix).\n- Each bullet must be concise and capability-focused.\n- Do NOT write as a paragraph.`
+      ? `- Return a bullet list (use - prefix).\n- Each bullet must showcase measurable achievements and strong skills.\n- Do NOT write as a paragraph.`
       : format === "paragraph"
-      ? `- Write as a single flowing paragraph of 5-7 professional sentences.\n- No bullet points.\n- Avoid repetitive skill listing.`
-      : `- Keep it as short sentence(s).\n- Do NOT write a long paragraph.\n- No bullet points.`;
-
-  const outputInstructionVi =
-    format === "list"
-      ? `VIẾT NGAY DANH SÁCH KẾT QUẢ. KHÔNG viết bất kỳ thứ gì khác.`
-      : format === "paragraph"
-      ? `VIẾT NGAY ĐOẠN VĂN KẾT QUẢ. KHÔNG viết bất kỳ thứ gì khác.`
-      : `VIẾT NGAY CÂU KẾT QUẢ. KHÔNG viết bất kỳ thứ gì khác.`;
-
-  const outputInstructionEn =
-    format === "list"
-      ? `OUTPUT THE IMPROVED BULLET LIST DIRECTLY. NOTHING ELSE.`
-      : format === "paragraph"
-      ? `OUTPUT THE REWRITTEN PARAGRAPH DIRECTLY. NOTHING ELSE.`
-      : `OUTPUT THE IMPROVED TEXT DIRECTLY. NOTHING ELSE.`;
+      ? `- Write as a single flowing paragraph of 5-7 professional sentences demonstrating maximum capability.\n- No bullet points.`
+      : `- Keep it concise and impactful.\n- Do NOT write a long paragraph.`;
 
   if (lang === "vi") {
-    return `Bạn là trợ lý tối ưu CV chuyên nghiệp.
-
-Nhiệm vụ: Cải thiện và nâng tầm nội dung bên dưới.
-
-GIỚI HẠN NGHIÊM NGẶT:
-- Không bịa thành tích giả.
-- Không thêm công nghệ không có trong nội dung.
-- Giữ ngôn ngữ tiếng Việt.
-- Không xuất phân tích hay giải thích.
-
-QUY TẮC NÂNG TẦM:
-- Được phép cấu trúc lại và tăng cường ngôn từ cho mạnh hơn.
-- Được phép kết hợp logic các kỹ năng thành câu khẳng định năng lực mạnh mẽ hơn.
-- Được phép nhấn mạnh khả năng giải quyết vấn đề và kinh nghiệm thực tiễn dựa trên các công nghệ đã liệt kê.
-- Tập trung vào giá trị và tác động, không chỉ liệt kê kỹ năng.
-- Thể hiện sự tự tin và tạo ấn tượng mạnh.
-${formatRuleVi}
-- Không bình luận.
-- Không thêm văn bản thừa.
-
-${outputInstructionVi}`;
+    return CV_WRITER_SYSTEM_PROMPT_VI.replace("{FORMAT_RULE}", formatRuleVi);
   }
-  return `You are a professional CV optimization assistant.
-
-Your task is to improve and elevate the content below.
-
-STRICT LIMITS:
-- Do not invent fake achievements.
-- Do not add technologies that are not mentioned.
-- Keep the language in English.
-- Do not output analysis or explanation.
-
-ENHANCEMENT RULES:
-- You may restructure and enhance wording to make it stronger.
-- You may logically combine skills into stronger capability statements.
-- You may emphasize problem-solving ability and practical experience based on listed technologies.
-- Focus on value and impact, not simple skill listing.
-- Make it sound confident and impactful.
-${formatRuleEn}
-- No commentary.
-- No extra text.
-
-${outputInstructionEn}`;
+  return CV_WRITER_SYSTEM_PROMPT_EN.replace("{FORMAT_RULE}", formatRuleEn);
 }
+
+// ── Section-specific rewriting hints ────────────────────────
+const SECTION_HINTS_VI: Record<string, string> = {
+  summary: "Viết lại phần giới thiệu bản thân này thành đoạn văn chuyên nghiệp hơn, nêu bật giá trị cốt lõi và năng lực chính.",
+  experience_list: "Viết lại mô tả công việc này: dùng động từ mạnh, thêm số liệu cụ thể, tập trung vào thành tựu thay vì liệt kê nhiệm vụ.",
+  project_list: "Viết lại mô tả dự án này: làm rõ vai trò cá nhân, nêu kết quả đạt được, đề cập tech stack cụ thể.",
+  award_list: "Viết lại mô tả giải thưởng này: nêu rõ ý nghĩa và giá trị của giải thưởng.",
+};
+
+const SECTION_HINTS_EN: Record<string, string> = {
+  summary: "Rewrite this personal summary into a more professional paragraph highlighting core value and key capabilities.",
+  experience_list: "Rewrite this job description: use strong action verbs, add specific metrics, focus on achievements not duties.",
+  project_list: "Rewrite this project description: clarify individual role, state outcomes achieved, mention specific tech stack.",
+  award_list: "Rewrite this award description: emphasize significance and impact of the award.",
+};
 
 // ── Build the user prompt ───────────────────────────────────
 function buildUserPrompt(
@@ -178,28 +178,31 @@ function buildUserPrompt(
   context?: string
 ): string {
   const anchorVi =
-    format === "list" ? "Chỉ viết danh sách kết quả tiếng Việt:"
-    : format === "paragraph" ? "Chỉ viết đoạn văn kết quả tiếng Việt:"
-    : "Chỉ viết câu kết quả tiếng Việt:";
+    format === "list" ? "Viết lại hoàn toàn bằng tiếng Việt (KHÁC bản gốc):"
+    : format === "paragraph" ? "Viết lại hoàn toàn thành đoạn văn tiếng Việt (KHÁC bản gốc):"
+    : "Viết lại câu ngắn gọn bằng tiếng Việt (KHÁC bản gốc):";
 
   const anchorEn =
-    format === "list" ? "Improved bullet list:"
-    : format === "paragraph" ? "Improved paragraph:"
-    : "Improved text:";
+    format === "list" ? "Completely rewrite as bullet list (DIFFERENT from original):"
+    : format === "paragraph" ? "Completely rewrite as paragraph (DIFFERENT from original):"
+    : "Completely rewrite concisely (DIFFERENT from original):";
+
+  const hint = lang === "vi"
+    ? (SECTION_HINTS_VI[sectionType] || "Viết lại nội dung này chuyên nghiệp hơn.")
+    : (SECTION_HINTS_EN[sectionType] || "Rewrite this content more professionally.");
 
   if (lang === "vi") {
-    return `Nội dung:
-${currentContent.trim()}${context ? `\n\nBối cảnh: ${context}` : ""}\n\n${anchorVi}`;
+    return `${hint}\n\nNội dung gốc (KHÔNG được sao chép):\n${currentContent.trim()}${context ? `\n\nBối cảnh: ${context}` : ""}\n\n${anchorVi}`;
   }
-  return `Content:
-${currentContent.trim()}${context ? `\n\nContext: ${context}` : ""}\n\n${anchorEn}`;
+  return `${hint}\n\nOriginal content (DO NOT copy):\n${currentContent.trim()}${context ? `\n\nContext: ${context}` : ""}\n\n${anchorEn}`;
 }
 
 // ── Ollama caller ────────────────────────────────────────────
 async function callOllama(
   systemPrompt: string,
   userPrompt: string,
-  prefill = ""
+  prefill = "",
+  temperature = 0.7
 ): Promise<string> {
   const baseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
   const model   = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
@@ -220,7 +223,7 @@ async function callOllama(
         model,
         stream: false,
         think: false,
-        options: { temperature: 0.5, num_predict: 2000, top_p: 0.9 },
+        options: { temperature, num_predict: 2000, top_p: 0.9 },
         messages,
       }),
     });
@@ -270,7 +273,8 @@ export async function optimizeCVContent(
   // Prefill forces the model past reasoning and into output immediately
   const prefill = format === "list" ? "- " : "";
 
-  const raw = await callOllama(systemPrompt, userPrompt, prefill);
+  // First attempt with normal temperature
+  let raw = await callOllama(systemPrompt, userPrompt, prefill, 0.7);
   if (!raw) {
     return {
       success: false,
@@ -281,7 +285,19 @@ export async function optimizeCVContent(
   }
 
   // Extract the actual output, stripping any model reasoning preamble
-  const output = extractOutput(raw, lang);
+  let output = extractOutput(raw, lang);
+
+  // If output is too similar to input, retry once with higher temperature
+  if (output.length > 10 && isTooSimilar(currentContent, output)) {
+    console.log("[AI] Suggestion too similar to original, retrying with higher temperature...");
+    raw = await callOllama(systemPrompt, userPrompt, prefill, 0.9);
+    if (raw) {
+      const retryOutput = extractOutput(raw, lang);
+      if (retryOutput.length > 10) {
+        output = retryOutput;
+      }
+    }
+  }
 
   if (output.length > 10) {
     const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";

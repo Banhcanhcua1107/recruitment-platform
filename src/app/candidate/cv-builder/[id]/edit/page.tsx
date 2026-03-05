@@ -208,7 +208,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-[calc(100vh-64px)] bg-slate-100 overflow-hidden font-sans">
 
       {/* ── TOP NAV BAR ───────────────────────────────────────────── */}
       <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 z-30 shadow-sm">

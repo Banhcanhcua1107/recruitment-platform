@@ -217,7 +217,7 @@ export function AIContentOptimizer() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-100 shrink-0">
         <div className="flex items-center gap-2.5 mb-1">
-          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-blue-600 shadow-sm">
+          <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-linear-to-br from-violet-500 to-blue-600 shadow-sm">
             <Brain size={15} className="text-white" />
           </div>
           <h2 className="text-sm font-bold text-slate-800">AI Content Optimizer</h2>
@@ -226,7 +226,7 @@ export function AIContentOptimizer() {
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+      <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 space-y-5">
         <motion.div variants={containerVariants} initial="hidden" animate="visible">
 
           {/* Active Section Badge */}
@@ -309,7 +309,7 @@ export function AIContentOptimizer() {
               <button
                 onClick={handleOptimize}
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 disabled:opacity-60 text-white text-sm font-bold shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-linear-to-r from-violet-600 to-blue-600 hover:from-violet-700 hover:to-blue-700 disabled:opacity-60 text-white text-sm font-bold shadow-lg shadow-violet-500/20 transition-all active:scale-[0.98]"
               >
                 {isLoading ? (
                   <>
@@ -383,7 +383,7 @@ export function AIContentOptimizer() {
                     </div>
 
                     {/* Suggestion Content */}
-                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-line bg-white/60 rounded-lg p-3 border border-blue-100">
+                    <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap break-all bg-white/60 rounded-lg p-3 border border-blue-100 max-h-[400px] overflow-y-auto">
                       {suggestion}
                     </div>
 
