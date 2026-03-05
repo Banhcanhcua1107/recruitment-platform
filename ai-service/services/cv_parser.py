@@ -34,7 +34,9 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_OCR_MODEL = os.getenv("OLLAMA_CV_PARSER_MODEL", "qwen3-vl:4b")
 
 
-# ── helpers ─────────────────────────────────────────────── = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+# ── helpers ───────────────────────────────────────────────
+logger = logging.getLogger("cv_parser")
+_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE_RE = re.compile(
     r"(?:\+?\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}"
 )
@@ -315,8 +317,48 @@ def structure_cv(raw_text: str) -> ParsedCV:
 # ═════════════════════════════════════════════════════════════
 
 
+def extract_image_with_ollama_ocr(image_bytes: bytes) -> tuple[str, int]:
+    """
+    Extract text directly from a single image using Ollama qwen3-vl:4b.
+    """
+    img_b64 = base64.b64encode(image_bytes).decode()
+    payload = json.dumps({
+        "model": OLLAMA_OCR_MODEL,
+        "stream": False,
+        "think": False,
+        "options": {"temperature": 0.0, "num_predict": 4096},
+        "messages": [{
+            "role": "user",
+            "content": (
+                "Please transcribe ALL text visible in this CV/resume image. "
+                "Preserve the original structure (sections, bullet points, dates). "
+                "Output plain text only, no commentary."
+            ),
+            "images": [img_b64],
+        }],
+    }).encode()
+
+    req = urllib.request.Request(
+        f"{OLLAMA_BASE_URL}/api/chat",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            body = json.loads(resp.read().decode())
+            msg = body.get("message", {})
+            page_text = (msg.get("content") or msg.get("thinking") or "").strip()
+            logger.info("[cv_parser] Direct Image OCR: %d chars", len(page_text))
+            return page_text, 1
+    except urllib.error.URLError as exc:
+        logger.error("[cv_parser] Ollama Direct Image OCR failed: %s", exc)
+        return "", 1
+
+
 def parse_cv(
-    pdf_bytes: bytes,
+    file_bytes: bytes,
+    content_type: str = "application/pdf"
 ) -> tuple[ParsedCV, ExtractionMethod, int, list[str]]:
     """
     End-to-end pipeline: extract → structure.
@@ -327,30 +369,47 @@ def parse_cv(
     """
     warnings: list[str] = []
     method = ExtractionMethod.TEXT
+    
+    is_image = content_type.startswith("image/")
 
-    # 1️⃣ Try pdfplumber (selectable text)
-    raw_text, page_count = extract_text_with_pdfplumber(pdf_bytes)
-
-    # 2️⃣ Fallback to Ollama qwen3-vl:4b if text is too short (likely scanned)
-    if len(raw_text.split()) < 30:
-        warnings.append(
-            "Text extraction yielded minimal content – "
-            f"falling back to Ollama OCR ({OLLAMA_OCR_MODEL})."
-        )
+    if is_image:
+        warnings.append(f"Image uploaded ({content_type}) - skipping PDF text extraction.")
         method = ExtractionMethod.OCR
+        raw_text, page_count = extract_image_with_ollama_ocr(file_bytes)
+        if not raw_text:
+             warnings.append(
+                f"Ollama OCR ({OLLAMA_OCR_MODEL}) returned empty text. "
+                "Ensure Ollama is running and the model is pulled."
+            )
+    else:
+        # 1️⃣ Try pdfplumber (selectable text)
         try:
-            ocr_text, ocr_pages = extract_text_with_ollama_ocr(pdf_bytes)
-            if ocr_text:
-                raw_text = ocr_text
-                page_count = ocr_pages
-            else:
-                warnings.append(
-                    f"Ollama OCR ({OLLAMA_OCR_MODEL}) returned empty text. "
-                    "Ensure Ollama is running and the model is pulled: "
-                    f"ollama pull {OLLAMA_OCR_MODEL}"
-                )
-        except Exception as exc:
-            warnings.append(f"Ollama OCR failed: {exc}")
+            raw_text, page_count = extract_text_with_pdfplumber(file_bytes)
+        except Exception as e:
+            raw_text = ""
+            page_count = 1
+            warnings.append(f"PDF extraction failed: {e}")
+
+        # 2️⃣ Fallback to Ollama qwen3-vl:4b if text is too short (likely scanned)
+        if len(raw_text.split()) < 30:
+            warnings.append(
+                "Text extraction yielded minimal content – "
+                f"falling back to Ollama OCR ({OLLAMA_OCR_MODEL})."
+            )
+            method = ExtractionMethod.OCR
+            try:
+                ocr_text, ocr_pages = extract_text_with_ollama_ocr(file_bytes)
+                if ocr_text:
+                    raw_text = ocr_text
+                    page_count = ocr_pages
+                else:
+                    warnings.append(
+                        f"Ollama OCR ({OLLAMA_OCR_MODEL}) returned empty text. "
+                        "Ensure Ollama is running and the model is pulled: "
+                        f"ollama pull {OLLAMA_OCR_MODEL}"
+                    )
+            except Exception as exc:
+                warnings.append(f"Ollama OCR failed: {exc}")
 
     parsed = structure_cv(raw_text)
     return parsed, method, page_count, warnings

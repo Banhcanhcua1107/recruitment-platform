@@ -140,10 +140,17 @@ async def endpoint_parse_cv(
     - Returns a fully structured JSON representation.
     """
     # ── Validate file type ───────────────────────────────────
-    if file.content_type not in ("application/pdf", "application/octet-stream"):
+    allowed_types = (
+        "application/pdf", 
+        "application/octet-stream",
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    )
+    if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=400,
-            detail=f"Expected a PDF file, received '{file.content_type}'.",
+            detail=f"Expected a PDF or Image file, received '{file.content_type}'.",
         )
 
     # ── Read & size-check ────────────────────────────────────
@@ -161,7 +168,10 @@ async def endpoint_parse_cv(
     # ── Parse ────────────────────────────────────────────────
     start = time.perf_counter()
     try:
-        parsed_cv, method, page_count, warnings = parse_cv(pdf_bytes)
+        parsed_cv, method, page_count, warnings = parse_cv(
+            pdf_bytes, 
+            content_type=file.content_type
+        )
     except Exception as exc:
         logger.exception("CV parsing failed")
         raise HTTPException(
