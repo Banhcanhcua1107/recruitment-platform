@@ -7,8 +7,9 @@ import { AISidebar } from "../../components/AISidebar";
 import { GreenModernTemplate } from "../../components/templates/GreenModernTemplate";
 import { getResumeById, saveResume, ResumeRow, ResumeBlock } from "../../api";
 import { CVContent, CVSection } from "../../types";
-import { ArrowLeft, Save, Download, Undo2, Redo2, CheckCircle2, Loader2, LayoutTemplate, ListChecks } from "lucide-react";
+import { ArrowLeft, Save, Download, Undo2, Redo2, CheckCircle2, Loader2, LayoutTemplate, ListChecks, ScanLine } from "lucide-react";
 import Link from "next/link";
+import { OCRPreviewModal } from "../../components/ocr/OCRPreviewModal";
 
 // Registry: template_id → visual component
 const TEMPLATE_COMPONENTS: Record<string, React.ComponentType> = {
@@ -29,7 +30,18 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
   const [loadError, setLoadError] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [viewMode, setViewMode] = useState<ViewMode>("template");
+  const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Handle OCR confirmation — load parsed data into store
+  const handleOCRConfirm = (sections: CVSection[]) => {
+    loadResumeIntoStore(
+      sections,
+      undefined,
+      resume?.template_id || undefined
+    );
+    setOcrModalOpen(false);
+  };
 
   // Load resume từ Supabase
   useEffect(() => {
@@ -272,6 +284,13 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
         {/* Right */}
         <div className="flex items-center gap-2 shrink-0">
           <button
+            onClick={() => setOcrModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-semibold transition-colors border border-blue-200"
+          >
+            <ScanLine size={15} />
+            Upload CV
+          </button>
+          <button
             onClick={() => window.print()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold transition-colors"
           >
@@ -365,6 +384,13 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
         </div>
 
       </div>
+
+      {/* ── OCR Preview Modal ───────────────────────────────── */}
+      <OCRPreviewModal
+        isOpen={ocrModalOpen}
+        onClose={() => setOcrModalOpen(false)}
+        onConfirm={handleOCRConfirm}
+      />
     </div>
   );
 }

@@ -30,6 +30,7 @@ from models import (
     ErrorResponse,
     MatchJobRequest,
     MatchJobResponse,
+    OCRUploadResponse,
     ParseCVResponse,
 )
 from services.cv_parser import parse_cv
@@ -248,6 +249,138 @@ async def endpoint_match_job(payload: MatchJobRequest):
         model_used=f"ollama/{os.getenv('OLLAMA_CV_SUGGEST_MODEL', 'qwen3:4b')}",
     )
 
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  POST /ocr/upload                                              ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+
+MAX_OCR_SIZE_MB = 10
+
+ALLOWED_OCR_TYPES = {
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/webp",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/octet-stream",   # browsers sometimes send this for DOCX
+}
+
+
+@app.post(
+    "/ocr/upload",
+    response_model=OCRUploadResponse,
+    tags=["ocr"],
+    summary="PaddleOCR: detect and recognise text regions in a CV",
+    responses={
+        400: {"model": ErrorResponse, "description": "Invalid file"},
+        503: {"model": ErrorResponse, "description": "OCR engine not available"},
+    },
+)
+async def endpoint_ocr_upload(
+    file: UploadFile = File(..., description="CV file (PNG / JPG / WEBP / PDF / DOCX)"),
+):
+    """
+    Upload a CV document and receive pixel-precise bounding boxes for every
+    detected text region.
+
+    - **PNG / JPG / WEBP** → processed directly.
+    - **PDF** → each page is rasterised at 200 dpi before OCR.
+    - **DOCX** → converted to PDF via LibreOffice then rasterised.
+
+    Response includes:
+    - Per-page ``blocks`` with ``text``, ``bbox`` (4-point polygon in pixels),
+      ``confidence``, and ``rect`` (0–100 normalised for frontend overlay).
+    """
+    # ── Validate content type ──────────────────────────────────
+    ct = (file.content_type or "").lower()
+    fname = file.filename or ""
+    ext = os.path.splitext(fname)[-1].lower()
+
+    is_docx = ext == ".docx" or "wordprocessingml" in ct
+    is_known = ct in ALLOWED_OCR_TYPES or ext in {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".docx"}
+    if not is_known:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type '{ct}'. Accepted: PNG, JPG, WEBP, PDF, DOCX.",
+        )
+
+    # ── Read & size-check ─────────────────────────────────────
+    file_bytes = await file.read()
+    size_mb = len(file_bytes) / (1024 * 1024)
+    if size_mb > MAX_OCR_SIZE_MB:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large ({size_mb:.1f} MB). Maximum is {MAX_OCR_SIZE_MB} MB.",
+        )
+    if len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    # ── Run OCR pipeline ──────────────────────────────────────
+    start = time.perf_counter()
+    warnings: list[str] = []
+
+    try:
+        from services.ocr_service import run_ocr, OCRBlock
+        from models import OCRBlockModel, OCRPageModel
+
+        effective_ct = (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            if is_docx
+            else ct
+        )
+        page_results = run_ocr(file_bytes, content_type=effective_ct, filename=fname)
+
+    except RuntimeError as exc:
+        # PaddleOCR not installed, LibreOffice missing, etc.
+        logger.error("OCR pipeline error: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("OCR inference failed")
+        raise HTTPException(status_code=500, detail=f"OCR failed: {exc}") from exc
+
+    elapsed = time.perf_counter() - start
+    total_blocks = sum(len(p.blocks) for p in page_results)
+    logger.info(
+        "OCR done – %d page(s), %d blocks in %.2fs",
+        len(page_results),
+        total_blocks,
+        elapsed,
+    )
+
+    if elapsed > 2.0:
+        warnings.append(f"Processing took {elapsed:.1f}s (target < 2s).")
+
+    # ── Serialise ──────────────────────────────────────
+    pages_out: list[OCRPageModel] = []
+    for pr in page_results:
+        blocks_out = [
+            OCRBlockModel(
+                text=b.text,
+                bbox=b.bbox,
+                confidence=b.confidence,
+                page=b.page,
+                rect={"x": b.rect_x, "y": b.rect_y, "width": b.rect_w, "height": b.rect_h},
+            )
+            for b in pr.blocks
+        ]
+        pages_out.append(
+            OCRPageModel(
+                page=pr.page,
+                image_width=pr.image_width,
+                image_height=pr.image_height,
+                blocks=blocks_out,
+            )
+        )
+
+    return OCRUploadResponse(
+        success=True,
+        page_count=len(pages_out),
+        total_blocks=total_blocks,
+        pages=pages_out,
+        elapsed_seconds=round(elapsed, 3),
+        warnings=warnings,
+    )
 
 # ── Entry point ──────────────────────────────────────────────
 

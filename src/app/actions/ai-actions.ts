@@ -34,7 +34,7 @@ function detectFormat(text: string): ContentFormat {
 // This function aggressively strips all non-content text.
 function extractOutput(raw: string, lang: "vi" | "en"): string {
   // 1. Strip <think>...</think> blocks (matched or orphaned)
-  let text = raw.replace(/<think>[\s\S]*?<\/think>/gi, "");
+  let text = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
   const closeThinkIdx = text.lastIndexOf("</think>");
   if (closeThinkIdx !== -1) {
     text = text.slice(closeThinkIdx + "</think>".length);
@@ -202,7 +202,7 @@ async function callOllama(
   systemPrompt: string,
   userPrompt: string,
   prefill = "",
-  temperature = 0.7
+  temperature = 0.2
 ): Promise<string> {
   const baseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
   const model   = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
@@ -222,8 +222,13 @@ async function callOllama(
       body: JSON.stringify({
         model,
         stream: false,
-        think: false,
-        options: { temperature, num_predict: 2000, top_p: 0.9 },
+        options: { 
+          temperature: 0.2, // Quan trọng: Giảm sáng tạo thừa
+          num_predict: 500,  // Giới hạn độ dài để không viết quá dài
+          top_p: 0.5,
+          // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
+          stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"] 
+        },
         messages,
       }),
     });

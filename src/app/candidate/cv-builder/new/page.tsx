@@ -103,7 +103,7 @@ export default function NewCVPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="bg-white rounded-2xl border border-slate-200 overflow-hidden animate-pulse">
-                <div className="h-[240px] bg-slate-100" />
+                <div className="h-60 bg-slate-100" />
                 <div className="p-4 space-y-2">
                   <div className="h-4 bg-slate-100 rounded w-3/4" />
                   <div className="h-3 bg-slate-100 rounded w-1/2" />
@@ -135,7 +135,7 @@ export default function NewCVPage() {
                   }`}
                 >
                   {/* Preview thumbnail */}
-                  <div className="h-[240px] bg-gradient-to-br from-slate-100 to-slate-200 relative overflow-hidden flex items-center justify-center">
+                  <div className="h-60 bg-linear-to-br from-slate-100 to-slate-200 relative overflow-hidden flex items-center justify-center">
                     {template.thumbnail_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img

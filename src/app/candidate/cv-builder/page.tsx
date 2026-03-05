@@ -2,18 +2,23 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
-import { getMyResumes, deleteResume, renameResume, ResumeRow } from "./api";
-import { Plus, FileText, MoreVertical, Trash2, Pencil, ExternalLink, Clock } from "lucide-react";
+import { getMyResumes, deleteResume, renameResume, createResume, ResumeRow } from "./api";
+import { Plus, FileText, MoreVertical, Trash2, Pencil, ExternalLink, Clock, ScanLine, Upload } from "lucide-react";
+import { OCRPreviewModal } from "./components/ocr/OCRPreviewModal";
+import type { CVSection } from "./types";
 
 export default function CVDashboardPage() {
+  const router = useRouter();
   const [resumes, setResumes] = useState<ResumeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [ocrModalOpen, setOcrModalOpen] = useState(false);
 
   const loadResumes = async () => {
     try {
@@ -55,6 +60,24 @@ export default function CVDashboardPage() {
     } catch (err) {
       console.error("Đổi tên thất bại:", err);
     }
+  };
+
+  // Handle OCR scan — create a new resume from OCR data and navigate to edit
+  const handleOCRConfirm = async (sections: CVSection[]) => {
+    try {
+      // Use a default template ID (or null for custom)
+      const defaultTemplateId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+      const newResume = await createResume(defaultTemplateId, "CV từ Upload");
+      if (newResume) {
+        // Navigate to edit page — the sections will be loaded via store
+        // We store OCR sections in sessionStorage so the edit page can pick them up
+        sessionStorage.setItem("ocr_sections", JSON.stringify(sections));
+        router.push(`/candidate/cv-builder/${newResume.id}/edit?ocr=1`);
+      }
+    } catch (err) {
+      console.error("Tạo CV từ OCR thất bại:", err);
+    }
+    setOcrModalOpen(false);
   };
 
   return (
@@ -106,6 +129,23 @@ export default function CVDashboardPage() {
               <h3 className="text-lg font-bold text-slate-800">Tạo CV mới</h3>
               <p className="text-slate-400 text-sm mt-1">Chọn từ thư viện mẫu</p>
             </Link>
+
+            {/* UPLOAD CV CARD */}
+            <button
+              type="button"
+              onClick={() => setOcrModalOpen(true)}
+              className="group flex flex-col items-center justify-center h-80 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 hover:bg-white hover:border-blue-400 hover:shadow-xl transition-all cursor-pointer text-left"
+            >
+              <div className="size-16 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-colors mb-4">
+                <Upload size={28} className="text-blue-400 group-hover:text-blue-600 transition-colors" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800">Upload CV có sẵn</h3>
+              <p className="text-slate-400 text-sm mt-1 text-center px-4">AI quét và nhập dữ liệu tự động</p>
+              <div className="flex items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full bg-blue-100/60 border border-blue-200/60">
+                <ScanLine size={12} className="text-blue-600" />
+                <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider">PDF • JPG • PNG</span>
+              </div>
+            </button>
 
             {/* EXISTING CVs */}
             {resumes.map((resume) => (
@@ -260,6 +300,13 @@ export default function CVDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* OCR Preview Modal */}
+      <OCRPreviewModal
+        isOpen={ocrModalOpen}
+        onClose={() => setOcrModalOpen(false)}
+        onConfirm={handleOCRConfirm}
+      />
     </div>
   );
 }

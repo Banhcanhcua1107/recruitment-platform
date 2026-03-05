@@ -85,6 +85,42 @@ class ParseCVResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+# ╔══════════════════════════════════════════════════════════════
+# ║  /ocr/upload  ─  Request / Response models                   ║
+# ╚══════════════════════════════════════════════════════════════
+
+
+class OCRBlockModel(BaseModel):
+    """Single detected text region returned by PaddleOCR."""
+
+    text: str
+    # 4-point polygon: [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] in image pixels
+    bbox: list[list[int]]
+    confidence: float
+    page: int = 1
+    # Normalised axis-aligned rect (0–100 range) derived from bbox + image dims
+    rect: dict[str, float] = Field(
+        default_factory=dict,
+        description="{x, y, width, height} in 0–100 percent of image size",
+    )
+
+
+class OCRPageModel(BaseModel):
+    page: int
+    image_width: int
+    image_height: int
+    blocks: list[OCRBlockModel] = Field(default_factory=list)
+
+
+class OCRUploadResponse(BaseModel):
+    success: bool
+    page_count: int
+    total_blocks: int
+    pages: list[OCRPageModel]
+    elapsed_seconds: float
+    warnings: list[str] = Field(default_factory=list)
+
+
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  /match-job  ─  Request / Response models                   ║
 # ╚══════════════════════════════════════════════════════════════╝
