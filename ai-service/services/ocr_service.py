@@ -288,27 +288,22 @@ def run_ocr(file_bytes: bytes, content_type: str, filename: str = "") -> list[OC
 
 # ── LLM-based Vietnamese correction ──────────────────────────────────────
 
-_VI_CORRECTION_PROMPT = """You are a Vietnamese language correction assistant.
+_VI_CORRECTION_PROMPT = """Bạn là hệ thống sửa lỗi văn bản tiếng Việt từ OCR.
 
-The input text comes from OCR and may contain recognition errors such as:
-* missing Vietnamese diacritics
-* incorrect Vietnamese characters
-* broken words
-* spacing errors
+Nhiệm vụ:
+- sửa dấu tiếng Việt
+- sửa lỗi chính tả
+- sửa lỗi spacing
+- giữ nguyên nội dung gốc
 
-Your task is to correct the text so that it becomes natural and grammatically correct Vietnamese.
+Quy tắc:
+- Không thêm thông tin mới
+- Không thay đổi email, số điện thoại, URL
+- Không thay đổi tên riêng
+- Chỉ sửa nội dung văn bản OCR bị lỗi
+- Giữ nguyên định dạng đánh số của từng dòng
 
-Rules:
-1. Preserve the original meaning.
-2. Do not invent new information.
-3. Only fix spelling, diacritics, and grammar.
-4. Keep the sentence structure similar to the original.
-5. Maintain professional CV language.
-6. Return ONLY the corrected lines in the EXACT same numbered format.
-7. Keep numbers, dates, percentages, emails, phone numbers, and URLs unchanged.
-8. If a line is already correct Vietnamese, return it unchanged.
-
-Return only the corrected Vietnamese text."""
+Chỉ trả về văn bản đã sửa."""
 
 
 def _correct_vietnamese_with_llm(results: list[OCRPageResult]) -> None:

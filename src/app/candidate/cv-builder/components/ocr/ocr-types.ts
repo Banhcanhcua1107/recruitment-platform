@@ -92,6 +92,7 @@ export interface ParsedCVResponse {
   extraction_method: string;
   data: {
     full_name: string | null;
+    job_title?: string | null;
     contact: {
       email: string | null;
       phone: string | null;
@@ -161,7 +162,7 @@ export function transformParsedCVToDraft(
 ): OCRDraftData {
   return {
     fullName: cleanOCRText(parsed.full_name),
-    title: "",
+    title: cleanOCRText(parsed.job_title),
     email: cleanOCRText(parsed.contact.email),
     phone: cleanOCRText(parsed.contact.phone),
     address: cleanOCRText(parsed.contact.address),

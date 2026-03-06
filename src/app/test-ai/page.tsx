@@ -31,7 +31,8 @@ export default function TestOCR() {
   return (
     <div className="p-10">
       <h1 className="text-2xl font-bold mb-4">Test AI CV Scanner (Qwen-VL)</h1>
-      <input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+      <label htmlFor="cv-file" className="block mb-2 font-medium">Select CV File:</label>
+      <input id="cv-file" type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
       <button onClick={handleTest} className="bg-blue-600 text-white p-2 rounded ml-2">
         {loading ? "Đang quét..." : "Bắt đầu quét"}
       </button>

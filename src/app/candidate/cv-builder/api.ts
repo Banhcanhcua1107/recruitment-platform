@@ -27,10 +27,11 @@ export interface ResumeRow {
   resume_data: ResumeBlock[];
   current_styling: Record<string, unknown>;
   is_public: boolean;
+  thumbnail_url?: string | null;
   created_at: string;
   updated_at: string;
   // joined
-  template?: Pick<TemplateRow, "name" | "structure_schema" | "default_styling"> | null;
+  template?: Pick<TemplateRow, "name" | "structure_schema" | "default_styling" | "thumbnail_url"> | null;
 }
 
 export interface BlockDef {
@@ -94,7 +95,7 @@ export async function getMyResumes(): Promise<ResumeRow[]> {
 
   const { data, error } = await supabase
     .from("resumes")
-    .select("*, template:templates(name, structure_schema, default_styling)")
+    .select("*, template:templates(name, structure_schema, default_styling, thumbnail_url)")
     .eq("user_id", user.id)
     .order("updated_at", { ascending: false });
 
@@ -107,7 +108,7 @@ export async function getResumeById(id: string): Promise<ResumeRow | null> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from("resumes")
-    .select("*, template:templates(name, structure_schema, default_styling)")
+    .select("*, template:templates(name, structure_schema, default_styling, thumbnail_url)")
     .eq("id", id)
     .single();
 

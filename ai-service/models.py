@@ -45,6 +45,7 @@ class ProjectEntry(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     technologies: list[str] = Field(default_factory=list)
+    role: Optional[str] = None
     url: Optional[str] = None
 
 
@@ -58,6 +59,7 @@ class ParsedCV(BaseModel):
     """Structured representation of a parsed CV."""
 
     full_name: Optional[str] = None
+    job_title: Optional[str] = None
     contact: ContactInfo = Field(default_factory=ContactInfo)
     summary: Optional[str] = None
     skills: list[str] = Field(default_factory=list)

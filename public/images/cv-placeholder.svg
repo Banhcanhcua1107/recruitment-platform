@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1131" viewBox="0 0 800 1131" fill="none">
+  <rect width="800" height="1131" fill="#F8FAFC"/>
+  <!-- Top decorative bar -->
+  <rect width="800" height="40" fill="#059669"/>
+  <!-- Header skeleton -->
+  <rect x="80" y="100" width="240" height="40" rx="8" fill="#E2E8F0"/>
+  <rect x="80" y="160" width="400" height="24" rx="6" fill="#CBD5E1"/>
+  <!-- Info boxes -->
+  <rect x="80" y="240" width="200" height="16" rx="4" fill="#E2E8F0"/>
+  <rect x="80" y="270" width="200" height="16" rx="4" fill="#E2E8F0"/>
+  <rect x="80" y="300" width="200" height="16" rx="4" fill="#E2E8F0"/>
+  <!-- Divider -->
+  <line x1="80" y1="350" x2="720" y2="350" stroke="#CBD5E1" stroke-width="2" stroke-linecap="round" stroke-dasharray="8 8"/>
+  <!-- Work Experience Skeleton -->
+  <rect x="80" y="400" width="160" height="24" rx="6" fill="#CBD5E1"/>
+  <!-- Item 1 -->
+  <rect x="80" y="450" width="120" height="16" rx="4" fill="#94A3B8"/>
+  <rect x="240" y="450" width="400" height="16" rx="4" fill="#E2E8F0"/>
+  <rect x="240" y="480" width="480" height="12" rx="4" fill="#F1F5F9"/>
+  <rect x="240" y="500" width="420" height="12" rx="4" fill="#F1F5F9"/>
+  <rect x="240" y="520" width="300" height="12" rx="4" fill="#F1F5F9"/>
+  <!-- Item 2 -->
+  <rect x="80" y="580" width="120" height="16" rx="4" fill="#94A3B8"/>
+  <rect x="240" y="580" width="350" height="16" rx="4" fill="#E2E8F0"/>
+  <rect x="240" y="610" width="480" height="12" rx="4" fill="#F1F5F9"/>
+  <rect x="240" y="630" width="280" height="12" rx="4" fill="#F1F5F9"/>
+  
+  <!-- Education Skeleton -->
+  <rect x="80" y="700" width="160" height="24" rx="6" fill="#CBD5E1"/>
+  <rect x="80" y="750" width="120" height="16" rx="4" fill="#94A3B8"/>
+  <rect x="240" y="750" width="350" height="16" rx="4" fill="#E2E8F0"/>
+  <rect x="240" y="780" width="280" height="12" rx="4" fill="#F1F5F9"/>
+  
+  <!-- Skills Skeleton -->
+  <rect x="80" y="850" width="160" height="24" rx="6" fill="#CBD5E1"/>
+  <rect x="80" y="900" width="100" height="30" rx="15" fill="#E2E8F0"/>
+  <rect x="190" y="900" width="140" height="30" rx="15" fill="#E2E8F0"/>
+  <rect x="340" y="900" width="80" height="30" rx="15" fill="#E2E8F0"/>
+  <rect x="430" y="900" width="120" height="30" rx="15" fill="#E2E8F0"/>
+  
+  <rect x="80" y="940" width="120" height="30" rx="15" fill="#E2E8F0"/>
+  <rect x="210" y="940" width="90" height="30" rx="15" fill="#E2E8F0"/>
+  
+  <rect width="800" height="1131" fill="transparent" stroke="#E2E8F0" stroke-width="4"/>
+</svg>
