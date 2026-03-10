@@ -16,6 +16,8 @@ import {
   ProjectListSectionData,
   AwardListSectionData,
   CertificateListSectionData,
+  RichOutlineNode,
+  RichOutlineSectionData,
   CVSection,
 } from "../../types";
 import { Plus, X } from "lucide-react";
@@ -562,6 +564,87 @@ function CertificateSection({ section }: { section: CVSection }) {
 }
 
 /* ── Custom Text ───────────────────────────────────── */
+function updateRichOutlineNodeText(
+  nodes: RichOutlineNode[],
+  nodeId: string,
+  value: string
+): RichOutlineNode[] {
+  return nodes.map((node) => {
+    if (node.id === nodeId) {
+      return { ...node, text: value };
+    }
+
+    return {
+      ...node,
+      children: updateRichOutlineNodeText(node.children, nodeId, value),
+    };
+  });
+}
+
+function RichOutlineNodeView({
+  node,
+  onChange,
+}: {
+  node: RichOutlineNode;
+  onChange: (nodeId: string, value: string) => void;
+}) {
+  const content =
+    node.kind === "heading" ? (
+      <div className="font-bold text-[13px] text-gray-900">
+        <InlineText value={node.text} onChange={(value) => onChange(node.id, value)} placeholder="Tiêu đề" />
+      </div>
+    ) : (
+      <div className="text-[12.5px] text-gray-700 leading-relaxed">
+        {node.kind === "meta" ? (
+          <span className="text-gray-500">
+            <InlineText value={node.text} onChange={(value) => onChange(node.id, value)} placeholder="Dòng meta" />
+          </span>
+        ) : (
+          <InlineText value={node.text} onChange={(value) => onChange(node.id, value)} placeholder="Nội dung" />
+        )}
+      </div>
+    );
+
+  return (
+    <li className={node.kind === "bullet" ? "list-disc ml-4" : "list-none"}>
+      {content}
+      {node.children.length > 0 && (
+        <ul className="mt-1 ml-4 space-y-1">
+          {node.children.map((child) => (
+            <RichOutlineNodeView key={child.id} node={child} onChange={onChange} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function RichOutlineSection({ section }: { section: CVSection }) {
+  const { updateSectionData } = useCVStore();
+  const data = section.data as RichOutlineSectionData;
+
+  return (
+    <SectionWrapper sectionId={section.id} label="Outline">
+      <div className="mb-3">
+        <SectionTitle sectionId={section.id} title={section.title || "Outline"} />
+        <ul className="pl-1 space-y-1">
+          {(data.nodes || []).map((node) => (
+            <RichOutlineNodeView
+              key={node.id}
+              node={node}
+              onChange={(nodeId, value) =>
+                updateSectionData(section.id, {
+                  nodes: updateRichOutlineNodeText(data.nodes || [], nodeId, value),
+                })
+              }
+            />
+          ))}
+        </ul>
+      </div>
+    </SectionWrapper>
+  );
+}
+
 function CustomTextSection({ section }: { section: CVSection }) {
   const { updateSectionData } = useCVStore();
   const data = section.data as { text?: string };
@@ -597,6 +680,8 @@ function RenderSection({ section, allSections }: { section: CVSection; allSectio
     }
     case "summary":
       return <SummarySection section={section} />;
+    case "rich_outline":
+      return <RichOutlineSection section={section} />;
     case "experience_list":
       return <ExperienceSection section={section} />;
     case "education_list":

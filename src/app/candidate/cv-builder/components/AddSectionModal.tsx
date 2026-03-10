@@ -28,6 +28,12 @@ const SECTION_OPTIONS: SectionOption[] = [
     description: "Giới thiệu bản thân, mục tiêu nghề nghiệp",
   },
   {
+    type: "rich_outline",
+    label: "Outline nhiá»u cáº¥p",
+    icon: "format_list_bulleted",
+    description: "Danh sÃ¡ch level 1, 2, 3 phÃ¹ há»£p OCR vÃ  ná»™i dung phÃ¢n cáº¥p",
+  },
+  {
     type: "experience_list",
     label: "Kinh nghiệm làm việc",
     icon: "work",

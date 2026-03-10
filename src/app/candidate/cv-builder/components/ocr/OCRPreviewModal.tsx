@@ -1,12 +1,20 @@
 ﻿"use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ScanLine } from "lucide-react";
 import { OCRUploadZone } from "./OCRUploadZone";
+import { OCRPipelineGuide } from "./OCRPipelineGuide";
+import { OCRHelpDrawer } from "./OCRHelpDrawer";
 import { ScanningOverlay } from "./ScanningOverlay";
 import { OriginalLayoutWorkspace } from "./OriginalLayoutWorkspace";
-import { type RawOCRBlock } from "./ocr-types";
+import {
+  type OCRDraftData,
+  type RawOCRBlock,
+  hasMeaningfulDraftData,
+  transformParsedCVToDraft,
+  transformRawBlocksToSections,
+} from "./ocr-types";
 import type { CVSection } from "../../types";
 
 // ── Props ────────────────────────────────────────────
@@ -42,16 +50,67 @@ interface OCRUploadResponse {
   warnings: string[];
 }
 
-// ── API call: POST /ocr/upload ───────────────────────────
+// ── API call: POST /upload-cv ───────────────────────────
 
-const AI_SERVICE_URL =
-  process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
+interface UploadCVResponse extends OCRUploadResponse {
+  extraction_method: string;
+  data: {
+    full_name: string | null;
+    job_title?: string | null;
+    contact: {
+      email: string | null;
+      phone: string | null;
+      linkedin: string | null;
+      address: string | null;
+    };
+    summary: string | null;
+    skills: string[];
+    experience: Array<{
+      company: string | null;
+      title: string | null;
+      start_date: string | null;
+      end_date: string | null;
+      description: string | null;
+    }>;
+    education: Array<{
+      institution: string | null;
+      degree: string | null;
+      field_of_study: string | null;
+      start_date: string | null;
+      end_date: string | null;
+      gpa: string | null;
+    }>;
+    projects: Array<{
+      name: string | null;
+      description: string | null;
+      technologies: string[];
+      url: string | null;
+    }>;
+    certifications: Array<{
+      name: string | null;
+      issuer: string | null;
+      date_obtained: string | null;
+    }>;
+    languages: string[];
+    raw_text: string;
+  };
+  detected_sections: Array<{
+    type: string;
+    title: string;
+    content: string;
+    items: Array<Record<string, unknown>>;
+    line_ids: string[];
+    block_indices: number[];
+  }>;
+  builder_sections: CVSection[];
+  raw_text: string;
+}
 
-async function callOCRUpload(file: File): Promise<OCRUploadResponse> {
+async function callUploadCV(file: File): Promise<UploadCVResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${AI_SERVICE_URL}/ocr/upload`, {
+  const res = await fetch(`/api/ai/upload-cv`, {
     method: "POST",
     body: formData,
   });
@@ -91,9 +150,9 @@ function paddleBlocksToRaw(response: OCRUploadResponse): RawOCRBlock[] {
   return blocks;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ----------------------------------------------------------------
 // OCR Preview Modal — Orchestrator
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ----------------------------------------------------------------
 export function OCRPreviewModal({
   isOpen,
   onClose,
@@ -102,13 +161,19 @@ export function OCRPreviewModal({
   const [step, setStep] = useState<ModalStep>("upload");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [rawBlocks, setRawBlocks] = useState<RawOCRBlock[]>([]);
+  const [draftData, setDraftData] = useState<OCRDraftData | null>(null);
+  const [backendSections, setBackendSections] = useState<CVSection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   // ── Reset ──────────────────────────────────────────────
   const resetState = useCallback(() => {
+    requestIdRef.current += 1;
     setStep("upload");
     setSelectedFile(null);
     setRawBlocks([]);
+    setDraftData(null);
+    setBackendSections(null);
     setError(null);
   }, []);
 
@@ -119,26 +184,37 @@ export function OCRPreviewModal({
 
   // ── File selected → run OCR ─────────────────────────────
   const handleFileSelected = useCallback(async (file: File) => {
+    const requestId = ++requestIdRef.current;
     setSelectedFile(file);
     setStep("scanning");
     setError(null);
+    setDraftData(null);
+    setBackendSections(null);
 
     try {
-      const response = await callOCRUpload(file);
+      const uploadResponse = await callUploadCV(file);
 
-      if (!response.success || response.total_blocks === 0) {
+      if (!uploadResponse.success || uploadResponse.total_blocks === 0) {
         throw new Error(
-          response.total_blocks === 0
+          uploadResponse.total_blocks === 0
             ? "Không phát hiện văn bản nào trong tài liệu."
             : "Không thể phân tích tài liệu"
         );
       }
 
-      const blocks = paddleBlocksToRaw(response);
+      const blocks = paddleBlocksToRaw(uploadResponse);
+      const parsedDraft = transformParsedCVToDraft(uploadResponse.data);
       setRawBlocks(blocks);
+      setBackendSections(uploadResponse.builder_sections || null);
+      setDraftData(hasMeaningfulDraftData(parsedDraft) ? parsedDraft : null);
       setStep("preview");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Lỗi không xác định";
+      if (requestIdRef.current !== requestId) return;
+      const rawMessage = err instanceof Error ? err.message : "Lỗi không xác định";
+      const message =
+        /failed to fetch|cors|network|err_failed/i.test(rawMessage)
+          ? "Không thể kết nối tới AI service ở http://localhost:8000. Hãy kiểm tra backend đã chạy và đã reload route /upload-cv."
+          : rawMessage;
       setError(message);
       setStep("upload");
     }
@@ -146,14 +222,31 @@ export function OCRPreviewModal({
 
   // ── Confirm edited blocks → parent ────────────────────────
   const handleConfirm = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    (_editedBlocks: RawOCRBlock[]) => {
-      // TODO: map RawOCRBlock[] → CVSection[] via your domain mapper
-      const sections: CVSection[] = [];
+    (editedBlocks: RawOCRBlock[]) => {
+      const blocksChanged =
+        editedBlocks.length !== rawBlocks.length ||
+        editedBlocks.some((block, index) => {
+          const original = rawBlocks[index];
+          return (
+            !original ||
+            block.id !== original.id ||
+            block.text !== original.text ||
+            block.rect.x !== original.rect.x ||
+            block.rect.y !== original.rect.y ||
+            block.rect.width !== original.rect.width ||
+            block.rect.height !== original.rect.height
+          );
+        });
+
+      const sections: CVSection[] =
+        !blocksChanged && backendSections && backendSections.length > 0
+          ? backendSections
+          : transformRawBlocksToSections(editedBlocks, draftData);
+
       onConfirm(sections);
       resetState();
     },
-    [onConfirm, resetState]
+    [backendSections, draftData, onConfirm, rawBlocks, resetState]
   );
 
   const handleCancelDraft = useCallback(() => resetState(), [resetState]);
@@ -189,15 +282,20 @@ export function OCRPreviewModal({
           >
             {/* Close button */}
             {step !== "scanning" && (
-              <motion.button
-                aria-label="Close OCR modal"
-                onClick={handleClose}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="absolute top-4 right-4 z-20 flex items-center justify-center w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-500 transition-all"
-              >
-                <X size={16} />
-              </motion.button>
+              <>
+                <div className="absolute top-4 left-4 z-20">
+                  <OCRHelpDrawer buttonLabel="Help" />
+                </div>
+                <motion.button
+                  aria-label="Close OCR modal"
+                  onClick={handleClose}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="absolute top-4 right-4 z-20 flex items-center justify-center w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-500 transition-all"
+                >
+                  <X size={16} />
+                </motion.button>
+              </>
             )}
 
             {/* Content Card */}
@@ -217,7 +315,7 @@ export function OCRPreviewModal({
                     Upload CV để quét bằng AI
                   </h2>
                   <p className="text-sm text-slate-400 mt-1">
-                    EasyOCR sẽ tự động phát hiện và trích xuất toàn bộ văn bản từ CV của bạn
+                    Pipeline OCR theo hướng PP-OCR sẽ phát hiện vùng chữ, nhận dạng nội dung và dựng CV draft để bạn hiệu chỉnh
                   </p>
                 </motion.div>
               )}
@@ -232,6 +330,7 @@ export function OCRPreviewModal({
                     exit={{ opacity: 0, x: 20 }}
                   >
                     <OCRUploadZone onFileSelected={handleFileSelected} />
+                    <OCRPipelineGuide />
 
                     {error && (
                       <motion.div
@@ -271,6 +370,7 @@ export function OCRPreviewModal({
           key="ocr-workspace"
           file={selectedFile}
           initialBlocks={rawBlocks}
+          parsedDraft={draftData}
           onConfirm={handleConfirm}
           onCancel={handleCancelDraft}
         />

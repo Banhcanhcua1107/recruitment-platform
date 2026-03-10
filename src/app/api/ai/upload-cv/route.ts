@@ -1,0 +1,60 @@
+import { NextRequest, NextResponse } from "next/server";
+
+export const dynamic = "force-dynamic";
+
+const AI_SERVICE_URL =
+  process.env.AI_SERVICE_URL ||
+  process.env.NEXT_PUBLIC_AI_SERVICE_URL ||
+  "http://localhost:8000";
+
+export async function POST(req: NextRequest) {
+  try {
+    const incoming = await req.formData();
+    const outgoing = new FormData();
+
+    const file = incoming.get("file");
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { detail: "Missing file upload." },
+        { status: 400 }
+      );
+    }
+
+    outgoing.append("file", file, file.name);
+
+    const minConfidence = incoming.get("min_confidence");
+    const params = new URLSearchParams();
+    if (typeof minConfidence === "string" && minConfidence.trim()) {
+      params.set("min_confidence", minConfidence);
+    }
+
+    const targetUrl = `${AI_SERVICE_URL}/upload-cv${
+      params.size ? `?${params.toString()}` : ""
+    }`;
+
+    const response = await fetch(targetUrl, {
+      method: "POST",
+      body: outgoing,
+      cache: "no-store",
+    });
+
+    const contentType = response.headers.get("content-type") || "application/json";
+    const bodyText = await response.text();
+
+    return new NextResponse(bodyText, {
+      status: response.status,
+      headers: {
+        "content-type": contentType,
+      },
+    });
+  } catch (error) {
+    console.error("Proxy upload-cv error:", error);
+    return NextResponse.json(
+      {
+        detail:
+          "Proxy upload-cv failed. Verify the AI service is running on http://localhost:8000.",
+      },
+      { status: 502 }
+    );
+  }
+}

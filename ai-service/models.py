@@ -1,30 +1,26 @@
 """
 Pydantic models for request/response validation.
-Covers both /parse-cv and /match-job endpoints.
 """
 
 from __future__ import annotations
 
-from datetime import date
-from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  /parse-cv  ─  Response models                              ║
+# ║  POST /parse-cv  ─  Response                                ║
 # ╚══════════════════════════════════════════════════════════════╝
 
-
-class ContactInfo(BaseModel):
+class ParseCVContactModel(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     linkedin: Optional[str] = None
     address: Optional[str] = None
 
 
-class ExperienceEntry(BaseModel):
+class ParseCVExperienceModel(BaseModel):
     company: Optional[str] = None
     title: Optional[str] = None
     start_date: Optional[str] = None
@@ -32,7 +28,7 @@ class ExperienceEntry(BaseModel):
     description: Optional[str] = None
 
 
-class EducationEntry(BaseModel):
+class ParseCVEducationModel(BaseModel):
     institution: Optional[str] = None
     degree: Optional[str] = None
     field_of_study: Optional[str] = None
@@ -41,66 +37,56 @@ class EducationEntry(BaseModel):
     gpa: Optional[str] = None
 
 
-class ProjectEntry(BaseModel):
+class ParseCVProjectModel(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     technologies: list[str] = Field(default_factory=list)
-    role: Optional[str] = None
     url: Optional[str] = None
 
 
-class CertificationEntry(BaseModel):
+class ParseCVCertificationModel(BaseModel):
     name: Optional[str] = None
     issuer: Optional[str] = None
     date_obtained: Optional[str] = None
 
 
-class ParsedCV(BaseModel):
-    """Structured representation of a parsed CV."""
-
+class ParseCVDataModel(BaseModel):
     full_name: Optional[str] = None
     job_title: Optional[str] = None
-    contact: ContactInfo = Field(default_factory=ContactInfo)
+    contact: ParseCVContactModel = Field(default_factory=ParseCVContactModel)
     summary: Optional[str] = None
     skills: list[str] = Field(default_factory=list)
-    experience: list[ExperienceEntry] = Field(default_factory=list)
-    education: list[EducationEntry] = Field(default_factory=list)
-    projects: list[ProjectEntry] = Field(default_factory=list)
-    certifications: list[CertificationEntry] = Field(default_factory=list)
+    experience: list[ParseCVExperienceModel] = Field(default_factory=list)
+    education: list[ParseCVEducationModel] = Field(default_factory=list)
+    projects: list[ParseCVProjectModel] = Field(default_factory=list)
+    certifications: list[ParseCVCertificationModel] = Field(default_factory=list)
     languages: list[str] = Field(default_factory=list)
-    raw_text: str = Field(
-        default="",
-        description="Full extracted text before structuring",
-    )
-
-
-class ExtractionMethod(str, Enum):
-    TEXT = "text_extraction"
-    OCR  = "ollama_qwen3_vl"  # qwen3-vl:4b via Ollama
+    raw_text: str = ""
 
 
 class ParseCVResponse(BaseModel):
-    success: bool
-    extraction_method: ExtractionMethod
-    data: ParsedCV
+    """Response returned by POST /parse-cv."""
+    success: bool = True
+    extraction_method: str = "unknown"
+    data: ParseCVDataModel = Field(default_factory=ParseCVDataModel)
     page_count: int = 0
     warnings: list[str] = Field(default_factory=list)
+    raw_text: str = Field(default="", description="Extracted text before normalization")
+    clean_text: str = Field(default="", description="LLM-normalized text")
+    cv_json: dict[str, Any] = Field(default_factory=dict, description="Structured CV data")
+    avatar_url: Optional[str] = Field(default=None, description="Data-URI of avatar image if detected")
 
 
-# ╔══════════════════════════════════════════════════════════════
+# ╔══════════════════════════════════════════════════════════════╗
 # ║  /ocr/upload  ─  Request / Response models                   ║
-# ╚══════════════════════════════════════════════════════════════
-
+# ╚══════════════════════════════════════════════════════════════╝
 
 class OCRBlockModel(BaseModel):
-    """Single detected text region returned by PaddleOCR."""
-
+    """Single detected text region returned by RapidOCR."""
     text: str
-    # 4-point polygon: [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] in image pixels
     bbox: list[list[int]]
     confidence: float
     page: int = 1
-    # Normalised axis-aligned rect (0–100 range) derived from bbox + image dims
     rect: dict[str, float] = Field(
         default_factory=dict,
         description="{x, y, width, height} in 0–100 percent of image size",
@@ -123,49 +109,49 @@ class OCRUploadResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class DetectedSectionModel(BaseModel):
+    type: str
+    title: str
+    content: str = ""
+    items: list[Any] = Field(default_factory=list)
+    line_ids: list[str] = Field(default_factory=list)
+    block_indices: list[int] = Field(default_factory=list)
+
+
+class UploadCVResponse(BaseModel):
+    success: bool = True
+    extraction_method: str = "ocr_layout"
+    page_count: int = 0
+    total_blocks: int = 0
+    pages: list[OCRPageModel] = Field(default_factory=list)
+    elapsed_seconds: float = 0.0
+    warnings: list[str] = Field(default_factory=list)
+    data: ParseCVDataModel = Field(default_factory=ParseCVDataModel)
+    detected_sections: list[DetectedSectionModel] = Field(default_factory=list)
+    builder_sections: list[dict[str, Any]] = Field(default_factory=list)
+    raw_text: str = ""
+
+
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  /match-job  ─  Request / Response models                   ║
+# ║  /match-job  ─  Request / Response                          ║
 # ╚══════════════════════════════════════════════════════════════╝
 
-
 class MatchJobRequest(BaseModel):
-    cv_text: str = Field(
-        ...,
-        min_length=20,
-        description="Full text content of the candidate's CV",
-        json_schema_extra={"example": "Python developer with 5 years of experience in Django, FastAPI, PostgreSQL..."},
-    )
-    job_description: str = Field(
-        ...,
-        min_length=20,
-        description="Full text of the job description / posting",
-        json_schema_extra={"example": "We are looking for a Senior Backend Engineer proficient in Python, AWS, Docker..."},
-    )
+    cv_text: str = Field(..., min_length=20)
+    job_description: str = Field(..., min_length=20)
 
 
 class MatchJobResponse(BaseModel):
     success: bool
-    match_percentage: float = Field(
-        ...,
-        ge=0,
-        le=100,
-        description="Cosine-similarity score scaled to 0–100 %",
-    )
-    missing_keywords: list[str] = Field(
-        default_factory=list,
-        description="Keywords present in the JD but absent from the CV",
-    )
-    common_keywords: list[str] = Field(
-        default_factory=list,
-        description="Keywords found in both CV and JD",
-    )
+    match_percentage: float = Field(..., ge=0, le=100)
+    missing_keywords: list[str] = Field(default_factory=list)
+    common_keywords: list[str] = Field(default_factory=list)
     model_used: str = "ollama/qwen3:4b"
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  Generic error envelope                                      ║
+# ║  Generic error                                               ║
 # ╚══════════════════════════════════════════════════════════════╝
-
 
 class ErrorResponse(BaseModel):
     success: bool = False

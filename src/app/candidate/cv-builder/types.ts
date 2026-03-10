@@ -44,6 +44,7 @@ export type SectionType =
   | 'header' // New Header type
   | 'personal_info' 
   | 'summary' 
+  | 'rich_outline'
   | 'experience_list' 
   | 'education_list' 
   | 'skill_list' 
@@ -179,9 +180,23 @@ export interface SummarySectionData {
   text: string;
 }
 
+export type RichOutlineNodeKind = 'heading' | 'bullet' | 'paragraph' | 'meta';
+
+export interface RichOutlineNode {
+  id: string;
+  text: string;
+  kind: RichOutlineNodeKind;
+  children: RichOutlineNode[];
+}
+
+export interface RichOutlineSectionData {
+  nodes: RichOutlineNode[];
+}
+
 export type AnySectionData = 
   | HeaderData
   | PersonalInfoData 
+  | RichOutlineSectionData
   | ExperienceListSectionData 
   | EducationListSectionData 
   | SkillListSectionData

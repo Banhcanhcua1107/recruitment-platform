@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { 
     HeaderData, 
     PersonalInfoData, 
+    RichOutlineSectionData,
     SummarySectionData, 
     ExperienceListSectionData, 
     EducationListSectionData,
@@ -14,6 +15,7 @@ import {
     EducationItem,
     SkillItem
 } from '../types';
+import { parseRichOutlineText, serializeRichOutlineNodes } from '../outline-utils';
 import { Plus, Trash, GripVertical } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -265,15 +267,17 @@ export const PropertiesPanel = () => {
                     {section.type === 'experience_list' && renderExperienceForm(section.data as ExperienceListSectionData)}
                     {section.type === 'skill_list' && renderSkillsForm(section.data as SkillListSectionData)}
                      
-                    {section.type === 'summary' && (
+                    {(section.type === 'summary' || section.type === 'custom_text' || section.type === 'rich_outline') && (
                          <div>
-                            <label className="text-xs font-bold text-slate-700 block mb-1">Summary Text</label>
+                            <label className="text-xs font-bold text-slate-700 block mb-1">
+                                {section.type === 'summary' ? 'Summary Text' : section.type === 'rich_outline' ? 'Outline Text' : 'Section Text'}
+                            </label>
                             <textarea 
-                                title="Giới thiệu bản thân"
-                                placeholder="Viết giới thiệu bản thân..."
+                                title={section.type === 'rich_outline' ? 'Structured outline' : 'Giới thiệu bản thân'}
+                                placeholder={section.type === 'rich_outline' ? "Dùng 2 dấu cách để tạo level con" : "Viết giới thiệu bản thân..."}
                                 className="w-full h-40 p-3 text-sm border border-slate-200 rounded-md focus:border-emerald-500 focus:ring-emerald-500 outline-none resize-none leading-relaxed"
-                                value={(section.data as SummarySectionData).text || ''}
-                                onChange={(e) => updateSectionData(section.id, { text: e.target.value })}
+                                value={section.type === 'rich_outline' ? serializeRichOutlineNodes((section.data as RichOutlineSectionData).nodes || []) : (section.data as SummarySectionData).text || ''}
+                                onChange={(e) => updateSectionData(section.id, section.type === 'rich_outline' ? { nodes: parseRichOutlineText(e.target.value) } : { text: e.target.value })}
                             />
                         </div>
                     )}

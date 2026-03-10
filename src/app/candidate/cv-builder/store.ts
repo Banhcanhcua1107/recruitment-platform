@@ -313,6 +313,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
       header: { fullName: '', title: '', avatarUrl: '' },
       personal_info: { email: '', phone: '', address: '', dob: '' },
       summary: { text: '' },
+      rich_outline: { nodes: [] },
       experience_list: { items: [{ id: uuidv4(), company: '', position: '', startDate: '', endDate: '', description: '' }] },
       education_list: { items: [{ id: uuidv4(), institution: '', degree: '', startDate: '', endDate: '' }] },
       skill_list: { items: [{ id: uuidv4(), name: '', level: 50 }] },
@@ -323,6 +324,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
     };
 
     const SECTION_TITLES: Record<string, string> = {
+      rich_outline: 'Structured Outline',
       header: '',
       personal_info: '',
       summary: 'Tổng quan',

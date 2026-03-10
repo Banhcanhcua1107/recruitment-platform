@@ -3,6 +3,8 @@ import {
   PersonalInfoData, 
   ExperienceListSectionData, 
   HeaderData,
+  RichOutlineNode,
+  RichOutlineSectionData,
   SummarySectionData,
   EducationListSectionData,
   SkillListSectionData,
@@ -72,6 +74,64 @@ const SummaryBlock = ({ data }: { data: SummarySectionData }) => (
             {data.text || 'Add a professional summary...'}
         </p>
     </div>
+);
+
+const CustomTextBlock = ({ data, title }: { data: { text?: string }, title?: string }) => (
+    <div className="mb-6">
+        <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900 mb-2 border-b-2 border-slate-100 pb-1 w-full">
+            {title || 'Custom Section'}
+        </h3>
+        <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+            {data.text || 'Add custom content...'}
+        </div>
+    </div>
+);
+
+const RichOutlineNodeBlock = ({ node }: { node: RichOutlineNode }) => {
+  if (node.kind === "heading") {
+    return (
+      <li className="list-none">
+        <div className="font-semibold text-slate-900">{node.text}</div>
+        {node.children.length > 0 && (
+          <ul className="mt-1 space-y-1 ml-4">
+            {node.children.map((child) => (
+              <RichOutlineNodeBlock key={child.id} node={child} />
+            ))}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
+  return (
+    <li className={node.kind === "bullet" ? "list-disc ml-4" : "list-none"}>
+      <div className="text-slate-700">
+        {node.kind === "meta" ? <span className="text-slate-500">{node.text}</span> : node.text}
+      </div>
+      {node.children.length > 0 && (
+        <ul className="mt-1 space-y-1 ml-4">
+          {node.children.map((child) => (
+            <RichOutlineNodeBlock key={child.id} node={child} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+};
+
+const RichOutlineBlock = ({ data, title }: { data: RichOutlineSectionData; title?: string }) => (
+  <div className="mb-6">
+    <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900 mb-2 border-b-2 border-slate-100 pb-1 w-full">
+      {title || "Structured Outline"}
+    </h3>
+    <ul className="text-sm text-slate-700 leading-relaxed space-y-1">
+      {data.nodes.length > 0 ? (
+        data.nodes.map((node) => <RichOutlineNodeBlock key={node.id} node={node} />)
+      ) : (
+        <li className="list-none text-slate-400">Add structured content...</li>
+      )}
+    </ul>
+  </div>
 );
 
 // --- Experience Block ---
@@ -163,6 +223,10 @@ export const CVComponentRenderer = ({ section, theme }: { section: CVSection, th
         return <EducationListBlock data={section.data as EducationListSectionData} />;
     case 'skill_list':
         return <SkillListBlock data={section.data as SkillListSectionData} theme={theme} />;
+    case 'rich_outline':
+        return <RichOutlineBlock data={section.data as RichOutlineSectionData} title={section.title} />;
+    case 'custom_text':
+        return <CustomTextBlock data={section.data as { text?: string }} title={section.title} />;
     default:
       return <GenericBlock type={section.type} />;
   }

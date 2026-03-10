@@ -2,7 +2,8 @@
 
 import React from "react";
 import { useCVStore } from "../store";
-import { CVSection, SummarySectionData, ExperienceListSectionData, EducationListSectionData, SkillListSectionData, HeaderData, PersonalInfoData } from "../types";
+import { CVSection, SummarySectionData, ExperienceListSectionData, EducationListSectionData, SkillListSectionData, HeaderData, PersonalInfoData, RichOutlineSectionData } from "../types";
+import { parseRichOutlineText, serializeRichOutlineNodes } from "../outline-utils";
 import { RichTextEditor } from "./RichTextEditor";
 import { GripVertical, Trash2, Eye, EyeOff } from "lucide-react";
 import { AddSectionButton } from "./AddSectionModal";
@@ -12,6 +13,7 @@ const SECTION_LABELS: Record<string, string> = {
   header: "Thông tin cá nhân",
   personal_info: "Liên hệ",
   summary: "Giới thiệu bản thân",
+  rich_outline: "Outline nhiều cấp",
   experience_list: "Kinh nghiệm làm việc",
   education_list: "Học vấn",
   skill_list: "Kỹ năng",
@@ -24,6 +26,7 @@ const SECTION_ICONS: Record<string, string> = {
   header: "person",
   personal_info: "contact_page",
   summary: "article",
+  rich_outline: "format_list_bulleted",
   experience_list: "work",
   education_list: "school",
   skill_list: "psychology",
@@ -213,6 +216,33 @@ function SectionContent({
             onChange={(html) => onDataChange({ text: html })}
             placeholder="Viết giới thiệu bản thân..."
           />
+        </div>
+      );
+    }
+
+    case "rich_outline": {
+      const data = section.data as RichOutlineSectionData;
+      const serialized = serializeRichOutlineNodes(data.nodes || []);
+
+      if (!isActive) {
+        return (
+          <p className="text-xs text-slate-500 line-clamp-4 leading-relaxed whitespace-pre-wrap">
+            {serialized || "Chưa có nội dung outline. Click để chỉnh sửa."}
+          </p>
+        );
+      }
+
+      return (
+        <div onClick={stopPropagation} className="space-y-2">
+          <textarea
+            value={serialized}
+            onChange={(e) => onDataChange({ nodes: parseRichOutlineText(e.target.value) })}
+            placeholder={"Dùng thụt dòng 2 space để tạo level\n- Dùng '- ' cho bullet\n> Dùng '> ' cho meta"}
+            className="w-full min-h-[220px] resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-400 focus:border-emerald-400"
+          />
+          <p className="text-[11px] text-slate-400">
+            Mỗi lần thụt thêm 2 dấu cách sẽ thành một level con trong CV Builder.
+          </p>
         </div>
       );
     }

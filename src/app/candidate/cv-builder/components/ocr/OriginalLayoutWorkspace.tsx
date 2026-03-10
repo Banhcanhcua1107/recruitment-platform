@@ -35,7 +35,9 @@ import {
 } from "react-hook-form";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, ZoomIn, ZoomOut, Maximize, ScanLine, Phone, Mail, MapPin, UserCircle2 } from "lucide-react";
-import type { RawOCRBlock, OriginalLayoutFormState } from "./ocr-types";
+import { OCRHelpDrawer } from "./OCRHelpDrawer";
+import { cleanOCRText } from "./ocr-types";
+import type { OCRDraftData, RawOCRBlock, OriginalLayoutFormState } from "./ocr-types";
 
 // ── CV Parsing Types ─────────────────────────────────────────
 
@@ -59,6 +61,10 @@ interface CVItem {
   sectionType: SectionType;
   contactType?: "phone" | "email" | "location";
   skillLevel?: number; // 0-100
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   cx: number; // block centre x, 0-100
   cy: number; // block centre y, 0-100
 }
@@ -74,6 +80,7 @@ interface ParsedCV {
 interface OriginalLayoutWorkspaceProps {
   file: File;
   initialBlocks: RawOCRBlock[];
+  parsedDraft?: OCRDraftData | null;
   onConfirm: (blocks: RawOCRBlock[]) => void;
   onCancel: () => void;
   isScanning?: boolean;
@@ -84,7 +91,7 @@ interface MappedBox {
   confidence: number;
   label?: string;
   sectionType: SectionType;
-  px: { top: number; left: number; width: number; height: number };
+  pct: { top: string; left: string; width: string; height: string; numHeight: number };
 }
 
 // Utilities
@@ -97,6 +104,16 @@ function stableKey(block: RawOCRBlock): string {
   if (block.id) return block.id;
   const { x, y, width, height } = block.rect;
   return `${x.toFixed(3)}-${y.toFixed(3)}-${width.toFixed(3)}-${height.toFixed(3)}`;
+}
+
+function revokeObjectUrlLater(url: string, delayMs = 15000): void {
+  window.setTimeout(() => {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // Ignore blob revoke races in development.
+    }
+  }, delayMs);
 }
 
 // ── CV Parsing Engine ─────────────────────────────────────────
@@ -169,6 +186,10 @@ function parseCVFromBlocks(blocks: RawOCRBlock[]): ParsedCV {
     blockIndex: i,
     text: b.text.trim(),
     sectionType: "other" as SectionType,
+    x: b.rect.x,
+    y: b.rect.y,
+    width: b.rect.width,
+    height: b.rect.height,
     cx: b.rect.x + b.rect.width  / 2,
     cy: b.rect.y + b.rect.height / 2,
   }));
@@ -400,10 +421,20 @@ const _VI_CORRECTIONS: Array<[RegExp, string]> = [
 ];
 
 function normalizeVietnamese(text: string): string {
-  let t = text;
+  let t = cleanOCRText(text);
   for (const [pattern, replacement] of _VI_CORRECTIONS) {
     t = t.replace(pattern, replacement);
   }
+  t = t
+    .replace(/([a-zà-ỹ])([A-ZÀ-Ỹ])/g, '$1 $2')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/([,.;:!?])(?![\s\n]|$)/g, '$1 ')
+    .replace(/\s*-\s*/g, ' - ')
+    .replace(/\bReact\s+JS\b/g, 'ReactJS')
+    .replace(/\bNode\s+JS\b/g, 'NodeJS')
+    .replace(/\bTailwind\s+CSS\b/g, 'TailwindCSS')
+    .replace(/\bJava\s+Script\b/g, 'JavaScript')
+    .replace(/\bMy\s+SQL\b/g, 'MySQL');
   return t;
 }
 
@@ -437,22 +468,20 @@ const SECTION_BOX: Record<SectionType, { bg: string; border: string }> = {
 
 function AvatarBox({
   avatarRect,
-  imageSize,
 }: {
   avatarRect: NonNullable<ParsedCV["avatarRect"]>;
-  imageSize: { width: number; height: number };
 }) {
-  const px = {
-    top:    (avatarRect.y      / 100) * imageSize.height,
-    left:   (avatarRect.x      / 100) * imageSize.width,
-    width:  (avatarRect.width  / 100) * imageSize.width,
-    height: (avatarRect.height / 100) * imageSize.height,
+  const pct = {
+    top:    `${avatarRect.y}%`,
+    left:   `${avatarRect.x}%`,
+    width:  `${avatarRect.width}%`,
+    height: `${avatarRect.height}%`,
   };
   return (
     <div
       className="pointer-events-none absolute"
       style={{
-        top: px.top, left: px.left, width: px.width, height: px.height,
+        top: pct.top, left: pct.left, width: pct.width, height: pct.height,
         borderRadius: "50%",
         border: "2.5px dashed #3b82f6",
         boxShadow: "0 0 0 1px rgba(59,130,246,0.18), 0 0 14px rgba(59,130,246,0.28)",
@@ -560,15 +589,17 @@ function SourceOCRBox({
   register,
   isActive,
   onActivate,
+  imageSize,
 }: {
   index: number;
   mappedBox: MappedBox;
   register: UseFormRegister<OriginalLayoutFormState>;
   isActive: boolean;
   onActivate: () => void;
+  imageSize: { width: number; height: number };
 }) {
-  const { px, confidence, sectionType } = mappedBox;
-  const fontSize = Math.max(6, px.height * 0.65);
+  const { pct, confidence, sectionType } = mappedBox;
+  const fontSize = Math.max(6, (pct.numHeight / 100) * imageSize.height * 0.65);
   const isLowConf = confidence < 0.5;
   const style = SECTION_BOX[sectionType] ?? SECTION_BOX.other;
 
@@ -576,10 +607,10 @@ function SourceOCRBox({
     <div
       className="absolute cursor-pointer transition-shadow duration-100"
       style={{
-        top: px.top,
-        left: px.left,
-        width: px.width,
-        height: px.height,
+        top: pct.top,
+        left: pct.left,
+        width: pct.width,
+        height: pct.height,
         zIndex: isActive ? 50 : 10,
         borderRadius: 2,
         mixBlendMode: "multiply",
@@ -652,14 +683,20 @@ function SourcePane({
   setActiveIndex: (i: number | null) => void;
   isScanning: boolean;
 }) {
-  const [imgSrc, setImgSrc] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const isPdf = file?.type === "application/pdf" || file?.name?.toLowerCase().endsWith(".pdf");
 
   useEffect(() => {
-    if (!file?.type.startsWith("image/")) return;
+    if (!file) return;
     const url = URL.createObjectURL(file);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setImgSrc(url);
-    return () => URL.revokeObjectURL(url);
+    setSourceUrl(url);
+    if (isPdf) {
+      onImageLoad(600, 849);
+    }
+    return () => {
+      revokeObjectUrlLater(url);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
 
   return (
@@ -686,24 +723,41 @@ function SourcePane({
             className="relative bg-white shadow-2xl ring-1 ring-slate-800"
             style={{ display: "inline-block" }}
           >
-            {imgSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={imgSrc}
-                alt="Source CV"
-                draggable={false}
-                style={{ height: 800, width: "auto", objectFit: "contain", display: "block" }}
-                onLoad={(e) => {
-                  const el = e.currentTarget;
-                  onImageLoad(el.offsetWidth, el.offsetHeight);
-                }}
-              />
+            {sourceUrl ? (
+              isPdf ? (
+                <iframe
+                  src={`${sourceUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                  title="Source CV PDF"
+                  scrolling="no"
+                  style={{ 
+                    width: 600, 
+                    height: 849, 
+                    display: "block", 
+                    border: 0, 
+                    background: "white", 
+                    overflow: "hidden",
+                    pointerEvents: "none"
+                  }}
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={sourceUrl}
+                  alt="Source CV"
+                  draggable={false}
+                  style={{ height: 800, width: "auto", objectFit: "contain", display: "block" }}
+                  onLoad={(e) => {
+                    const el = e.currentTarget;
+                    onImageLoad(el.offsetWidth, el.offsetHeight);
+                  }}
+                />
+              )
             ) : (
               <div
                 className="flex items-center justify-center bg-slate-800 text-sm text-slate-400"
                 style={{ width: 600, height: 800 }}
               >
-                PDF preview — vui lòng dùng file ảnh (JPG / PNG)
+                Đang tải bản gốc...
               </div>
             )}
 
@@ -713,7 +767,7 @@ function SourcePane({
                 style={{ width: imageSize.width, height: imageSize.height }}
               >
                 {avatarRect && (
-                  <AvatarBox avatarRect={avatarRect} imageSize={imageSize} />
+                  <AvatarBox avatarRect={avatarRect} />
                 )}
                 {mappedBoxes.map((box, index) => (
                   <div key={`src-${box.stableKey}`} style={{ pointerEvents: "auto" }}>
@@ -723,6 +777,7 @@ function SourcePane({
                       register={register}
                       isActive={activeIndex === index}
                       onActivate={() => setActiveIndex(activeIndex === index ? null : index)}
+                      imageSize={imageSize}
                     />
                   </div>
                 ))}
@@ -800,6 +855,7 @@ function SectionBlock({
 function StructuredMirrorPane({
   file,
   parsedCV,
+  parsedDraft,
   control,
   scale,
   onScaleChange,
@@ -808,6 +864,7 @@ function StructuredMirrorPane({
 }: {
   file: File;
   parsedCV: ParsedCV;
+  parsedDraft?: OCRDraftData | null;
   control: Control<OriginalLayoutFormState>;
   scale: number;
   onScaleChange: (s: number) => void;
@@ -817,31 +874,91 @@ function StructuredMirrorPane({
   // ── Avatar extraction: crop avatar region from source image ──
   const [avatarSrc, setAvatarSrc] = useState<string>("");
   useEffect(() => {
-    if (!file?.type.startsWith("image/") || !parsedCV.avatarRect) {
+    if (!file?.type.startsWith("image/")) {
       setAvatarSrc("");
       return;
     }
-    let revokeUrl = "";
+
+    let isCancelled = false;
+    const revokeUrl = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => {
-      const { x, y, width, height } = parsedCV.avatarRect!;
-      const sx = Math.round((x      / 100) * img.naturalWidth);
-      const sy = Math.round((y      / 100) * img.naturalHeight);
-      const sw = Math.max(1, Math.round((width  / 100) * img.naturalWidth));
-      const sh = Math.max(1, Math.round((height / 100) * img.naturalHeight));
+
+    const renderCrop = (sx: number, sy: number, sw: number, sh: number) => {
       const canvas = document.createElement("canvas");
-      canvas.width  = sw;
+      canvas.width = sw;
       canvas.height = sh;
       const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      if (!ctx) return;
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      if (!isCancelled) {
         setAvatarSrc(canvas.toDataURL("image/jpeg", 0.92));
       }
-      URL.revokeObjectURL(revokeUrl);
     };
-    revokeUrl = URL.createObjectURL(file);
+
+    const fallbackCrop = () => {
+      if (!parsedCV.avatarRect) {
+        if (!isCancelled) setAvatarSrc("");
+        return;
+      }
+
+      const { x, y, width, height } = parsedCV.avatarRect;
+      const sx = Math.round((x / 100) * img.naturalWidth);
+      const sy = Math.round((y / 100) * img.naturalHeight);
+      const rawSw = Math.max(1, Math.round((width / 100) * img.naturalWidth));
+      const rawSh = Math.max(1, Math.round((height / 100) * img.naturalHeight));
+
+      const targetW = Math.min(rawSw, Math.round(rawSh * 0.9));
+      const targetH = Math.min(rawSh, Math.max(Math.round(targetW * 1.25), targetW));
+      const centeredX = Math.max(0, Math.min(img.naturalWidth - targetW, sx + Math.round((rawSw - targetW) / 2)));
+      const boundedY = Math.max(0, Math.min(img.naturalHeight - targetH, sy));
+
+      renderCrop(centeredX, boundedY, targetW, targetH);
+    };
+
+    img.onload = async () => {
+      try {
+        const FaceDetectorCtor = (window as Window & {
+          FaceDetector?: new (options?: { fastMode?: boolean; maxDetectedFaces?: number }) => {
+            detect: (source: CanvasImageSource) => Promise<Array<{ boundingBox: DOMRectReadOnly }>>;
+          };
+        }).FaceDetector;
+
+        if (FaceDetectorCtor) {
+          const detector = new FaceDetectorCtor({
+            fastMode: true,
+            maxDetectedFaces: 3,
+          });
+          const faces = await detector.detect(img);
+          const bestFace = [...faces].sort(
+            (a, b) => b.boundingBox.width * b.boundingBox.height - a.boundingBox.width * a.boundingBox.height
+          )[0];
+
+          if (bestFace) {
+            const { x, y, width, height } = bestFace.boundingBox;
+            const faceCenterX = x + width / 2;
+            const faceCenterY = y + height / 2;
+            const cropW = Math.min(img.naturalWidth, Math.max(width * 2.8, height * 1.9));
+            const cropH = Math.min(img.naturalHeight, Math.max(height * 3.2, cropW * 1.18));
+            const sx = Math.max(0, Math.min(img.naturalWidth - cropW, faceCenterX - cropW / 2));
+            const sy = Math.max(0, Math.min(img.naturalHeight - cropH, faceCenterY - cropH * 0.36));
+
+            renderCrop(Math.round(sx), Math.round(sy), Math.round(cropW), Math.round(cropH));
+            return;
+          }
+        }
+      } catch {
+        // Fall through to layout-based crop.
+      }
+
+      fallbackCrop();
+    };
+
     img.src = revokeUrl;
-    return () => { URL.revokeObjectURL(revokeUrl); };
+
+    return () => {
+      isCancelled = true;
+      revokeObjectUrlLater(revokeUrl);
+    };
   }, [file, parsedCV.avatarRect]);
 
   // ── Live text from form ────────────────────────────────────
@@ -856,6 +973,15 @@ function StructuredMirrorPane({
 
   const activeSectionType: SectionType | null =
     activeIndex !== null ? (parsedCV.items[activeIndex]?.sectionType ?? null) : null;
+
+  interface RenderLine {
+    key: string;
+    text: string;
+    content: string;
+    level: number;
+    marker: string | null;
+    emphasis: "heading" | "body" | "meta";
+  }
 
   // ── Group items by section ─────────────────────────────────
   const bySection = useMemo(() => {
@@ -934,8 +1060,94 @@ function StructuredMirrorPane({
     /^[A-ZÀÁÂÃÈÉÊÌÍÎÒÓÔÕÙÚÛÝĂĐÊÔƠƯ\s]{4,}$/.test(t) &&
     !t.includes("@") && !/\d{5,}/.test(t);
 
+  const getRenderLines = useCallback((items: CVItem[]): RenderLine[] => {
+    if (!items.length) return [];
+
+    const normalizedItems = items
+      .map((item) => ({
+        ...item,
+        resolvedText: getText(item.blockIndex),
+      }))
+      .filter((item) => item.resolvedText.trim().length > 0);
+
+    if (!normalizedItems.length) return [];
+
+    const minX = Math.min(...normalizedItems.map((item) => item.x));
+    const indentCandidates = normalizedItems
+      .map((item) => item.x - minX)
+      .filter((offset) => offset > 1.2)
+      .sort((a, b) => a - b);
+    const indentStep = Math.max(2.4, Math.min(indentCandidates[0] ?? 4.5, 8));
+
+    return normalizedItems.map((item) => {
+      const text = item.resolvedText.trim();
+      const bulletMatch = text.match(/^([•●▪◦\-*+])\s*(.+)$/) || text.match(/^(\d+[.)])\s*(.+)$/);
+      const content = bulletMatch ? bulletMatch[2].trim() : text;
+      const offset = Math.max(0, item.x - minX);
+      const inferredLevel = Math.max(0, Math.min(4, Math.round(offset / indentStep)));
+
+      let emphasis: RenderLine["emphasis"] = "body";
+      if (/^\d{4}|^20\d{2}/.test(content) || /hiện tại/i.test(content)) {
+        emphasis = "meta";
+      } else if (
+        /\|/.test(content) ||
+        /:\s*$/.test(content) ||
+        (/^[A-ZÀÁÂÃÈÉÊHÌÍÎÒÓÔÕÙÚÛÝĂĐÊÔƠƯ]/.test(content) &&
+          content.length < 90 &&
+          !bulletMatch)
+      ) {
+        emphasis = "heading";
+      }
+
+      return {
+        key: `${item.blockIndex}-${item.x}-${item.y}`,
+        text,
+        content,
+        level: bulletMatch ? inferredLevel : Math.max(0, inferredLevel - (emphasis === "meta" ? 0 : 0)),
+        marker: bulletMatch ? bulletMatch[1] : null,
+        emphasis,
+      };
+    });
+  }, [getText]);
+
+  const renderIndentedSection = useCallback((items: CVItem[]) => {
+    const lines = getRenderLines(items);
+    if (!lines.length) return null;
+
+    return (
+      <div className="space-y-1.5">
+        {lines.map((line) => {
+          const className =
+            line.emphasis === "heading"
+              ? "font-semibold text-slate-800"
+              : line.emphasis === "meta"
+                ? "text-xs text-slate-400"
+                : "text-slate-600";
+
+          return (
+            <div
+              key={line.key}
+              className="text-sm leading-relaxed"
+              style={{ paddingLeft: `${line.level * 18}px` }}
+            >
+              <div className={`flex items-start gap-2 ${className}`}>
+                {line.marker ? (
+                  <span className="mt-[2px] shrink-0 text-slate-400">{line.marker}</span>
+                ) : line.level > 0 ? (
+                  <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+                ) : null}
+                <span className="flex-1 whitespace-pre-wrap break-words">{line.content}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }, [getRenderLines]);
+
   const nameText = bySection.name.map(i => getText(i.blockIndex)).join(" ").trim();
   const isEmpty  = parsedCV.items.every(i => i.sectionType === "other");
+  const useStructuredDraft = false;
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-r-2xl bg-slate-50">
@@ -966,6 +1178,109 @@ function StructuredMirrorPane({
           style={{ transform: `scale(${scale})`, transformOrigin: "top center" }}
         >
 
+          {/* ── Structured draft from backend parse-cv ───── */}
+          {useStructuredDraft ? (
+            <>
+              <div className="mb-4 flex items-center gap-4 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
+                <div
+                  className="shrink-0 overflow-hidden rounded-full ring-2 ring-slate-200"
+                  style={{ width: 80, height: 80, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}
+                >
+                  {avatarSrc ? (
+                    <img src={avatarSrc} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <UserCircle2 size={40} className="text-slate-300" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-blue-500">Ứng viên</p>
+                  <h1 className="text-xl font-extrabold leading-tight tracking-tight text-slate-800 wrap-break-word">
+                    {parsedDraft?.fullName || <span className="text-base italic font-normal text-slate-300">Chưa phát hiện tên</span>}
+                  </h1>
+                  {parsedDraft?.title && <p className="mt-1 text-sm text-slate-500 wrap-break-word">{parsedDraft.title}</p>}
+                </div>
+              </div>
+
+              {(parsedDraft?.summary || parsedDraft?.email || parsedDraft?.phone || parsedDraft?.address) && (
+                <SectionBlock label="THÔNG TIN CÁ NHÂN" accent="#10b981" divRef={refContact} highlight={false}>
+                  <div className="space-y-2">
+                    {parsedDraft?.summary && <p className="text-sm leading-relaxed text-slate-600">{parsedDraft.summary}</p>}
+                    {parsedDraft?.email && <div className="flex items-start gap-2.5"><Mail size={13} className="mt-0.5 shrink-0 text-emerald-500" /><span className="text-sm leading-snug text-slate-700 break-all">{parsedDraft.email}</span></div>}
+                    {parsedDraft?.phone && <div className="flex items-start gap-2.5"><Phone size={13} className="mt-0.5 shrink-0 text-emerald-500" /><span className="text-sm leading-snug text-slate-700 break-all">{parsedDraft.phone}</span></div>}
+                    {parsedDraft?.address && <div className="flex items-start gap-2.5"><MapPin size={13} className="mt-0.5 shrink-0 text-emerald-500" /><span className="text-sm leading-snug text-slate-700 break-all">{parsedDraft.address}</span></div>}
+                  </div>
+                </SectionBlock>
+              )}
+
+              {parsedDraft?.skills && parsedDraft.skills.length > 0 && (
+                <SectionBlock label="KỸ NĂNG" accent="#f59e0b" divRef={refSkills} highlight={false}>
+                  <div className="space-y-1.5">
+                    {parsedDraft.skills.map((skill) => (
+                      <p key={skill.id} className="text-sm text-slate-600">- {skill.name}</p>
+                    ))}
+                  </div>
+                </SectionBlock>
+              )}
+
+              {parsedDraft?.experiences && parsedDraft.experiences.length > 0 && (
+                <SectionBlock label="KINH NGHIỆM LÀM VIỆC" accent="#8b5cf6" divRef={refExperience} highlight={false}>
+                  <div className="space-y-4">
+                    {parsedDraft.experiences.map((exp) => (
+                      <div key={exp.id} className="space-y-1">
+                        <p className="text-sm font-semibold text-slate-800">{exp.position || exp.company}</p>
+                        {(exp.company || exp.startDate || exp.endDate) && (
+                          <p className="text-xs text-slate-400">{[exp.company, [exp.startDate, exp.endDate].filter(Boolean).join(" - ")].filter(Boolean).join(" | ")}</p>
+                        )}
+                        {exp.description && <p className="text-sm leading-relaxed text-slate-600">{exp.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </SectionBlock>
+              )}
+
+              {parsedDraft?.educations && parsedDraft.educations.length > 0 && (
+                <SectionBlock label="HỌC VẤN" accent="#6366f1" divRef={refEducation} highlight={false}>
+                  <div className="space-y-4">
+                    {parsedDraft.educations.map((edu) => (
+                      <div key={edu.id} className="space-y-1">
+                        <p className="text-sm font-semibold text-slate-800">{edu.institution}</p>
+                        {edu.degree && <p className="text-sm text-slate-600">{edu.degree}</p>}
+                        {(edu.startDate || edu.endDate) && <p className="text-xs text-slate-400">{[edu.startDate, edu.endDate].filter(Boolean).join(" - ")}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </SectionBlock>
+              )}
+
+              {parsedDraft?.projects && parsedDraft.projects.length > 0 && (
+                <SectionBlock label="DỰ ÁN" accent="#ea580c" divRef={refProjects} highlight={false}>
+                  <div className="space-y-4">
+                    {parsedDraft.projects.map((project) => (
+                      <div key={project.id} className="space-y-1">
+                        <p className="text-sm font-semibold text-slate-800">{project.name}</p>
+                        {project.technologies && <p className="text-xs text-slate-400">{project.technologies}</p>}
+                        {project.description && <p className="text-sm leading-relaxed text-slate-600">{project.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </SectionBlock>
+              )}
+
+              {parsedDraft?.certifications && parsedDraft.certifications.length > 0 && (
+                <SectionBlock label="CHỨNG CHỈ" accent="#8b5cf6" divRef={refCertifications} highlight={false}>
+                  <div className="space-y-4">
+                    {parsedDraft.certifications.map((cert) => (
+                      <div key={cert.id} className="space-y-1">
+                        <p className="text-sm font-semibold text-slate-800">{cert.name}</p>
+                        {(cert.issuer || cert.date) && <p className="text-xs text-slate-400">{[cert.issuer, cert.date].filter(Boolean).join(" | ")}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </SectionBlock>
+              )}
+            </>
+          ) : (
+          <>
           {/* ── Profile card (Avatar + Name) ─────────────── */}
           <div
             ref={refName}
@@ -990,13 +1305,16 @@ function StructuredMirrorPane({
               )}
             </div>
             {/* Name */}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="mb-0.5 text-[9px] font-bold uppercase tracking-widest text-blue-500">
                 Ứng viên
               </p>
-              <h1 className="truncate text-xl font-extrabold leading-tight tracking-tight text-slate-800">
-                {nameText || <span className="text-base italic font-normal text-slate-300">Chưa phát hiện tên</span>}
+              <h1 className="text-xl font-extrabold leading-tight tracking-tight text-slate-800 wrap-break-word">
+                {parsedDraft?.fullName || nameText || <span className="text-base italic font-normal text-slate-300">Chưa phát hiện tên</span>}
               </h1>
+              {parsedDraft?.title && (
+                <p className="mt-1 text-sm text-slate-500 wrap-break-word">{parsedDraft.title}</p>
+              )}
             </div>
           </div>
 
@@ -1008,12 +1326,7 @@ function StructuredMirrorPane({
               divRef={refObjective}
               highlight={isHL(["objective_header", "objective_item"])}
             >
-              <div className="space-y-0.5">
-                {bySection.objective.map((item) => {
-                  const t = getText(item.blockIndex);
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${t.length > 80 ? "leading-relaxed text-slate-600" : lineStyle(t)}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.objective)}
             </SectionBlock>
           )}
 
@@ -1025,9 +1338,7 @@ function StructuredMirrorPane({
               divRef={refAbout}
               highlight={isHL(["about_header", "about_body"])}
             >
-              <p className="text-sm leading-relaxed text-slate-600">
-                {bySection.about.map(i => getText(i.blockIndex)).join(" ")}
-              </p>
+              {renderIndentedSection(bySection.about)}
             </SectionBlock>
           )}
 
@@ -1068,40 +1379,7 @@ function StructuredMirrorPane({
               divRef={refSkills}
               highlight={isHL(["skills_header", "skill_item"])}
             >
-              <div className="space-y-1.5">
-                {bySection.skills.map((item) => {
-                  const t = getText(item.blockIndex);
-                  const pctMatch = t.match(/(\d+)\s*%/);
-                  const isBullet = /^[•\-\*\+]/.test(t.trim());
-                  const isCategory = /:\s*$/.test(t.trim()) && t.length < 60;
-
-                  if (pctMatch) {
-                    const name = t.replace(/\d+\s*%/, "").replace(/[()]/g, "").trim();
-                    const level = Math.min(100, Math.max(0, parseInt(pctMatch[1], 10)));
-                    return (
-                      <div key={item.blockIndex}>
-                        <div className="mb-1 flex items-center justify-between">
-                          <span className="text-sm font-medium text-slate-700">{name}</span>
-                          <span className="text-[11px] font-bold text-slate-400">{level}%</span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className="h-full rounded-full transition-all duration-500"
-                            style={{ width: `${level}%`, background: "linear-gradient(90deg,#3b82f6,#0ea5e9)" }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (isCategory) {
-                    return <p key={item.blockIndex} className="text-sm font-semibold text-slate-800 mt-2 first:mt-0">{t}</p>;
-                  }
-                  if (isBullet) {
-                    return <p key={item.blockIndex} className="text-sm text-slate-600 pl-3">{t}</p>;
-                  }
-                  return <p key={item.blockIndex} className="text-sm text-slate-600">{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.skills)}
             </SectionBlock>
           )}
 
@@ -1113,12 +1391,7 @@ function StructuredMirrorPane({
               divRef={refEducation}
               highlight={isHL(["education_header", "education_item"])}
             >
-              <div className="space-y-0.5">
-                {bySection.education.map((item) => {
-                  const t = getText(item.blockIndex);
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${lineStyle(t)}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.education)}
             </SectionBlock>
           )}
 
@@ -1130,12 +1403,7 @@ function StructuredMirrorPane({
               divRef={refExperience}
               highlight={isHL(["experience_header", "experience_item"])}
             >
-              <div className="space-y-0.5">
-                {bySection.experience.map((item) => {
-                  const t = getText(item.blockIndex);
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${lineStyle(t)}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.experience)}
             </SectionBlock>
           )}
 
@@ -1147,12 +1415,7 @@ function StructuredMirrorPane({
               divRef={refActivities}
               highlight={isHL(["activities_header", "activities_item"])}
             >
-              <div className="space-y-0.5">
-                {bySection.activities.map((item) => {
-                  const t = getText(item.blockIndex);
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${lineStyle(t)}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.activities)}
             </SectionBlock>
           )}
 
@@ -1164,12 +1427,7 @@ function StructuredMirrorPane({
               divRef={refProjects}
               highlight={isHL(["projects_header", "projects_item"])}
             >
-              <div className="space-y-0.5">
-                {bySection.projects.map((item) => {
-                  const t = getText(item.blockIndex);
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${lineStyle(t)}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.projects)}
             </SectionBlock>
           )}
 
@@ -1181,12 +1439,7 @@ function StructuredMirrorPane({
               divRef={refCertifications}
               highlight={isHL(["certifications_header", "certifications_item"])}
             >
-              <div className="space-y-0.5">
-                {bySection.certifications.map((item) => {
-                  const t = getText(item.blockIndex);
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${lineStyle(t)}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.certifications)}
             </SectionBlock>
           )}
 
@@ -1198,13 +1451,7 @@ function StructuredMirrorPane({
               divRef={refInterests}
               highlight={isHL(["interests_header", "interests_item"])}
             >
-              <div className="space-y-0.5">
-                {bySection.interests.map((item) => {
-                  const t = getText(item.blockIndex);
-                  const isBullet = /^[•\-\*\+]/.test(t.trim());
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${isBullet ? "text-slate-600 pl-3" : lineStyle(t)}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.interests)}
             </SectionBlock>
           )}
 
@@ -1216,13 +1463,7 @@ function StructuredMirrorPane({
               divRef={refOther}
               highlight={isHL(["other"])}
             >
-              <div className="space-y-0.5">
-                {bySection.other.map((item) => {
-                  const t = getText(item.blockIndex);
-                  const isBullet = /^[•\-\*\+]/.test(t.trim());
-                  return <p key={item.blockIndex} className={`leading-snug text-sm ${isBullet ? "text-slate-600 pl-3" : "text-slate-600"}`}>{t}</p>;
-                })}
-              </div>
+              {renderIndentedSection(bySection.other)}
             </SectionBlock>
           )}
 
@@ -1236,6 +1477,8 @@ function StructuredMirrorPane({
               <p className="mt-1 text-xs text-slate-300">Vui lòng upload file ảnh CV</p>
             </div>
           )}
+          </>
+          )}
 
         </div>
       </div>
@@ -1248,6 +1491,7 @@ function StructuredMirrorPane({
 export function OriginalLayoutWorkspace({
   file,
   initialBlocks,
+  parsedDraft,
   onConfirm,
   onCancel,
   isScanning = false,
@@ -1259,6 +1503,14 @@ export function OriginalLayoutWorkspace({
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const leftScrollRef = useRef<HTMLDivElement>(null);
   const rightScrollRef = useRef<HTMLDivElement>(null);
+  const handleImageLoad = useCallback((width: number, height: number) => {
+    setImageSize((current) => {
+      if (current.width === width && current.height === height) {
+        return current;
+      }
+      return { width, height };
+    });
+  }, []);
 
   // Parse CV structure from OCR blocks (stable — depends only on initial block positions)
   const parsedCV = useMemo(() => parseCVFromBlocks(initialBlocks), [initialBlocks]);
@@ -1280,11 +1532,12 @@ export function OriginalLayoutWorkspace({
         confidence: block.confidence,
         label: block.label,
         sectionType: parsedCV.items[i]?.sectionType ?? "other",
-        px: {
-          top:    (y / 100) * imageSize.height,
-          left:   (x / 100) * imageSize.width,
-          width:  (w / 100) * imageSize.width,
-          height: (h / 100) * imageSize.height,
+        pct: {
+          top:    `${y}%`,
+          left:   `${x}%`,
+          width:  `${w}%`,
+          height: `${h}%`,
+          numHeight: h,
         },
       };
     });
@@ -1338,6 +1591,7 @@ export function OriginalLayoutWorkspace({
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <OCRHelpDrawer buttonLabel="OCR Help" />
             <button
               type="button"
               onClick={onCancel}
@@ -1370,7 +1624,7 @@ export function OriginalLayoutWorkspace({
                 mappedBoxes={mappedBoxes}
                 register={register}
                 imageSize={imageSize}
-                onImageLoad={(w, h) => setImageSize({ width: w, height: h })}
+                onImageLoad={handleImageLoad}
                 avatarRect={parsedCV.avatarRect}
                 scale={scale}
                 onScaleChange={setScale}
@@ -1385,6 +1639,7 @@ export function OriginalLayoutWorkspace({
               <StructuredMirrorPane
                 file={file}
                 parsedCV={parsedCV}
+                parsedDraft={parsedDraft}
                 control={control}
                 scale={scale}
                 onScaleChange={setScale}

@@ -1,9 +1,22 @@
 """
 CV Parser Service
 ─────────────────
-1. Primary:   pdfplumber  – extracts selectable text from digital PDFs.
-2. Fallback:  Ollama qwen3-vl:4b  – multimodal OCR for scanned/image PDFs.
-3. Output:    Structured ParsedCV model via regex + heuristic sectioning.
+Pipeline:
+    Upload file
+    ↓
+    detect_file_type() → "pdf" | "image" | "docx"
+    ↓
+    extract_text_from_pdf / extract_text_from_image / extract_text_from_docx
+    ↓
+    normalize_text()   — LLM call 1: fix OCR noise
+    ↓
+    parse_cv_json()    — LLM call 2: structured JSON
+    ↓
+    {"raw_text", "clean_text", "cv_json", "avatar_url"}
+
+Models (Ollama):
+    OLLAMA_CV_PARSER_MODEL  = qwen2.5-coder:7b  (normalize + parse)
+    OLLAMA_CV_SUGGEST_MODEL = qwen3:4b           (suggestions — untouched)
 """
 
 from __future__ import annotations
@@ -14,931 +27,470 @@ import json
 import logging
 import os
 import re
-import urllib.error
-import urllib.request
-import unicodedata
-from json import JSONDecodeError
+from typing import Any
 
 import pdfplumber
+import requests
+from PIL import Image
+from services.ocr_service import extract_full_text, run_ocr
 
-from models import (
-    CertificationEntry,
-    ContactInfo,
-    EducationEntry,
-    ExperienceEntry,
-    ExtractionMethod,
-    ParsedCV,
-    ProjectEntry,
-)
+logger = logging.getLogger("cv_parser")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-# qwen3-vl:4b → quét & đọc CV (multimodal OCR)
-OLLAMA_OCR_MODEL = os.getenv("OLLAMA_CV_PARSER_MODEL", "qwen3-vl:4b")
-OLLAMA_TEXT_MODEL = os.getenv("OLLAMA_CV_SUGGEST_MODEL", "qwen3:4b")
-OLLAMA_CORRECTION_MODEL = os.getenv("OLLAMA_CV_CORRECTION_MODEL", OLLAMA_TEXT_MODEL)
+OLLAMA_CV_PARSER_MODEL = os.getenv("OLLAMA_CV_PARSER_MODEL", "qwen2.5-coder:7b")
 
-_CV_TEXT_CORRECTION_PROMPT = """Bạn là hệ thống sửa lỗi văn bản tiếng Việt từ OCR.
+# ─────────────────────────────────────────────────────────────────────
+# Step 1 — File-type detection
+# ─────────────────────────────────────────────────────────────────────
 
-Nhiệm vụ:
-- sửa dấu tiếng Việt
-- sửa lỗi chính tả
-- sửa lỗi spacing
-- sửa lỗi OCR như thiếu chữ, sai chữ, mất ký tự
-- giữ nguyên nội dung gốc
+def detect_file_type(content_type: str, filename: str) -> str:
+    """Return 'pdf', 'image', or 'docx'."""
+    ct = (content_type or "").lower()
+    ext = os.path.splitext(filename or "")[-1].lower()
 
-Quy tắc:
-- Không thêm thông tin mới
-- Không thay đổi email, số điện thoại, URL
-- Không thay đổi tên riêng
-- Chỉ chỉnh sửa nội dung bị lỗi, không viết lại theo ý khác
-- Ưu tiên sửa các lỗi OCR thường gặp trong CV như mất dấu, mất chữ, sai chữ, dính chữ, vỡ dòng
-- Input là từng block ở dạng JSON lines: {"index": number, "text": string, "protected_tokens": object}
-- Output phải giữ nguyên định dạng JSON lines tương ứng, mỗi dòng là 1 object JSON hợp lệ
-- Không được đổi giá trị trong protected_tokens
-
-Ví dụ lỗi cần sửa:
-- "Lap trinh vien" -> "Lập trình viên"
-- "Muc tieu nghe nghiep" -> "Mục tiêu nghề nghiệp"
-- "thurc tap" -> "thực tập"
-- "kien thrc" -> "kiến thức"
-- "xay durng" -> "xây dựng"
-
-Chỉ trả về JSON lines đã sửa, không giải thích."""
-
-_CV_NORMALIZATION_PROMPT = """Bạn là một hệ thống AI chuyên phân tích và chuẩn hóa nội dung CV.
-
-Nhiệm vụ của bạn là:
-1. Phân tích văn bản CV được trích xuất từ OCR hoặc PDF.
-2. Chuẩn hóa nội dung để đúng chính tả, đúng dấu tiếng Việt và đúng ngữ nghĩa.
-3. Sửa lỗi dấu câu, lỗi chính tả và lỗi OCR.
-4. Giữ nguyên ý nghĩa ban đầu của nội dung CV.
-5. Không tự ý thêm thông tin mới không có trong CV.
-
-QUY TẮC XỬ LÝ
-
-1. Chuẩn hóa dấu tiếng Việt.
-2. Sửa lỗi OCR phổ biến.
-3. Sửa lỗi spacing.
-4. Chuẩn hóa dấu câu.
-5. Chuẩn hóa ngữ nghĩa nhưng không làm sai nội dung.
-6. Không thêm thông tin mới.
-7. Không thay đổi email, số điện thoại, URL, ngày tháng, tên riêng.
-8. Giữ nguyên nội dung gốc và chỉ chuẩn hóa phần bị lỗi.
-6. Nhận diện và phân loại nội dung vào các phần: full_name, job_title, contact, summary, skills, experience, education, projects, certifications, languages.
-7. Nếu một trường không tồn tại, trả về null cho trường đơn và mảng rỗng cho trường dạng danh sách.
-
-FORMAT OUTPUT
-- Chỉ trả về JSON hợp lệ.
-- Không giải thích.
-- Không viết thêm mô tả ngoài JSON.
-
-Schema mong muốn:
-{
-    "full_name": string | null,
-    "job_title": string | null,
-    "contact": {
-        "email": string | null,
-        "phone": string | null,
-        "linkedin": string | null,
-        "address": string | null
-    },
-    "summary": string | null,
-    "skills": string[],
-    "experience": [
-        {
-            "company": string | null,
-            "title": string | null,
-            "start_date": string | null,
-            "end_date": string | null,
-            "description": string | null
-        }
-    ],
-    "education": [
-        {
-            "institution": string | null,
-            "degree": string | null,
-            "field_of_study": string | null,
-            "start_date": string | null,
-            "end_date": string | null,
-            "gpa": string | null
-        }
-    ],
-    "projects": [
-        {
-            "name": string | null,
-            "description": string | null,
-            "technologies": string[],
-            "role": string | null,
-            "url": string | null
-        }
-    ],
-    "certifications": [
-        {
-            "name": string | null,
-            "issuer": string | null,
-            "date_obtained": string | null
-        }
-    ],
-    "languages": string[]
-}"""
+    if ct == "application/pdf" or ext == ".pdf":
+        return "pdf"
+    if ct.startswith("image/") or ext in (".png", ".jpg", ".jpeg", ".webp"):
+        return "image"
+    if "wordprocessingml" in ct or ext == ".docx":
+        return "docx"
+    # Fallback: try PDF by extension heuristic
+    return "pdf"
 
 
-# ── helpers ───────────────────────────────────────────────
-logger = logging.getLogger("cv_parser")
-_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
-_PHONE_RE = re.compile(
-    r"(?:\+?\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{3,4}[\s.-]?\d{3,4}"
-)
-_LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/in/[\w-]+/?")
-_URL_RE = re.compile(r"(?:https?://|www\.)\S+|(?:facebook|github|linkedin)\.com/\S+", re.IGNORECASE)
-_DATE_RANGE_RE = re.compile(r"\b\d{1,2}/\d{4}\s*[-–/]\s*\d{1,2}/\d{4}\b|\b\d{4}\s*[-–/]\s*\d{4}\b")
-_BULLET_LINE_RE = re.compile(r"^(?:[-•●▪►]|\d+[.)])\s*")
-_SECTION_LINE_RE = re.compile(
-    r"^(?:ứng viên|học vấn|kỹ năng|khác|thông tin cá nhân|dự án học tập|chứng chỉ|sở thích|front-end|back-end|database|triển khai|ngôn ngữ lập trình|mục tiêu nghề nghiệp)\b",
-    re.IGNORECASE,
-)
+# ─────────────────────────────────────────────────────────────────────
+# Step 2 — Text extraction per file type
+# ─────────────────────────────────────────────────────────────────────
 
-_CV_OCR_REPLACEMENTS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\bUng\s+vien\b", re.IGNORECASE), "Ứng viên"),
-    (re.compile(r"\bLap\s+trinh\s+vien\b", re.IGNORECASE), "Lập trình viên"),
-    (re.compile(r"\bMuc\s+tieu\s+nghe\s+nghiep\b", re.IGNORECASE), "Mục tiêu nghề nghiệp"),
-    (re.compile(r"\btham\s+gia\b", re.IGNORECASE), "tham gia"),
-    (re.compile(r"\bky\s+thur?c\s+tap\b", re.IGNORECASE), "kỳ thực tập"),
-    (re.compile(r"\bthur?c\s+tap\b", re.IGNORECASE), "thực tập"),
-    (re.compile(r"\bcong\s+nghe\b", re.IGNORECASE), "công nghệ"),
-    (re.compile(r"\btrai\s+nghiem\b", re.IGNORECASE), "trải nghiệm"),
-    (re.compile(r"\bmoi\s+truong\b", re.IGNORECASE), "môi trường"),
-    (re.compile(r"\blam\s+viec\b", re.IGNORECASE), "làm việc"),
-    (re.compile(r"\bap\s+dung\b", re.IGNORECASE), "áp dụng"),
-    (re.compile(r"\bki[ée]n\s+thr?c\b", re.IGNORECASE), "kiến thức"),
-    (re.compile(r"\bk[ií]e?n\s+thrc\b", re.IGNORECASE), "kiến thức"),
-    (re.compile(r"\bdu\s+an\b", re.IGNORECASE), "dự án"),
-    (re.compile(r"\bren\s+luyen\b", re.IGNORECASE), "rèn luyện"),
-    (re.compile(r"\bky\s+nang\b", re.IGNORECASE), "kỹ năng"),
-    (re.compile(r"\bchuyen\s+mon\b", re.IGNORECASE), "chuyên môn"),
-    (re.compile(r"\blam\s+viec\s+nhom\b", re.IGNORECASE), "làm việc nhóm"),
-    (re.compile(r"\bhuong\s+toi\b", re.IGNORECASE), "hướng tới"),
-    (re.compile(r"\btoi\s+la\b", re.IGNORECASE), "tôi là"),
-    (re.compile(r"\btro\s+thanh\b", re.IGNORECASE), "trở thành"),
-    (re.compile(r"\bHien\s+dang\b", re.IGNORECASE), "Hiện đang"),
-    (re.compile(r"\btim\s+kiem\b", re.IGNORECASE), "tìm kiếm"),
-    (re.compile(r"\bco\s+hoi\b", re.IGNORECASE), "cơ hội"),
-    (re.compile(r"\bHoc\s+van\b", re.IGNORECASE), "Học vấn"),
-    (re.compile(r"\bNgon\s+ngu\s+lap\s+trinh\b", re.IGNORECASE), "Ngôn ngữ lập trình"),
-    (re.compile(r"\bTrien\s+khai\b", re.IGNORECASE), "Triển khai"),
-    (re.compile(r"\bChung\s+chi\b", re.IGNORECASE), "Chứng chỉ"),
-    (re.compile(r"\bSo\s+thich\b", re.IGNORECASE), "Sở thích"),
-    (re.compile(r"\bThong\s+tin\s+ca\s+nhan\b", re.IGNORECASE), "Thông tin cá nhân"),
-    (re.compile(r"\bDai\s+hoc\b", re.IGNORECASE), "Đại học"),
-    (re.compile(r"\bHung\s+Vuong\b", re.IGNORECASE), "Hùng Vương"),
-    (re.compile(r"\bSinh\s+vien\s+nam\s+3\b", re.IGNORECASE), "Sinh viên năm 3"),
-    (re.compile(r"\bChuyen\s+nganh\b", re.IGNORECASE), "Chuyên ngành"),
-    (re.compile(r"\bphan\s+mem\b", re.IGNORECASE), "phần mềm"),
-    (re.compile(r"\bDo\s+an\s+hoc\s+tap\b", re.IGNORECASE), "Dự án học tập"),
-    (re.compile(r"\bMo\s+ta\b", re.IGNORECASE), "Mô tả"),
-    (re.compile(r"\bCong\s+nghe\b", re.IGNORECASE), "Công nghệ"),
-    (re.compile(r"\bVai\s+tro\b", re.IGNORECASE), "Vai trò"),
-    (re.compile(r"\bPhat\s+trien\b", re.IGNORECASE), "Phát triển"),
-    (re.compile(r"\bthiet\s+ke\b", re.IGNORECASE), "thiết kế"),
-    (re.compile(r"\bgiao\s+dien\b", re.IGNORECASE), "giao diện"),
-    (re.compile(r"\bxay\s+d[uư]n[gq]\b", re.IGNORECASE), "xây dựng"),
-    (re.compile(r"\bket\s+noi\b", re.IGNORECASE), "kết nối"),
-    (re.compile(r"\bco\s+so\s+d[uữ]\s+lieu\b", re.IGNORECASE), "cơ sở dữ liệu"),
-    (re.compile(r"\bquan\s+ly\b", re.IGNORECASE), "quản lý"),
-    (re.compile(r"\bhoa\s+don\b", re.IGNORECASE), "hóa đơn"),
-    (re.compile(r"\bthong\s+ke\b", re.IGNORECASE), "thống kê"),
-    (re.compile(r"\btim\s+kiem\s+nang\s+cao\b", re.IGNORECASE), "tìm kiếm nâng cao"),
-    (re.compile(r"\bxuat\s+file\s+Excel\b", re.IGNORECASE), "xuất file Excel"),
-    (re.compile(r"\bHe\s+thong\b", re.IGNORECASE), "Hệ thống"),
-    (re.compile(r"\bchuc\s+nang\b", re.IGNORECASE), "chức năng"),
-    (re.compile(r"\bgui\s+email\b", re.IGNORECASE), "gửi email"),
-    (re.compile(r"\bbao\s+mat\b", re.IGNORECASE), "bảo mật"),
-    (re.compile(r"\bma\s+hoa\s+mat\s+khau\b", re.IGNORECASE), "mã hóa mật khẩu"),
-]
+def _extract_avatar_b64(pdf_bytes: bytes) -> str | None:
+    """Crop the first page to an image and return base64, or None."""
+    try:
+        import fitz  # pymupdf
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page = doc[0]
+        # Render at 150 dpi
+        mat = fitz.Matrix(150 / 72, 150 / 72)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        doc.close()
 
-# Section headings commonly found in CVs (case-insensitive)
-_SECTION_PATTERNS: dict[str, re.Pattern[str]] = {
-    "summary": re.compile(
-        r"^(?:summary|objective|profile|about\s*me|giới\s*thiệu|tóm\s*tắt)",
-        re.IGNORECASE,
-    ),
-    "experience": re.compile(
-        r"^(?:experience|work\s*experience|employment|kinh\s*nghiệm|professional\s*experience)",
-        re.IGNORECASE,
-    ),
-    "education": re.compile(
-        r"^(?:education|academic|học\s*vấn|trình\s*độ)",
-        re.IGNORECASE,
-    ),
-    "skills": re.compile(
-        r"^(?:skills|technical\s*skills|competencies|kỹ\s*năng)",
-        re.IGNORECASE,
-    ),
-    "projects": re.compile(
-        r"^(?:projects|personal\s*projects|dự\s*án)",
-        re.IGNORECASE,
-    ),
-    "certifications": re.compile(
-        r"^(?:certifications?|licenses?|chứng\s*chỉ)",
-        re.IGNORECASE,
-    ),
-    "languages": re.compile(
-        r"^(?:languages|ngôn\s*ngữ)",
-        re.IGNORECASE,
-    ),
-}
+        # We only keep the top-left quarter where avatars typically live
+        w, h = img.size
+        avatar_region = img.crop((0, 0, w // 3, h // 3))
+
+        buf = io.BytesIO()
+        avatar_region.save(buf, format="JPEG", quality=80)
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception as e:
+        logger.warning("Avatar extraction failed: %s", e)
+        return None
 
 
-# ═════════════════════════════════════════════════════════════
-# 1. Text extraction
-# ═════════════════════════════════════════════════════════════
-
-
-def extract_text_with_pdfplumber(pdf_bytes: bytes) -> tuple[str, int]:
+def extract_text_from_pdf(pdf_bytes: bytes) -> tuple[str, str | None, int]:
     """
-    Extract selectable text from a PDF using pdfplumber.
-
-    Returns
-    -------
-    (text, page_count)
+    Use pdfplumber to extract the selectable text layer from a PDF.
+    Returns (raw_text, avatar_base64_or_None).
     """
     text_parts: list[str] = []
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         page_count = len(pdf.pages)
         for page in pdf.pages:
-            page_text = page.extract_text() or ""
-            text_parts.append(page_text)
-    return "\n".join(text_parts).strip(), page_count
+            t = page.extract_text()
+            if t:
+                text_parts.append(t.strip())
+
+    raw_text = "\n\n".join(text_parts).strip()
+    avatar_b64 = _extract_avatar_b64(pdf_bytes)
+    return raw_text, avatar_b64, page_count
 
 
-def extract_text_with_ollama_ocr(pdf_bytes: bytes) -> tuple[str, int]:
-    """
-    Extract text from a scanned PDF using Ollama qwen3-vl:4b (multimodal OCR).
-
-    Strategy
-    --------
-    1. Convert each PDF page to a PNG image via pypdfium2 (bundled with pdfplumber).
-    2. Base64-encode the image.
-    3. Send to Ollama /api/chat with the qwen3-vl:4b vision model.
-    4. Accumulate per-page text.
-
-    Returns
-    -------
-    (text, page_count)
-    """
-    import pypdfium2 as pdfium  # installed as pdfplumber dependency
-
-    texts: list[str] = []
-    doc = pdfium.PdfDocument(pdf_bytes)
-    page_count = len(doc)
-
-    for page_index in range(page_count):
-        page   = doc[page_index]
-        bitmap = page.render(scale=2.0)  # 2× scale → better OCR quality
-        pil_image = bitmap.to_pil()
-
-        buf = io.BytesIO()
-        pil_image.save(buf, format="PNG")
-        img_b64 = base64.b64encode(buf.getvalue()).decode()
-
-        payload = json.dumps({
-            "model": OLLAMA_OCR_MODEL,
-            "stream": False,
-            "think": False,          # disable Qwen3-VL extended-thinking mode
-            "options": {"temperature": 0.0, "num_predict": 4096},
-            "messages": [{
-                "role": "user",
-                "content": (
-                    "Please transcribe ALL text visible in this CV/resume image. "
-                    "Preserve the original structure (sections, bullet points, dates). "
-                    "Output plain text only, no commentary."
-                ),
-                "images": [img_b64],
-            }],
-        }).encode()
-
-        req = urllib.request.Request(
-            f"{OLLAMA_BASE_URL}/api/chat",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=180) as resp:
-                body = json.loads(resp.read().decode())
-                msg = body.get("message", {})
-                page_text = (msg.get("content") or msg.get("thinking") or "").strip()
-                texts.append(page_text)
-                logger.info("[cv_parser] OCR page %d: %d chars", page_index + 1, len(page_text))
-        except urllib.error.URLError as exc:
-            logger.error("[cv_parser] Ollama OCR page %d failed: %s", page_index + 1, exc)
-            texts.append("")
-
-    doc.close()
-    return "\n".join(texts).strip(), page_count
-
-
-# ═════════════════════════════════════════════════════════════
-# 2. Structuring
-# ═════════════════════════════════════════════════════════════
-
-
-def _detect_sections(text: str) -> dict[str, str]:
-    """Split raw text into named sections based on heading patterns."""
-    lines = text.split("\n")
-    sections: dict[str, list[str]] = {}
-    current_section = "header"
-    sections[current_section] = []
-
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            continue
-
-        matched = False
-        for section_name, pattern in _SECTION_PATTERNS.items():
-            if pattern.match(stripped):
-                current_section = section_name
-                sections.setdefault(current_section, [])
-                matched = True
-                break
-
-        if not matched:
-            sections.setdefault(current_section, [])
-            sections[current_section].append(stripped)
-
-    return {k: "\n".join(v) for k, v in sections.items()}
-
-
-def _extract_contact(text: str) -> ContactInfo:
-    email_match = _EMAIL_RE.search(text)
-    phone_match = _PHONE_RE.search(text)
-    linkedin_match = _LINKEDIN_RE.search(text)
-    return ContactInfo(
-        email=email_match.group(0) if email_match else None,
-        phone=phone_match.group(0) if phone_match else None,
-        linkedin=linkedin_match.group(0) if linkedin_match else None,
+def extract_text_from_image(
+    image_bytes: bytes,
+    content_type: str = "image/jpeg",
+    filename: str = "image.jpg",
+) -> tuple[str, int]:
+    page_results = run_ocr(
+        image_bytes,
+        content_type=content_type,
+        filename=filename,
+        apply_llm_correction=True,
     )
+    return extract_full_text(page_results), len(page_results)
 
 
-def _extract_name(header_text: str) -> str | None:
-    """Heuristic: the first non-empty line in the header is usually the name."""
-    for line in header_text.split("\n"):
-        clean = line.strip()
-        # Skip lines that look like emails, phones, or URLs
-        if clean and not _EMAIL_RE.match(clean) and not _PHONE_RE.match(clean):
-            return clean
-    return None
+def extract_text_from_docx(docx_bytes: bytes) -> str:
+    """Extract plain text from a DOCX file via python-docx."""
+    try:
+        from docx import Document  # python-docx
+    except ImportError as exc:
+        raise RuntimeError("python-docx is not installed: pip install python-docx") from exc
+
+    doc = Document(io.BytesIO(docx_bytes))
+    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+    return "\n".join(paragraphs)
 
 
-def _parse_skills(text: str) -> list[str]:
-    """Split a skills section into individual skill tokens."""
-    # Common delimiters: comma, pipe, bullet, semicolon, newline
-    raw = re.split(r"[,|;•·●▪►\n]", text)
-    return [s.strip(" -–—") for s in raw if s.strip(" -–—")]
+# ─────────────────────────────────────────────────────────────────────
+# Step 3 — Pre-processing: fix OCR broken spacing before LLM
+# ─────────────────────────────────────────────────────────────────────
+
+# Patterns that indicate a Vietnamese diacritic character split across a space:
+# e.g. "l àm" → "làm", "vi ệc" → "việc"
+_BROKEN_VI_PATTERNS = [
+    # Lone 1-2 char cluster followed by a space then a Vietnamese-accented char
+    (re.compile(r'(?<=[a-zA-Z])(\s)(?=[àáâãèéêìíîòóôõùúûýăđêôơưÀÁÂÃÈÉÊÌÍÎÒÓÔÕÙÚÛÝĂĐÔƠƯ])'), ''),
+    # Vietnamese-accented char followed by space then a bare Latin letter (continuation)
+    (re.compile(r'(?<=[àáâãèéêìíîòóôõùúûýăđôơưÀÁÂÃÈÉÊÌÍÎÒÓÔÕÙÚÛÝĂĐÔƠƯ])(\s)(?=[a-zA-Z])'), ''),
+]
 
 
-def _parse_experience(text: str) -> list[ExperienceEntry]:
+def clean_ocr_text(text: str) -> str:
     """
-    Best-effort experience parser.
-    Splits on lines that look like company names or date ranges.
+    Pre-process raw OCR text before passing to the LLM.
+
+    Steps:
+    1. Merge characters split by OCR: "l àm vi ệc" → "làm việc"
+    2. Collapse multiple spaces / tabs into a single space.
+    3. Limit consecutive blank lines to 2.
+
+    Examples:
+        clean_ocr_text("l àm vi ệc")  → "làm việc"
+        clean_ocr_text("c ông ty")     → "công ty"
+        clean_ocr_text("ng ôn ng ữ")  → "ngôn ngữ"
     """
-    entries: list[ExperienceEntry] = []
-    blocks = re.split(r"\n(?=[A-Z])", text)
-    for block in blocks:
-        lines = block.strip().split("\n")
-        if not lines:
-            continue
-        entry = ExperienceEntry(
-            company=lines[0] if lines else None,
-            title=lines[1] if len(lines) > 1 else None,
-            description="\n".join(lines[2:]) if len(lines) > 2 else None,
-        )
-        entries.append(entry)
-    return entries
+    t = text
+    for pattern, repl in _BROKEN_VI_PATTERNS:
+        t = pattern.sub(repl, t)
+    # Collapse horizontal whitespace
+    t = re.sub(r"[ \t]+", " ", t)
+    # Collapse excess blank lines
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
 
 
-def _parse_education(text: str) -> list[EducationEntry]:
-    entries: list[EducationEntry] = []
-    blocks = re.split(r"\n(?=[A-Z])", text)
-    for block in blocks:
-        lines = block.strip().split("\n")
-        if not lines:
-            continue
-        entries.append(
-            EducationEntry(
-                institution=lines[0] if lines else None,
-                degree=lines[1] if len(lines) > 1 else None,
-                field_of_study=lines[2] if len(lines) > 2 else None,
-            )
-        )
-    return entries
+# ─────────────────────────────────────────────────────────────────────
+# Step 4 — LLM helper
+# ─────────────────────────────────────────────────────────────────────
 
-
-def _parse_projects(text: str) -> list[ProjectEntry]:
-    entries: list[ProjectEntry] = []
-    blocks = re.split(r"\n(?=[A-Z])", text)
-    for block in blocks:
-        lines = block.strip().split("\n")
-        if not lines:
-            continue
-        entries.append(
-            ProjectEntry(
-                name=lines[0],
-                description="\n".join(lines[1:]) if len(lines) > 1 else None,
-            )
-        )
-    return entries
-
-
-def _parse_certifications(text: str) -> list[CertificationEntry]:
-    entries: list[CertificationEntry] = []
-    for line in text.split("\n"):
-        clean = line.strip(" -–—•")
-        if clean:
-            entries.append(CertificationEntry(name=clean))
-    return entries
-
-
-def _parse_languages(text: str) -> list[str]:
-    raw = re.split(r"[,|;•\n]", text)
-    return [l.strip(" -–—") for l in raw if l.strip(" -–—")]
-
-
-def _normalize_spacing(text: str) -> str:
-    text = unicodedata.normalize("NFC", text)
-    text = text.replace("\u00a0", " ")
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\s*([,:;])\s*", r"\1 ", text)
-    text = re.sub(r"\s*([/])\s*", r" \1 ", text)
-    text = re.sub(r"\s*([()])\s*", r"\1", text)
-    text = re.sub(r"\s+([.,!?])", r"\1", text)
-    text = re.sub(r"(?<=[a-zA-ZÀ-ỹ])(?=[A-ZÀ-Ỹ][a-zà-ỹ])", " ", text)
-    return text.strip()
-
-
-def _apply_cv_ocr_replacements(text: str) -> str:
-    for pattern, replacement in _CV_OCR_REPLACEMENTS:
-        text = pattern.sub(replacement, text)
-    text = re.sub(r"\bReactS\b", "ReactJS", text)
-    text = re.sub(r"\bTalwindc?SS\b", "TailwindCSS", text, flags=re.IGNORECASE)
-    text = re.sub(r"\bNodeJS\b", "Node.js", text)
-    text = re.sub(r"\bJavascript\b", "JavaScript", text)
-    text = re.sub(r"\bNext\.js\b", "Next.js", text)
-    return text
-
-
-def _should_merge_lines(previous: str, current: str) -> bool:
-    if not previous or not current:
-        return False
-    if _SECTION_LINE_RE.match(current):
-        return False
-    if _BULLET_LINE_RE.match(current):
-        return False
-    if _DATE_RANGE_RE.search(current):
-        return False
-    if previous.endswith(":"):
-        return False
-    if _SECTION_LINE_RE.match(previous):
-        return False
-    if re.search(r"[a-zA-ZÀ-ỹ0-9,)]$", previous) and re.match(r"^[a-zà-ỹ(]", current):
-        return True
-    if len(previous) < 40 and re.match(r"^[A-ZÀ-Ỹa-zà-ỹ]", current) and not current.isupper():
-        return True
-    return False
-
-
-def _merge_broken_lines(raw_text: str) -> str:
-    lines = [_normalize_spacing(line) for line in raw_text.splitlines()]
-    merged: list[str] = []
-    for line in lines:
-        if not line:
-            if merged and merged[-1] != "":
-                merged.append("")
-            continue
-        if merged and merged[-1] and _should_merge_lines(merged[-1], line):
-            merged[-1] = _normalize_spacing(f"{merged[-1]} {line}")
-            continue
-        merged.append(line)
-    return "\n".join(merged).strip()
-
-
-def _heuristic_preprocess_cv_text(raw_text: str) -> str:
-    text = _merge_broken_lines(raw_text)
-    text = _apply_cv_ocr_replacements(text)
-    normalized_lines = []
-    for line in text.splitlines():
-        if not line.strip():
-            normalized_lines.append("")
-            continue
-        normalized_lines.append(_normalize_spacing(line))
-    return "\n".join(normalized_lines).strip()
-
-
-def _mask_protected_tokens(text: str) -> tuple[str, dict[str, str]]:
-    replacements: dict[str, str] = {}
-    counter = 0
-
-    def _replace(pattern: re.Pattern[str], value: str) -> str:
-        nonlocal counter
-
-        def repl(match: re.Match[str]) -> str:
-            nonlocal counter
-            token = f"__PROTECTED_{counter}__"
-            replacements[token] = match.group(0)
-            counter += 1
-            return token
-
-        return pattern.sub(repl, value)
-
-    text = _replace(_EMAIL_RE, text)
-    text = _replace(_PHONE_RE, text)
-    text = _replace(_URL_RE, text)
-    return text, replacements
-
-
-def _restore_protected_tokens(text: str, replacements: dict[str, str]) -> str:
-    for token, original in replacements.items():
-        text = text.replace(token, original)
-    return text
-
-
-def _split_text_for_correction(raw_text: str, max_lines_per_block: int = 10) -> list[str]:
-    lines = raw_text.splitlines()
-    blocks: list[str] = []
-    current: list[str] = []
-
-    for line in lines:
-        if line.strip():
-            current.append(line.rstrip())
-            if len(current) >= max_lines_per_block:
-                blocks.append("\n".join(current))
-                current = []
-            continue
-
-        if current:
-            blocks.append("\n".join(current))
-            current = []
-        blocks.append("")
-
-    if current:
-        blocks.append("\n".join(current))
-
-    return blocks
-
-
-def _rebuild_corrected_text(blocks: list[str]) -> str:
-    output: list[str] = []
-    previous_blank = False
-    for block in blocks:
-        if block == "":
-            if not previous_blank:
-                output.append("")
-            previous_blank = True
-            continue
-        output.append(block)
-        previous_blank = False
-    return "\n".join(output).strip()
-
-
-def _correct_cv_text_with_llm(raw_text: str) -> str:
-    blocks = _split_text_for_correction(raw_text)
-    non_empty_blocks = [block for block in blocks if block]
-    if not non_empty_blocks:
-        return raw_text.strip()
-
-    payload_blocks: list[str] = []
-    for index, block in enumerate(non_empty_blocks, start=1):
-        masked_block, replacements = _mask_protected_tokens(block)
-        payload_blocks.append(
-            json.dumps(
-                {
-                    "index": index,
-                    "text": masked_block,
-                    "protected_tokens": replacements,
-                },
-                ensure_ascii=False,
-            )
-        )
-
-    input_text = "\n".join(payload_blocks)
-
-    payload = json.dumps({
-        "model": OLLAMA_CORRECTION_MODEL,
+def _call_llm(prompt: str, temperature: float = 0.0, timeout: int = 180) -> str:
+    """POST to Ollama /api/generate, return raw response text."""
+    payload = {
+        "model": OLLAMA_CV_PARSER_MODEL,
+        "prompt": prompt,
         "stream": False,
-        "think": False,
-        "options": {"temperature": 0.0, "num_predict": 8192},
-        "messages": [
-            {"role": "system", "content": _CV_TEXT_CORRECTION_PROMPT},
-            {"role": "user", "content": input_text},
-        ],
-    }).encode()
-
-    req = urllib.request.Request(
-        f"{OLLAMA_BASE_URL}/api/chat",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        body = json.loads(resp.read().decode())
-        content = (body.get("message", {}).get("content") or "").strip()
-
-    corrected_map: dict[int, str] = {}
-    for line in content.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        try:
-            item = json.loads(stripped)
-        except JSONDecodeError:
-            continue
-
-        index = item.get("index")
-        text = item.get("text")
-        replacements = item.get("protected_tokens") or {}
-        if isinstance(index, int) and isinstance(text, str) and isinstance(replacements, dict):
-            corrected_map[index] = _restore_protected_tokens(text, replacements)
-
-    if not corrected_map:
-        raise ValueError("LLM correction did not return JSON lines")
-
-    corrected_blocks: list[str] = []
-    non_empty_index = 0
-    for block in blocks:
-        if block == "":
-            corrected_blocks.append("")
-            continue
-        non_empty_index += 1
-        corrected_blocks.append(corrected_map.get(non_empty_index, block))
-
-    return _heuristic_preprocess_cv_text(_rebuild_corrected_text(corrected_blocks))
+        "options": {"temperature": temperature},
+    }
+    try:
+        resp = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json=payload,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return resp.json().get("response", "").strip()
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"LLM request failed: {e}") from e
 
 
-def _extract_json_object(text: str) -> str | None:
-    text = text.strip()
-    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
-    if fenced:
-        return fenced.group(1)
+# ─────────────────────────────────────────────────────────────────────
+# Step 4 — Normalize OCR / raw text
+# ─────────────────────────────────────────────────────────────────────
 
-    start = text.find("{")
-    end = text.rfind("}")
+def normalize_text(raw_text: str) -> str:
+    """
+    LLM call #1 — fix OCR noise, Vietnamese diacritics, spacing.
+
+    The input is first pre-cleaned by clean_ocr_text() in parse_cv().
+    Returns cleaned plain text (not JSON).
+    """
+    prompt = f"""You are a Vietnamese OCR text normalization system.
+
+Tasks:
+1. Fix broken characters from OCR such as:
+   "l àm vi ệc" → "làm việc"
+   "c ông ty" → "công ty"
+   "ng ôn ng ữ" → "ngôn ngữ"
+
+2. Fix spacing problems inside words.
+
+3. Restore Vietnamese diacritics if possible:
+   "Muc tieu nghe nghiep" → "Mục tiêu nghề nghiệp"
+   "Ngon ngu lap trinh"   → "Ngôn ngữ lập trình"
+
+4. Keep the original meaning of the CV. Do NOT invent or add information.
+
+5. Preserve CV sections and ensure each section title is on its OWN LINE,
+   separated from the paragraph content below it. For example:
+
+   CORRECT:
+   Mục tiêu nghề nghiệp
+   Mong muốn tham gia kỳ thực tập tại công ty công nghệ...
+
+   WRONG (do not merge title with content):
+   Mục tiêu nghề nghiệp Mong muốn tham gia...
+
+   Common section titles to watch for:
+   - Thông tin cá nhân
+   - Mục tiêu nghề nghiệp
+   - Kỹ năng
+   - Học vấn
+   - Dự án
+   - Kinh nghiệm
+   - Chứng chỉ
+   - Sở thích
+
+6. Do NOT translate to another language.
+
+7. Preserve list hierarchy and keep nested bullet points on separate lines.
+
+8. Never move contact information into the objective/summary section.
+   Email, phone, address, and URLs must stay as separate contact lines.
+
+Return ONLY the normalized text, no explanations.
+
+OCR TEXT:
+{raw_text}"""
+
+    try:
+        return _call_llm(prompt)
+    except Exception as e:
+        logger.warning("Normalization LLM failed, using raw text: %s", e)
+        return raw_text
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Step 5 — Parse structured JSON
+# ─────────────────────────────────────────────────────────────────────
+
+_CV_SCHEMA = """{
+  "personal_information": {
+    "name": "",
+    "email": "",
+    "phone": "",
+    "address": "",
+    "linkedin": ""
+  },
+  "job_title": "",
+  "career_objective": "",
+  "education": [
+    {
+      "institution": "",
+      "degree": "",
+      "field_of_study": "",
+      "start_date": "",
+      "end_date": "",
+      "gpa": ""
+    }
+  ],
+  "skills": [],
+  "projects": [
+    {
+      "name": "",
+      "description": "",
+      "technologies": [],
+      "role": "",
+      "url": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "",
+      "title": "",
+      "start_date": "",
+      "end_date": "",
+      "description": ""
+    }
+  ],
+  "certificates": [
+    {
+      "name": "",
+      "issuer": "",
+      "date_obtained": ""
+    }
+  ],
+  "interests": []
+}"""
+
+
+def parse_cv_json(clean_text: str) -> dict[str, Any]:
+    """
+    LLM call #2 — extract structured CV data from clean text.
+    Returns a dict matching _CV_SCHEMA.
+    """
+    prompt = f"""Bạn là chuyên gia phân tích CV.
+Trích xuất thông tin từ văn bản CV dưới đây và trả về JSON theo đúng schema.
+
+Quy tắc nghiêm ngặt:
+1. Chỉ trả về JSON hợp lệ — không giải thích, không thêm text.
+2. Giữ trường rỗng ("") nếu không có thông tin, mảng rỗng ([]) cho list.
+3. Không bịa thêm thông tin.
+4. Không đổi ngôn ngữ nội dung.
+
+SCHEMA:
+{_CV_SCHEMA}
+
+VĂN BẢN CV:
+{clean_text}"""
+
+    try:
+        raw = _call_llm(prompt)
+    except Exception as e:
+        logger.error("Parse LLM failed: %s", e)
+        return {}
+
+    # Strip markdown code fences if present
+    content = raw
+    if content.startswith("```"):
+        content = re.sub(r"^```(?:json)?\s*", "", content)
+        content = re.sub(r"\s*```$", "", content)
+    content = content.strip()
+
+    # Extract first JSON object
+    start = content.find("{")
+    end = content.rfind("}")
     if start == -1 or end == -1 or end <= start:
-        return None
-    return text[start:end + 1]
-
-
-def _dedupe_strings(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    output: list[str] = []
-    for value in values:
-        clean = value.strip()
-        lowered = clean.lower()
-        if clean and lowered not in seen:
-            seen.add(lowered)
-            output.append(clean)
-    return output
-
-
-def _normalise_structured_cv_payload(payload: dict) -> ParsedCV:
-    contact = payload.get("contact") or {}
-    experience = payload.get("experience") or []
-    education = payload.get("education") or []
-    projects = payload.get("projects") or []
-    certifications = payload.get("certifications") or []
-    skills = payload.get("skills") or []
-    languages = payload.get("languages") or []
-
-    return ParsedCV(
-        full_name=payload.get("full_name"),
-        job_title=payload.get("job_title"),
-        contact=ContactInfo(
-            email=contact.get("email"),
-            phone=contact.get("phone"),
-            linkedin=contact.get("linkedin"),
-            address=contact.get("address"),
-        ),
-        summary=payload.get("summary"),
-        skills=_dedupe_strings([str(item) for item in skills if item]),
-        experience=[
-            ExperienceEntry(
-                company=item.get("company"),
-                title=item.get("title"),
-                start_date=item.get("start_date"),
-                end_date=item.get("end_date"),
-                description=item.get("description"),
-            )
-            for item in experience
-            if isinstance(item, dict)
-        ],
-        education=[
-            EducationEntry(
-                institution=item.get("institution"),
-                degree=item.get("degree"),
-                field_of_study=item.get("field_of_study"),
-                start_date=item.get("start_date"),
-                end_date=item.get("end_date"),
-                gpa=item.get("gpa"),
-            )
-            for item in education
-            if isinstance(item, dict)
-        ],
-        projects=[
-            ProjectEntry(
-                name=item.get("name"),
-                description=item.get("description"),
-                technologies=_dedupe_strings([
-                    str(tech) for tech in (item.get("technologies") or []) if tech
-                ]),
-                role=item.get("role"),
-                url=item.get("url"),
-            )
-            for item in projects
-            if isinstance(item, dict)
-        ],
-        certifications=[
-            CertificationEntry(
-                name=item.get("name"),
-                issuer=item.get("issuer"),
-                date_obtained=item.get("date_obtained"),
-            )
-            for item in certifications
-            if isinstance(item, dict)
-        ],
-        languages=_dedupe_strings([str(item) for item in languages if item]),
-    )
-
-
-def _structure_cv_with_llm(raw_text: str) -> ParsedCV:
-    payload = json.dumps({
-        "model": OLLAMA_TEXT_MODEL,
-        "stream": False,
-        "think": False,
-        "options": {"temperature": 0.0, "num_predict": 4096},
-        "messages": [
-            {"role": "system", "content": _CV_NORMALIZATION_PROMPT},
-            {"role": "user", "content": raw_text},
-        ],
-    }).encode()
-
-    req = urllib.request.Request(
-        f"{OLLAMA_BASE_URL}/api/chat",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        body = json.loads(resp.read().decode())
-        content = (body.get("message", {}).get("content") or "").strip()
-
-    json_payload = _extract_json_object(content)
-    if not json_payload:
-        raise ValueError("LLM did not return a JSON object")
+        logger.error("LLM returned no JSON object. Raw: %s", content[:300])
+        return {}
 
     try:
-        parsed_payload = json.loads(json_payload)
-    except JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON returned by LLM: {exc}") from exc
-
-    structured = _normalise_structured_cv_payload(parsed_payload)
-    structured.raw_text = raw_text
-    return structured
+        return json.loads(content[start : end + 1])
+    except json.JSONDecodeError as e:
+        logger.error("JSON parse error: %s | Content: %s", e, content[:300])
+        return {}
 
 
-def structure_cv(raw_text: str) -> ParsedCV:
-    """Convert raw CV text into a structured ParsedCV."""
-    sections = _detect_sections(raw_text)
-
-    header_text = sections.get("header", "")
-    return ParsedCV(
-        full_name=_extract_name(header_text),
-        job_title=None,
-        contact=_extract_contact(raw_text),
-        summary=sections.get("summary"),
-        skills=_parse_skills(sections.get("skills", "")),
-        experience=_parse_experience(sections.get("experience", "")),
-        education=_parse_education(sections.get("education", "")),
-        projects=_parse_projects(sections.get("projects", "")),
-        certifications=_parse_certifications(
-            sections.get("certifications", "")
-        ),
-        languages=_parse_languages(sections.get("languages", "")),
-        raw_text=raw_text,
-    )
-
-
-# ═════════════════════════════════════════════════════════════
-# 3. Public orchestrator
-# ═════════════════════════════════════════════════════════════
-
-
-def extract_image_with_ollama_ocr(image_bytes: bytes) -> tuple[str, int]:
-    """
-    Extract text directly from a single image using Ollama qwen3-vl:4b.
-    """
-    img_b64 = base64.b64encode(image_bytes).decode()
-    payload = json.dumps({
-        "model": OLLAMA_OCR_MODEL,
-        "stream": False,
-        "think": False,
-        "options": {"temperature": 0.0, "num_predict": 4096},
-        "messages": [{
-            "role": "user",
-            "content": (
-                "Please transcribe ALL text visible in this CV/resume image. "
-                "Preserve the original structure (sections, bullet points, dates). "
-                "Output plain text only, no commentary."
-            ),
-            "images": [img_b64],
-        }],
-    }).encode()
-
-    req = urllib.request.Request(
-        f"{OLLAMA_BASE_URL}/api/chat",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=180) as resp:
-            body = json.loads(resp.read().decode())
-            msg = body.get("message", {})
-            page_text = (msg.get("content") or msg.get("thinking") or "").strip()
-            logger.info("[cv_parser] Direct Image OCR: %d chars", len(page_text))
-            return page_text, 1
-    except urllib.error.URLError as exc:
-        logger.error("[cv_parser] Ollama Direct Image OCR failed: %s", exc)
-        return "", 1
-
+# ─────────────────────────────────────────────────────────────────────
+# Public orchestrator
+# ─────────────────────────────────────────────────────────────────────
 
 def parse_cv(
     file_bytes: bytes,
-    content_type: str = "application/pdf"
-) -> tuple[ParsedCV, ExtractionMethod, int, list[str]]:
+    content_type: str = "application/pdf",
+    filename: str = "",
+) -> dict[str, Any]:
     """
-    End-to-end pipeline: extract → structure.
+    Full pipeline. Returns both:
+    - legacy fields: raw_text, clean_text, cv_json, avatar_url
+    - builder fields: success, extraction_method, data, page_count, warnings
+    """
+    file_type = detect_file_type(content_type, filename)
+    logger.info("CV parse — file_type=%s filename=%s", file_type, filename)
 
-    Returns
-    -------
-    (parsed_cv, method_used, page_count, warnings)
-    """
+    avatar_b64: str | None = None
+    page_count = 0
+    extraction_method = "unknown"
     warnings: list[str] = []
-    method = ExtractionMethod.TEXT
-    
-    is_image = content_type.startswith("image/")
 
-    if is_image:
-        warnings.append(f"Image uploaded ({content_type}) - skipping PDF text extraction.")
-        method = ExtractionMethod.OCR
-        raw_text, page_count = extract_image_with_ollama_ocr(file_bytes)
-        if not raw_text:
-             warnings.append(
-                f"Ollama OCR ({OLLAMA_OCR_MODEL}) returned empty text. "
-                "Ensure Ollama is running and the model is pulled."
-            )
-    else:
-        # 1️⃣ Try pdfplumber (selectable text)
-        try:
-            raw_text, page_count = extract_text_with_pdfplumber(file_bytes)
-        except Exception as e:
-            raw_text = ""
-            page_count = 1
-            warnings.append(f"PDF extraction failed: {e}")
-
-        # 2️⃣ Fallback to Ollama qwen3-vl:4b if text is too short (likely scanned)
+    # ── Extract
+    if file_type == "pdf":
+        raw_text, avatar_b64, page_count = extract_text_from_pdf(file_bytes)
+        extraction_method = "pdf_text_layer"
+        # If pdfplumber yields too little text, the PDF is likely scanned/image-based.
+        # Fall back to OCR on all pages via RapidOCR.
         if len(raw_text.split()) < 30:
-            warnings.append(
-                "Text extraction yielded minimal content – "
-                f"falling back to Ollama OCR ({OLLAMA_OCR_MODEL})."
-            )
-            method = ExtractionMethod.OCR
+            logger.info("PDF text layer thin (%d words) — falling back to image OCR", len(raw_text.split()))
             try:
-                ocr_text, ocr_pages = extract_text_with_ollama_ocr(file_bytes)
-                if ocr_text:
-                    raw_text = ocr_text
-                    page_count = ocr_pages
-                else:
-                    warnings.append(
-                        f"Ollama OCR ({OLLAMA_OCR_MODEL}) returned empty text. "
-                        "Ensure Ollama is running and the model is pulled: "
-                        f"ollama pull {OLLAMA_OCR_MODEL}"
-                    )
-            except Exception as exc:
-                warnings.append(f"Ollama OCR failed: {exc}")
+                page_results = run_ocr(
+                    file_bytes,
+                    content_type="application/pdf",
+                    filename=filename or "document.pdf",
+                    apply_llm_correction=True,
+                )
+                raw_text = extract_full_text(page_results)
+                page_count = len(page_results)
+                extraction_method = "pdf_ocr_fallback"
+                warnings.append("PDF text layer mỏng, đã chuyển sang OCR fallback.")
+            except Exception as e:
+                logger.warning("Fallback OCR failed: %s", e)
+                warnings.append(f"OCR fallback failed: {e}")
 
-    if raw_text.strip():
-        raw_text = _heuristic_preprocess_cv_text(raw_text)
-        try:
-            raw_text = _correct_cv_text_with_llm(raw_text)
-        except Exception as exc:
-            warnings.append(f"LLM text correction skipped: {exc}")
+    elif file_type == "image":
+        raw_text, page_count = extract_text_from_image(
+            file_bytes,
+            content_type=content_type,
+            filename=filename or "image.jpg",
+        )
+        extraction_method = "image_ocr"
 
-            try:
-                parsed = _structure_cv_with_llm(raw_text)
-            except Exception as exc:
-                warnings.append(f"LLM structuring fallback to heuristic parser: {exc}")
-                parsed = structure_cv(raw_text)
+    elif file_type == "docx":
+        raw_text = extract_text_from_docx(file_bytes)
+        page_count = 1 if raw_text else 0
+        extraction_method = "docx_text"
 
-    return parsed, method, page_count, warnings
+    else:
+        raw_text = ""
+
+    if not raw_text.strip():
+        logger.warning("No text extracted from CV file.")
+        return {
+            "success": False,
+            "extraction_method": extraction_method,
+            "data": {
+                "full_name": None,
+                "job_title": None,
+                "contact": {
+                    "email": None,
+                    "phone": None,
+                    "linkedin": None,
+                    "address": None,
+                },
+                "summary": None,
+                "skills": [],
+                "experience": [],
+                "education": [],
+                "projects": [],
+                "certifications": [],
+                "languages": [],
+                "raw_text": "",
+            },
+            "page_count": page_count,
+            "warnings": warnings + ["Không trích xuất được văn bản từ tài liệu."],
+            "raw_text": "",
+            "clean_text": "",
+            "cv_json": {},
+            "avatar_url": None,
+        }
+
+    # ── Pre-clean OCR artifacts, then normalize via LLM
+    pre_cleaned = clean_ocr_text(raw_text)
+    clean_text = normalize_text(pre_cleaned)
+
+    # ── Parse JSON
+    cv_json = parse_cv_json(clean_text)
+
+    # ── Build avatar URL string (data URI for direct <img src=...> usage)
+    avatar_url: str | None = None
+    if avatar_b64:
+        avatar_url = f"data:image/jpeg;base64,{avatar_b64}"
+
+    personal_info = cv_json.get("personal_information", {}) if isinstance(cv_json, dict) else {}
+    structured_data = {
+        "full_name": personal_info.get("name") or None,
+        "job_title": cv_json.get("job_title") or None,
+        "contact": {
+            "email": personal_info.get("email") or None,
+            "phone": personal_info.get("phone") or None,
+            "linkedin": personal_info.get("linkedin") or None,
+            "address": personal_info.get("address") or None,
+        },
+        "summary": cv_json.get("career_objective") or cv_json.get("summary") or None,
+        "skills": cv_json.get("skills") or [],
+        "experience": cv_json.get("experience") or [],
+        "education": cv_json.get("education") or [],
+        "projects": cv_json.get("projects") or [],
+        "certifications": cv_json.get("certificates") or cv_json.get("certifications") or [],
+        "languages": cv_json.get("languages") or [],
+        "raw_text": raw_text,
+    }
+
+    return {
+        "success": True,
+        "extraction_method": extraction_method,
+        "data": structured_data,
+        "page_count": page_count,
+        "warnings": warnings,
+        "raw_text": raw_text,
+        "clean_text": clean_text,
+        "cv_json": cv_json,
+        "avatar_url": avatar_url,
+    }

@@ -1,10 +1,9 @@
 "use client";
 
-// ── Types for OCR Draft Data ──────────────────────────────────
-// Flat structure for react-hook-form, maps to ParsedCV from FastAPI
-
+import { Path } from "react-hook-form";
 import { v4 as uuidv4 } from "uuid";
 import type { CVSection } from "../../types";
+import { buildRichOutlineNodesFromEntries } from "../../outline-utils";
 
 export interface OCRExperienceItem {
   id: string;
@@ -13,7 +12,7 @@ export interface OCRExperienceItem {
   startDate: string;
   endDate: string;
   description: string;
-  confidence: number; // 0-1, how confident AI is about this data
+  confidence: number;
 }
 
 export interface OCREducationItem {
@@ -61,9 +60,6 @@ export interface OCRDraftData {
   certifications: OCRCertificationItem[];
 }
 
-import { Path } from "react-hook-form";
-
-// ── Bounding Box Types ────────────────────────────────────────
 export interface OCRBoundingBox {
   id: string;
   label: string;
@@ -73,7 +69,6 @@ export interface OCRBoundingBox {
   rect: { x: number; y: number; width: number; height: number };
 }
 
-// ── Raw Layout block types (for Native Editing) ───────────────
 export interface RawOCRBlock {
   id: string;
   text: string;
@@ -86,7 +81,6 @@ export interface OriginalLayoutFormState {
   blocks: RawOCRBlock[];
 }
 
-// ── ParsedCV response shape (mirrors FastAPI models.py) ───────
 export interface ParsedCVResponse {
   success: boolean;
   extraction_method: string;
@@ -134,40 +128,77 @@ export interface ParsedCVResponse {
   warnings: string[];
 }
 
-// ── Confidence scoring ────────────────────────────────────────
-// Simple heuristic: field is high-confidence if non-empty & length > 2
 function fieldConfidence(...values: (string | null | undefined)[]): number {
-  const filled = values.filter((v) => v && v.trim().length > 2).length;
+  const filled = values.filter((value) => value && value.trim().length > 2).length;
   return Math.min(1, filled / Math.max(1, values.length));
 }
 
-// ── Clean OCR Text ──────────────────────────────────────────────
-// Loại bỏ khoảng trắng sai lệch do OCR (ví dụ: "Tư vấ n" -> "Tư vấn", "Ti ế ng" -> "Tiếng")
 export function cleanOCRText(text: string | null | undefined): string {
   if (!text) return "";
-  let cleaned = text.normalize("NFC");
-  
-  // Dồn các ký tự bị tách lẻ do engine OCR: (chữ dài) + (1 khoảng trắng) + (1 ký tự đơn)
-  cleaned = cleaned.replace(/([a-zA-ZÀ-ỹ]{2,})\s+([a-zA-ZÀ-ỹ])(?=[\s.,;:!?]|$)/g, '$1$2');
-  
-  // Hoặc ngược lại: (1 ký tự đơn) + (1 khoảng trắng) + (chữ dài) 
-  cleaned = cleaned.replace(/(^|[\s.,;:!?])([a-zA-ZÀ-ỹ])\s+([a-zA-ZÀ-ỹ]{2,})/g, '$1$2$3');
 
-  return cleaned.replace(/\s+/g, ' ').trim();
+  let cleaned = text.normalize("NFC");
+
+  cleaned = cleaned.replace(
+    /([a-zA-ZÀ-ỹ]{2,})\s+([a-zA-ZÀ-ỹ])(?=[\s.,;:!?]|$)/g,
+    "$1$2"
+  );
+  cleaned = cleaned.replace(
+    /(^|[\s.,;:!?])([a-zA-ZÀ-ỹ])\s+([a-zA-ZÀ-ỹ]{2,})/g,
+    "$1$2$3"
+  );
+  cleaned = cleaned.replace(
+    /([A-Za-zĐđ]{2,})\s+([àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ])/g,
+    "$1$2"
+  );
+  cleaned = cleaned.replace(/([a-zà-ỹ])([A-ZÀ-Ỹ])/g, "$1 $2");
+  cleaned = cleaned.replace(/(?<=\w)\s+(?=@)/g, "");
+  cleaned = cleaned.replace(/(?<=@)\s+(?=\w)/g, "");
+  cleaned = cleaned.replace(
+    /([A-Z0-9._%+-]+@[A-Z0-9.-]+)\.\s+([A-Z]{2,})/gi,
+    "$1.$2"
+  );
+
+  cleaned = cleaned
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,.;:!?])(?![\s\n]|$)/g, "$1 ")
+    .replace(/\s*-\s*/g, " - ");
+
+  cleaned = cleaned
+    .replace(/\bThong\s+tin\s+ca\s+nhan\b/gi, "Thông tin cá nhân")
+    .replace(/\bDia\s+diem\b/gi, "Địa điểm")
+    .replace(/\bDai\s+h[oọ]c\b/gi, "Đại học")
+    .replace(/\bHung\s+Vur?ong\b/gi, "Hùng Vương")
+    .replace(/TPH[8B]?\s*Chi\s*Minh/gi, "TP.HCM")
+    .replace(/\bSinh\s+vien\s+nam\s+3\b/gi, "Sinh viên năm 3")
+    .replace(/\bChuyen\s+nganh\b/gi, "Chuyên ngành")
+    .replace(/\bNgon\s*ngu\b/gi, "Ngôn ngữ")
+    .replace(/\bdoi\s*tac\b/gi, "đối tác")
+    .replace(/\bxay\s*dung\b/gi, "xây dựng")
+    .replace(/\bhien\s*tai\b/gi, "hiện tại")
+    .replace(/\bCong\s+nghe\s+phan\s+me[mé]\w*\b/gi, "Công nghệ phần mềm")
+    .replace(/\bthong\s+thao\b/gi, "thông thạo")
+    .replace(/\bwebsit\b/gi, "website")
+    .replace(/\bso\s+dung\b/gi, "sử dụng")
+    .replace(/\bduroc\b/gi, "được")
+    .replace(/\btrien\s+khai\b/gi, "triển khai")
+    .replace(/\bTalwindc?SS\b/gi, "TailwindCSS")
+    .replace(/\bJavaMal\b/g, "JavaMail")
+    .replace(/\bVaitro\b/gi, "Vai trò")
+    .replace(/\bReact\s+JS\b/g, "ReactJS")
+    .replace(/\bNode\s+JS\b/g, "NodeJS")
+    .replace(/\bTailwind\s+CSS\b/g, "TailwindCSS")
+    .replace(/\bJava\s+Script\b/g, "JavaScript")
+    .replace(/\bMy\s+SQL\b/g, "MySQL")
+    .replace(/\/\/+/g, " / ");
+
+  return cleaned.replace(/\s+/g, " ").trim();
 }
 
-// ── Transform ParsedCV → OCRDraftData ─────────────────────────
 export function transformParsedCVToDraft(
   parsed: ParsedCVResponse["data"]
 ): OCRDraftData {
-  return {
-    fullName: cleanOCRText(parsed.full_name),
-    title: cleanOCRText(parsed.job_title),
-    email: cleanOCRText(parsed.contact.email),
-    phone: cleanOCRText(parsed.contact.phone),
-    address: cleanOCRText(parsed.contact.address),
-    summary: cleanOCRText(parsed.summary),
-    experiences: parsed.experience.map((exp) => ({
+  const experiences = parsed.experience
+    .map((exp) => ({
       id: uuidv4(),
       company: cleanOCRText(exp.company),
       position: cleanOCRText(exp.title),
@@ -175,47 +206,116 @@ export function transformParsedCVToDraft(
       endDate: cleanOCRText(exp.end_date),
       description: cleanOCRText(exp.description),
       confidence: fieldConfidence(exp.company, exp.title, exp.description),
-    })),
-    educations: parsed.education.map((edu) => ({
+    }))
+    .filter((exp) =>
+      [exp.company, exp.position, exp.startDate, exp.endDate, exp.description].some(
+        (value) => value.trim().length > 0
+      )
+    );
+
+  const educations = parsed.education
+    .map((edu) => ({
       id: uuidv4(),
       institution: cleanOCRText(edu.institution),
-      degree: cleanOCRText(edu.degree
-        ? edu.field_of_study
-          ? `${edu.degree} - ${edu.field_of_study}`
-          : edu.degree
-        : edu.field_of_study),
+      degree: cleanOCRText(
+        edu.degree
+          ? edu.field_of_study
+            ? `${edu.degree} - ${edu.field_of_study}`
+            : edu.degree
+          : edu.field_of_study
+      ),
       startDate: cleanOCRText(edu.start_date),
       endDate: cleanOCRText(edu.end_date),
-      confidence: fieldConfidence(edu.institution, edu.degree),
-    })),
-    skills: parsed.skills.map((skill) => ({
+      confidence: fieldConfidence(
+        edu.institution,
+        edu.degree,
+        edu.field_of_study
+      ),
+    }))
+    .filter((edu) =>
+      [edu.institution, edu.degree, edu.startDate, edu.endDate].some(
+        (value) => value.trim().length > 0
+      )
+    );
+
+  const skills = parsed.skills
+    .map((skill) => ({
       id: uuidv4(),
       name: cleanOCRText(skill),
-      level: 70, // default level
-    })),
-    projects: parsed.projects.map((proj) => ({
+      level: 70,
+    }))
+    .filter((skill) => skill.name.trim().length > 0);
+
+  const projects = parsed.projects
+    .map((project) => ({
       id: uuidv4(),
-      name: cleanOCRText(proj.name),
-      description: cleanOCRText(proj.description),
-      technologies: cleanOCRText(proj.technologies.join(", ")),
-      confidence: fieldConfidence(proj.name, proj.description),
-    })),
-    certifications: parsed.certifications.map((cert) => ({
+      name: cleanOCRText(project.name),
+      description: cleanOCRText(project.description),
+      technologies: cleanOCRText(project.technologies.join(", ")),
+      confidence: fieldConfidence(project.name, project.description),
+    }))
+    .filter((project) =>
+      [project.name, project.description, project.technologies].some(
+        (value) => value.trim().length > 0
+      )
+    );
+
+  const certifications = parsed.certifications
+    .map((cert) => ({
       id: uuidv4(),
       name: cleanOCRText(cert.name),
       issuer: cleanOCRText(cert.issuer),
       date: cleanOCRText(cert.date_obtained),
-      confidence: fieldConfidence(cert.name, cert.issuer),
-    })),
+      confidence: fieldConfidence(cert.name, cert.issuer, cert.date_obtained),
+    }))
+    .filter((cert) =>
+      [cert.name, cert.issuer, cert.date].some((value) => value.trim().length > 0)
+    );
+
+  return {
+    fullName: cleanOCRText(parsed.full_name),
+    title: cleanOCRText(parsed.job_title),
+    email: cleanOCRText(parsed.contact.email),
+    phone: cleanOCRText(parsed.contact.phone),
+    address: cleanOCRText(parsed.contact.address),
+    summary: cleanOCRText(parsed.summary),
+    experiences,
+    educations,
+    skills,
+    projects,
+    certifications,
   };
 }
 
-// ── Transform OCRDraftData → CVSection[] ──────────────────────
-// This maps the flat draft form data into the shape expected by useCVStore
+export function hasMeaningfulDraftData(
+  draft: OCRDraftData | null | undefined
+): boolean {
+  if (!draft) return false;
+
+  const scalarScore = [
+    draft.fullName &&
+      draft.fullName.trim() &&
+      draft.fullName.trim().toLowerCase() !== "bạn",
+    draft.title && draft.title.trim(),
+    draft.email && draft.email.trim(),
+    draft.phone && draft.phone.trim(),
+    draft.address && draft.address.trim(),
+    draft.summary && draft.summary.trim().length > 20,
+  ].filter(Boolean).length;
+
+  const collectionScore =
+    draft.experiences.length * 2 +
+    draft.educations.length * 2 +
+    draft.projects.length * 2 +
+    draft.certifications.length +
+    draft.skills.length;
+
+  return scalarScore + collectionScore >= 5;
+}
+
 export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
   const sections: CVSection[] = [];
 
-  // Header
   sections.push({
     id: uuidv4(),
     type: "header",
@@ -227,7 +327,6 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
     },
   });
 
-  // Personal Info
   sections.push({
     id: uuidv4(),
     type: "personal_info",
@@ -240,7 +339,6 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
     },
   });
 
-  // Summary
   if (draft.summary) {
     sections.push({
       id: uuidv4(),
@@ -252,7 +350,6 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
     });
   }
 
-  // Experience
   if (draft.experiences.length > 0) {
     sections.push({
       id: uuidv4(),
@@ -273,7 +370,6 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
     });
   }
 
-  // Education
   if (draft.educations.length > 0) {
     sections.push({
       id: uuidv4(),
@@ -293,7 +389,6 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
     });
   }
 
-  // Skills
   if (draft.skills.length > 0) {
     sections.push({
       id: uuidv4(),
@@ -302,16 +397,15 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
       isVisible: true,
       containerId: "main-column",
       data: {
-        items: draft.skills.map((s) => ({
-          id: s.id,
-          name: s.name,
-          level: s.level,
+        items: draft.skills.map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          level: skill.level,
         })),
       },
     });
   }
 
-  // Projects
   if (draft.projects.length > 0) {
     sections.push({
       id: uuidv4(),
@@ -320,20 +414,19 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
       isVisible: true,
       containerId: "main-column",
       data: {
-        items: draft.projects.map((proj) => ({
-          id: proj.id,
-          name: proj.name,
+        items: draft.projects.map((project) => ({
+          id: project.id,
+          name: project.name,
           role: "",
           startDate: "",
           endDate: "",
-          description: proj.description,
-          technologies: proj.technologies,
+          description: project.description,
+          technologies: project.technologies,
         })),
       },
     });
   }
 
-  // Certifications
   if (draft.certifications.length > 0) {
     sections.push({
       id: uuidv4(),
@@ -355,24 +448,258 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
   return sections;
 }
 
-// ── Helper to Generate Mock Bounding Boxes ─────────────────────
-// Vì backend hiện tại (Qwen-VL endpoint) chưa trả về tọa độ bounding box,
-// hàm này sẽ tạo mock bounding boxes dựa trên dữ liệu để trình diễn UI.
+type OCRSectionBucket =
+  | "objective"
+  | "skills"
+  | "education"
+  | "experience"
+  | "projects"
+  | "certifications"
+  | "activities"
+  | "interests"
+  | "other";
+
+const OCR_SECTION_PATTERNS: Array<[OCRSectionBucket, RegExp]> = [
+  ["objective", /MỤC TIÊU|OBJECTIVE|GIỚI THIỆU|VỀ BẢN THÂN/i],
+  ["skills", /KỸ NĂNG|SKILLS|NĂNG LỰC/i],
+  ["education", /HỌC VẤN|EDUCATION|TRÌNH ĐỘ/i],
+  ["experience", /KINH NGHIỆM|EXPERIENCE|CÔNG TÁC/i],
+  ["projects", /DỰ ÁN|PROJECTS|ĐỒ ÁN/i],
+  ["certifications", /CHỨNG CHỈ|CERTIFIC|GIẤY CHỨNG NHẬN/i],
+  ["activities", /HOẠT ĐỘNG|ACTIVITIES|NGOẠI KHÓA/i],
+  ["interests", /SỞ THÍCH|INTERESTS|HOBBIES/i],
+];
+
+function detectOCRSectionHeader(text: string): OCRSectionBucket | null {
+  const normalized = cleanOCRText(text).toUpperCase();
+  for (const [bucket, pattern] of OCR_SECTION_PATTERNS) {
+    if (pattern.test(normalized) && normalized.length <= 60) {
+      return bucket;
+    }
+  }
+  return null;
+}
+
+function isLikelyEmail(text: string): boolean {
+  return /@/.test(text);
+}
+
+function isLikelyPhone(text: string): boolean {
+  const digits = text.replace(/\D/g, "");
+  return digits.length >= 9 && digits.length <= 12;
+}
+
+function isLikelyLink(text: string): boolean {
+  return /linkedin|github|facebook|https?:\/\/|www\./i.test(text);
+}
+
+function isLikelyAddress(text: string): boolean {
+  return /đường|street|quận|district|tp\.?|hồ chí minh|hà nội|address|phường|ward/i.test(
+    text
+  );
+}
+
+function formatBucketLines(
+  entries: Array<{ text: string; x: number }>
+): string {
+  if (!entries.length) return "";
+
+  const minX = Math.min(...entries.map((entry) => entry.x));
+  const indentCandidates = entries
+    .map((entry) => entry.x - minX)
+    .filter((offset) => offset > 1.2)
+    .sort((a, b) => a - b);
+  const indentStep = Math.max(2.4, Math.min(indentCandidates[0] ?? 4.5, 8));
+
+  return entries
+    .map((entry) => {
+      const cleaned = cleanOCRText(entry.text);
+      const offset = Math.max(0, entry.x - minX);
+      const level = Math.max(0, Math.min(4, Math.round(offset / indentStep)));
+      return `${"  ".repeat(level)}${cleaned}`;
+    })
+    .join("\n")
+    .trim();
+}
+
+export function transformRawBlocksToSections(
+  blocks: RawOCRBlock[],
+  draft?: OCRDraftData | null
+): CVSection[] {
+  const orderedBlocks = [...blocks].sort(
+    (a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x
+  );
+
+  const buckets: Record<OCRSectionBucket, Array<{ text: string; x: number }>> = {
+    objective: [],
+    skills: [],
+    education: [],
+    experience: [],
+    projects: [],
+    certifications: [],
+    activities: [],
+    interests: [],
+    other: [],
+  };
+
+  const contact = {
+    email: draft?.email || "",
+    phone: draft?.phone || "",
+    address: draft?.address || "",
+    socials: [] as { network: string; url: string }[],
+  };
+
+  let inferredName = draft?.fullName || "";
+  let inferredTitle = draft?.title || "";
+  let currentBucket: OCRSectionBucket | null = null;
+
+  for (const block of orderedBlocks) {
+    const text = cleanOCRText(block.text);
+    if (!text) continue;
+
+    const headerBucket = detectOCRSectionHeader(text);
+    if (headerBucket) {
+      currentBucket = headerBucket;
+      continue;
+    }
+
+    if (!inferredName && block.rect.y < 20 && block.rect.width > 20 && text.length < 60) {
+      inferredName = text;
+      continue;
+    }
+
+    if (!inferredTitle && block.rect.y < 24 && text.length < 60) {
+      inferredTitle = text;
+      continue;
+    }
+
+    if (!contact.email && isLikelyEmail(text)) {
+      contact.email = text;
+      continue;
+    }
+
+    if (!contact.phone && isLikelyPhone(text)) {
+      contact.phone = text;
+      continue;
+    }
+
+    if (isLikelyLink(text)) {
+      contact.socials.push({
+        network: text.includes("linkedin")
+          ? "LinkedIn"
+          : text.includes("github")
+            ? "GitHub"
+            : "Link",
+        url: text,
+      });
+      continue;
+    }
+
+    if (!contact.address && isLikelyAddress(text)) {
+      contact.address = text;
+      continue;
+    }
+
+    (currentBucket ? buckets[currentBucket] : buckets.other).push({
+      text,
+      x: block.rect.x,
+    });
+  }
+
+  const sections: CVSection[] = [
+    {
+      id: uuidv4(),
+      type: "header",
+      isVisible: true,
+      containerId: "main-column",
+      data: {
+        fullName: inferredName,
+        title: inferredTitle,
+      },
+    },
+    {
+      id: uuidv4(),
+      type: "personal_info",
+      isVisible: true,
+      containerId: "main-column",
+      data: {
+        email: contact.email,
+        phone: contact.phone,
+        address: contact.address,
+        socials: contact.socials,
+      },
+    },
+  ];
+
+  const objectiveText = formatBucketLines(buckets.objective);
+  if (objectiveText) {
+    sections.push({
+      id: uuidv4(),
+      type: "summary",
+      title: "Mục tiêu nghề nghiệp",
+      isVisible: true,
+      containerId: "main-column",
+      data: { text: objectiveText },
+    });
+  }
+
+  const customSectionMap: Array<[OCRSectionBucket, string]> = [
+    ["skills", "Kỹ năng"],
+    ["education", "Học vấn"],
+    ["experience", "Kinh nghiệm làm việc"],
+    ["projects", "Dự án"],
+    ["certifications", "Chứng chỉ"],
+    ["activities", "Hoạt động"],
+    ["interests", "Sở thích"],
+    ["other", "Nội dung khác"],
+  ];
+
+  for (const [bucket, title] of customSectionMap) {
+    const nodes = buildRichOutlineNodesFromEntries(
+      buckets[bucket].map((entry) => ({
+        text: cleanOCRText(entry.text),
+        x: entry.x,
+      }))
+    );
+    if (!nodes.length) continue;
+
+    sections.push({
+      id: uuidv4(),
+      type: "rich_outline",
+      title,
+      isVisible: true,
+      containerId: "main-column",
+      data: { nodes },
+    });
+  }
+
+  return sections;
+}
+
 export function generateMockBoundingBoxes(draft: OCRDraftData): OCRBoundingBox[] {
   const boxes: OCRBoundingBox[] = [];
-  let currentY = 5; // Bắt đầu từ 5% top
+  let currentY = 5;
 
-  const addBox = (label: string, text: string, fieldPath: Path<OCRDraftData>, width: number, height: number, confidence: number = 0.9) => {
+  const addBox = (
+    label: string,
+    text: string,
+    fieldPath: Path<OCRDraftData>,
+    width: number,
+    height: number,
+    confidence = 0.9
+  ) => {
     if (!text) return;
+
     boxes.push({
       id: uuidv4(),
       label,
       text,
       fieldPath,
       confidence,
-      rect: { x: 10, y: currentY, width, height }
+      rect: { x: 10, y: currentY, width, height },
     });
-    currentY += height + 2; // margin 2%
+
+    currentY += height + 2;
   };
 
   addBox("Họ và tên", draft.fullName, "fullName", 50, 4);
@@ -382,68 +709,149 @@ export function generateMockBoundingBoxes(draft: OCRDraftData): OCRBoundingBox[]
   addBox("Địa chỉ", draft.address, "address", 60, 3);
   addBox("Giới thiệu", draft.summary, "summary", 80, 8);
 
-  draft.experiences.forEach((exp, i) => {
-    addBox(`Vị trí (${i+1})`, exp.position, `experiences.${i}.position`, 50, 3, exp.confidence);
-    addBox(`Công ty (${i+1})`, exp.company, `experiences.${i}.company`, 60, 3, exp.confidence);
-    addBox(`Mô tả (${i+1})`, exp.description, `experiences.${i}.description`, 80, 6, exp.confidence);
+  draft.experiences.forEach((exp, index) => {
+    addBox(
+      `Vị trí (${index + 1})`,
+      exp.position,
+      `experiences.${index}.position`,
+      50,
+      3,
+      exp.confidence
+    );
+    addBox(
+      `Công ty (${index + 1})`,
+      exp.company,
+      `experiences.${index}.company`,
+      60,
+      3,
+      exp.confidence
+    );
+    addBox(
+      `Mô tả (${index + 1})`,
+      exp.description,
+      `experiences.${index}.description`,
+      80,
+      6,
+      exp.confidence
+    );
   });
 
-  draft.educations.forEach((edu, i) => {
-    addBox(`Trường (${i+1})`, edu.institution, `educations.${i}.institution`, 60, 3, edu.confidence);
-    addBox(`Ngành (${i+1})`, edu.degree, `educations.${i}.degree`, 50, 3, edu.confidence);
+  draft.educations.forEach((edu, index) => {
+    addBox(
+      `Trường (${index + 1})`,
+      edu.institution,
+      `educations.${index}.institution`,
+      60,
+      3,
+      edu.confidence
+    );
+    addBox(
+      `Ngành (${index + 1})`,
+      edu.degree,
+      `educations.${index}.degree`,
+      50,
+      3,
+      edu.confidence
+    );
   });
 
   return boxes;
 }
 
-// ── Generate Mock Raw Blocks for Original Layout Editor ────────
-// Tạo layout dạng 2 cột để mô phỏng một CV gốc
 export function generateMockOCRBlocks(draft: OCRDraftData): RawOCRBlock[] {
   const blocks: RawOCRBlock[] = [];
-  
-  const addBlock = (label: string, text: string, x: number, y: number, w: number, h: number, conf: number = 0.9) => {
+
+  const addBlock = (
+    label: string,
+    text: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    confidence = 0.9
+  ) => {
     if (!text) return;
+
     blocks.push({
       id: uuidv4(),
       text,
       label,
-      confidence: conf,
-      rect: { x, y, width: w, height: h }
+      confidence,
+      rect: { x, y, width, height },
     });
   };
 
-  // Header (Top center)
   addBlock("fullName", draft.fullName, 30, 5, 40, 5);
   addBlock("title", draft.title, 40, 11, 20, 3);
-  
-  // Left Column (Contact, Skills)
+
   let leftY = 20;
-  addBlock("address", draft.address, 5, leftY, 25, 3); leftY += 4;
-  addBlock("phone", draft.phone, 5, leftY, 25, 3); leftY += 4;
-  addBlock("email", draft.email, 5, leftY, 25, 3); leftY += 8;
+  addBlock("address", draft.address, 5, leftY, 25, 3);
+  leftY += 4;
+  addBlock("phone", draft.phone, 5, leftY, 25, 3);
+  leftY += 4;
+  addBlock("email", draft.email, 5, leftY, 25, 3);
+  leftY += 8;
 
-  addBlock("Summary", draft.summary, 5, leftY, 25, 10); leftY += 12;
+  addBlock("summary", draft.summary, 5, leftY, 25, 10);
+  leftY += 12;
 
-  draft.skills.forEach(s => {
-    addBlock("skill", s.name, 5, leftY, 25, 2);
+  draft.skills.forEach((skill) => {
+    addBlock("skill", skill.name, 5, leftY, 25, 2);
     leftY += 3;
   });
 
-  // Right Column (Experience, Education)
   let rightY = 20;
-  draft.experiences.forEach(exp => {
-    addBlock("position", exp.position, 35, rightY, 60, 3, exp.confidence); rightY += 3.5;
-    addBlock("company", exp.company, 35, rightY, 60, 2.5, exp.confidence); rightY += 3.5;
-    addBlock("date", `${exp.startDate} - ${exp.endDate}`, 35, rightY, 60, 2.5, exp.confidence); rightY += 3.5;
-    addBlock("description", exp.description, 35, rightY, 60, 10, exp.confidence); rightY += 12;
+  draft.experiences.forEach((exp) => {
+    addBlock("position", exp.position, 35, rightY, 60, 3, exp.confidence);
+    rightY += 3.5;
+    addBlock("company", exp.company, 35, rightY, 60, 2.5, exp.confidence);
+    rightY += 3.5;
+    addBlock(
+      "date",
+      `${exp.startDate} - ${exp.endDate}`,
+      35,
+      rightY,
+      60,
+      2.5,
+      exp.confidence
+    );
+    rightY += 3.5;
+    addBlock(
+      "description",
+      exp.description,
+      35,
+      rightY,
+      60,
+      10,
+      exp.confidence
+    );
+    rightY += 12;
   });
 
-  draft.educations.forEach(edu => {
-    addBlock("institution", edu.institution, 35, rightY, 60, 3, edu.confidence); rightY += 3.5;
-    addBlock("degree", edu.degree, 35, rightY, 60, 2.5, edu.confidence); rightY += 3.5;
-    addBlock("date", `${edu.startDate} - ${edu.endDate}`, 35, rightY, 60, 2.5, edu.confidence); rightY += 5;
+  draft.educations.forEach((edu) => {
+    addBlock(
+      "institution",
+      edu.institution,
+      35,
+      rightY,
+      60,
+      3,
+      edu.confidence
+    );
+    rightY += 3.5;
+    addBlock("degree", edu.degree, 35, rightY, 60, 2.5, edu.confidence);
+    rightY += 3.5;
+    addBlock(
+      "date",
+      `${edu.startDate} - ${edu.endDate}`,
+      35,
+      rightY,
+      60,
+      2.5,
+      edu.confidence
+    );
+    rightY += 5;
   });
 
-  // Chạy qua dọn text một lần nữa do mockup kết nối nối chuỗi
-  return blocks.map(b => ({ ...b, text: cleanOCRText(b.text) }));
+  return blocks.map((block) => ({ ...block, text: cleanOCRText(block.text) }));
 }
