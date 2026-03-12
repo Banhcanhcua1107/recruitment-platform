@@ -81,6 +81,14 @@ interface OriginalLayoutWorkspaceProps {
   file: File;
   initialBlocks: RawOCRBlock[];
   parsedDraft?: OCRDraftData | null;
+  layoutDebug?: {
+    documentMode?: string;
+    pageModes: Array<{
+      page: number;
+      mode: string;
+      splitX: number | null;
+    }>;
+  } | null;
   onConfirm: (blocks: RawOCRBlock[]) => void;
   onCancel: () => void;
   isScanning?: boolean;
@@ -91,6 +99,7 @@ interface MappedBox {
   confidence: number;
   label?: string;
   sectionType: SectionType;
+  column?: "left" | "right" | "full_width";
   pct: { top: string; left: string; width: string; height: string; numHeight: number };
 }
 
@@ -114,6 +123,11 @@ function revokeObjectUrlLater(url: string, delayMs = 15000): void {
       // Ignore blob revoke races in development.
     }
   }, delayMs);
+}
+
+function humanizeLayoutMode(mode: string | undefined): string {
+  if (!mode) return "unknown";
+  return mode.replace(/_/g, " ");
 }
 
 // ── CV Parsing Engine ─────────────────────────────────────────
@@ -145,6 +159,10 @@ function extractSkillLevel(text: string): number | undefined {
 function parseCVFromBlocks(blocks: RawOCRBlock[]): ParsedCV {
   if (!blocks.length) return { items: [], avatarRect: null, sidebarBreakX: 40 };
 
+  const explicitLeft = blocks.filter((block) => block.column === "left");
+  const explicitRight = blocks.filter((block) => block.column === "right");
+  const explicitFullWidth = blocks.filter((block) => block.column === "full_width");
+
   // ── Column boundary: anchor on known section headers (robust for 2-col CVs) ──
   // Main-content headers (HỌC VẤN, KINH NGHIỆM, HOẠT ĐỘNG) always start in right column.
   // Their leftmost x-edge directly tells us where the right column begins.
@@ -158,7 +176,11 @@ function parseCVFromBlocks(blocks: RawOCRBlock[]): ParsedCV {
   });
 
   let sidebarBreakX = 35;
-  if (mainHdrBlocks.length > 0) {
+  if (explicitLeft.length > 0 && explicitRight.length > 0) {
+    const leftRightEdge = Math.max(...explicitLeft.map((b) => b.rect.x + b.rect.width));
+    const rightLeftEdge = Math.min(...explicitRight.map((b) => b.rect.x));
+    sidebarBreakX = (leftRightEdge + rightLeftEdge) / 2;
+  } else if (mainHdrBlocks.length > 0) {
     const minMainX = Math.min(...mainHdrBlocks.map(b => b.rect.x));
     if (sideHdrBlocks.length > 0) {
       const maxSideRight = Math.max(...sideHdrBlocks.map(b => b.rect.x + b.rect.width));
@@ -196,12 +218,15 @@ function parseCVFromBlocks(blocks: RawOCRBlock[]): ParsedCV {
 
   const sidebar = blocks
     .map((b, i) => ({ ...b, origIndex: i }))
-    .filter(b => b.rect.x + b.rect.width / 2 < sidebarBreakX)
+    .filter((b) => b.column ? b.column === "left" : b.rect.x + b.rect.width / 2 < sidebarBreakX)
     .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
 
   const mainContent = blocks
     .map((b, i) => ({ ...b, origIndex: i }))
-    .filter(b => b.rect.x + b.rect.width / 2 >= sidebarBreakX)
+    .filter((b) => {
+      if (b.column) return b.column === "right" || b.column === "full_width";
+      return b.rect.x + b.rect.width / 2 >= sidebarBreakX;
+    })
     .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
 
   // ── Sidebar parsing ──────────────────────────────────────────
@@ -299,6 +324,19 @@ function parseCVFromBlocks(blocks: RawOCRBlock[]): ParsedCV {
       // Stop the avatar rect 2% above the first text line
       const rectH  = Math.max(4, gapBottom - rectY - 2);
       avatarRect = { x: rectX, y: rectY, width: rectW, height: rectH };
+    }
+  }
+
+  if (!avatarRect && explicitLeft.length > 0 && explicitFullWidth.length > 0) {
+    const topLeftBlock = explicitLeft.reduce((a, b) => (b.rect.y < a.rect.y ? b : a));
+    const topFullBlock = explicitFullWidth.reduce((a, b) => (b.rect.y < a.rect.y ? b : a));
+    if (topFullBlock.rect.y > topLeftBlock.rect.y + 4) {
+      avatarRect = {
+        x: topLeftBlock.rect.x,
+        y: Math.max(0, topLeftBlock.rect.y),
+        width: topLeftBlock.rect.width,
+        height: Math.max(4, topFullBlock.rect.y - topLeftBlock.rect.y - 2),
+      };
     }
   }
 
@@ -598,10 +636,19 @@ function SourceOCRBox({
   onActivate: () => void;
   imageSize: { width: number; height: number };
 }) {
-  const { pct, confidence, sectionType } = mappedBox;
+  const { pct, confidence, sectionType, column, label } = mappedBox;
   const fontSize = Math.max(6, (pct.numHeight / 100) * imageSize.height * 0.65);
   const isLowConf = confidence < 0.5;
   const style = SECTION_BOX[sectionType] ?? SECTION_BOX.other;
+  const columnStyle =
+    column === "left"
+      ? { bg: "rgba(37,99,235,0.08)", border: "rgba(37,99,235,0.9)" }
+      : column === "right"
+      ? { bg: "rgba(22,163,74,0.08)", border: "rgba(22,163,74,0.9)" }
+      : column === "full_width"
+      ? { bg: "rgba(100,116,139,0.08)", border: "rgba(100,116,139,0.85)" }
+      : null;
+  const overlayStyle = columnStyle ?? style;
 
   return (
     <div
@@ -617,12 +664,36 @@ function SourceOCRBox({
         boxShadow: isActive
           ? "inset 0 0 0 2px rgba(255,215,0,0.95), 0 0 10px rgba(255,215,0,0.9)"
           : isLowConf
-          ? `inset 0 0 0 1px ${style.border}, 0 0 0 0.5px rgba(251,191,36,0.5)`
-          : `inset 0 0 0 1px ${style.border}`,
-        background: isActive ? "rgba(255,246,200,0.35)" : style.bg,
+          ? `inset 0 0 0 1px ${overlayStyle.border}, 0 0 0 0.5px rgba(251,191,36,0.5)`
+          : `inset 0 0 0 1px ${overlayStyle.border}`,
+        background: isActive ? "rgba(255,246,200,0.35)" : overlayStyle.bg,
       }}
       onClick={onActivate}
     >
+      {label && (
+        <span
+          style={{
+            position: "absolute",
+            top: -16,
+            left: 0,
+            maxWidth: "100%",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            color: "#0f172a",
+            background: "rgba(255,255,255,0.96)",
+            border: `1px solid ${overlayStyle.border}`,
+            borderRadius: 4,
+            padding: "1px 5px",
+            boxShadow: "0 1px 2px rgba(15,23,42,0.12)",
+          }}
+        >
+          {label}
+        </span>
+      )}
       {isActive && (
         <textarea
           {...register(`blocks.${index}.text`)}
@@ -725,20 +796,32 @@ function SourcePane({
           >
             {sourceUrl ? (
               isPdf ? (
-                <iframe
-                  src={`${sourceUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                  title="Source CV PDF"
-                  scrolling="no"
-                  style={{ 
-                    width: 600, 
-                    height: 849, 
-                    display: "block", 
-                    border: 0, 
-                    background: "white", 
-                    overflow: "hidden",
-                    pointerEvents: "none"
+                <object
+                  data={`${sourceUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                  type="application/pdf"
+                  aria-label="Source CV PDF"
+                  style={{
+                    width: 600,
+                    height: 849,
+                    display: "block",
+                    border: 0,
+                    background: "white",
+                    pointerEvents: "none",
                   }}
-                />
+                >
+                  <embed
+                    src={`${sourceUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                    type="application/pdf"
+                    style={{
+                      width: 600,
+                      height: 849,
+                      display: "block",
+                      border: 0,
+                      background: "white",
+                      pointerEvents: "none",
+                    }}
+                  />
+                </object>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -1492,6 +1575,7 @@ export function OriginalLayoutWorkspace({
   file,
   initialBlocks,
   parsedDraft,
+  layoutDebug,
   onConfirm,
   onCancel,
   isScanning = false,
@@ -1527,14 +1611,15 @@ export function OriginalLayoutWorkspace({
       const y = clamp(block.rect.y);
       const w = clamp(block.rect.width, 0, 100 - x);
       const h = clamp(block.rect.height, 0, 100 - y);
-      return {
-        stableKey: fields[i]?.id ?? stableKey(block),
-        confidence: block.confidence,
-        label: block.label,
-        sectionType: parsedCV.items[i]?.sectionType ?? "other",
-        pct: {
-          top:    `${y}%`,
-          left:   `${x}%`,
+        return {
+          stableKey: fields[i]?.id ?? stableKey(block),
+          confidence: block.confidence,
+          label: block.label,
+          sectionType: parsedCV.items[i]?.sectionType ?? "other",
+          column: block.column,
+          pct: {
+            top:    `${y}%`,
+            left:   `${x}%`,
           width:  `${w}%`,
           height: `${h}%`,
           numHeight: h,
@@ -1588,6 +1673,18 @@ export function OriginalLayoutWorkspace({
             <div>
               <h2 className="font-bold text-slate-800 text-lg leading-tight">Original Layout Editor</h2>
               <p className="text-xs text-slate-500 font-medium">Click a box to edit · Zoom synced across both panes</p>
+              {layoutDebug && (
+                <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
+                    Layout: {humanizeLayoutMode(layoutDebug.documentMode)}
+                  </span>
+                  {layoutDebug.pageModes.map((page) => (
+                    <span key={page.page} className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
+                      Page {page.page}: {humanizeLayoutMode(page.mode)}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">

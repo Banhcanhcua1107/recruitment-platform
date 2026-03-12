@@ -17,10 +17,10 @@ export default function CandidateApplicationsPage() {
     return applications.filter(app => {
       // Status Filter
       if (filter !== "All") {
-        if (filter === "New" && app.status !== "pending") return false;
+        if (filter === "New" && !["pending", "new", "viewed"].includes(app.status)) return false;
         if (filter === "Viewed" && app.status !== "viewed") return false;
-        if (filter === "Interview" && app.status !== "interviewing") return false;
-        if (filter === "Offer" && app.status !== "offered") return false;
+        if (filter === "Interview" && !["interviewing", "interview"].includes(app.status)) return false;
+        if (filter === "Offer" && !["offered", "hired"].includes(app.status)) return false;
         if (filter === "Reject" && app.status !== "rejected") return false;
       }
       

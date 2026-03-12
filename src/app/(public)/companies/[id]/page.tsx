@@ -8,8 +8,9 @@ import {
 } from "@/lib/companies";
 
 // ── Static params for SSG ──
-export function generateStaticParams() {
-  return getAllCompanies().map((c) => ({ id: c.slug }));
+export async function generateStaticParams() {
+  const companies = await getAllCompanies();
+  return companies.map((c) => ({ id: c.slug }));
 }
 
 // ── SEO ──
@@ -19,7 +20,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const company = getCompanyBySlug(id);
+  const company = await getCompanyBySlug(id);
   if (!company) return { title: "Không tìm thấy công ty | TalentFlow" };
   return {
     title: `${company.name} - Tuyển dụng | TalentFlow`,
@@ -34,10 +35,10 @@ export default async function CompanyProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const company = getCompanyBySlug(id);
+  const company = await getCompanyBySlug(id);
   if (!company) notFound();
 
-  const jobs = getJobsByCompanySlug(id);
+  const jobs = await getJobsByCompanySlug(id);
   const initial = company.name.charAt(0).toUpperCase();
   const hasLogo =
     company.logoUrl &&

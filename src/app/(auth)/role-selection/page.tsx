@@ -1,13 +1,12 @@
 "use client";
 import React, { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
 import { updateRole } from "@/app/(auth)/actions";
-import { useRouter } from "next/navigation";
 
 export default function RoleSelectionPage() {
   const [role, setRole] = useState<"candidate" | "employer">("candidate");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
   const supabase = createClient();
 
   const handleConfirm = async () => {
@@ -23,8 +22,7 @@ export default function RoleSelectionPage() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
+    await signOutAndRedirect(supabase, "/login");
   };
 
   return (

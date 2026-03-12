@@ -23,7 +23,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -32,6 +32,7 @@ from models import (
     ErrorResponse,
     MatchJobRequest,
     MatchJobResponse,
+    ParseOCRBlocksRequest,
     OCRUploadResponse,
     ParseCVResponse,
     UploadCVResponse,
@@ -280,6 +281,128 @@ def _run_ocr_pipeline(
     )
 
 
+def _build_page_results_from_blocks(blocks: list) -> list:
+    from services.ocr_service import OCRBlock, OCRPageResult
+
+    pages_by_number: dict[int, list] = {}
+    for block in blocks:
+        page_number = int(getattr(block, "page", 1) or 1)
+        pages_by_number.setdefault(page_number, []).append(block)
+
+    page_results: list[OCRPageResult] = []
+    for page_number in sorted(pages_by_number):
+        block_models = pages_by_number[page_number]
+        page_blocks: list[OCRBlock] = []
+        image_width = 1000
+        image_height = 1400
+
+        for block_model in block_models:
+            rect = getattr(block_model, "rect", {}) or {}
+            rect_x = float(rect.get("x", 0.0))
+            rect_y = float(rect.get("y", 0.0))
+            rect_w = float(rect.get("width", 0.0))
+            rect_h = float(rect.get("height", 0.0))
+            x1 = int((rect_x / 100.0) * image_width)
+            y1 = int((rect_y / 100.0) * image_height)
+            x2 = int(((rect_x + rect_w) / 100.0) * image_width)
+            y2 = int(((rect_y + rect_h) / 100.0) * image_height)
+            page_blocks.append(
+                OCRBlock(
+                    text=block_model.text,
+                    bbox=[[x1, y1], [x2, y1], [x2, y2], [x1, y2]],
+                    confidence=float(getattr(block_model, "confidence", 1.0) or 1.0),
+                    page=page_number,
+                    rect_x=rect_x,
+                    rect_y=rect_y,
+                    rect_w=rect_w,
+                    rect_h=rect_h,
+                )
+            )
+
+        page_results.append(
+            OCRPageResult(
+                page=page_number,
+                image_width=image_width,
+                image_height=image_height,
+                blocks=page_blocks,
+            )
+        )
+
+    return page_results
+
+
+def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnings: list[str]) -> UploadCVResponse:
+    from models import OCRBlockModel, OCRPageModel
+
+    total_blocks = sum(len(page.blocks) for page in page_results)
+    column_lookup: dict[tuple[int, float, float, float, float], str] = {}
+    for column_name in ("left", "right", "full_width"):
+        for item in parsed["layout"].get("columns", {}).get(column_name, []):
+            rect = item.get("rect", {})
+            key = (
+                int(item.get("page", 1)),
+                round(float(rect.get("x", 0.0)), 3),
+                round(float(rect.get("y", 0.0)), 3),
+                round(float(rect.get("width", 0.0)), 3),
+                round(float(rect.get("height", 0.0)), 3),
+            )
+            column_lookup[key] = column_name
+
+    pages_out: list[OCRPageModel] = []
+    for page_result in page_results:
+        pages_out.append(
+            OCRPageModel(
+                page=page_result.page,
+                image_width=page_result.image_width,
+                image_height=page_result.image_height,
+                blocks=[
+                    OCRBlockModel(
+                        text=block.text,
+                        bbox=block.bbox,
+                        confidence=block.confidence,
+                        page=block.page,
+                        column=column_lookup.get(
+                            (
+                                int(block.page),
+                                round(block.rect_x, 3),
+                                round(block.rect_y, 3),
+                                round(block.rect_w, 3),
+                                round(block.rect_h, 3),
+                            )
+                        ),
+                        rect={
+                            "x": block.rect_x,
+                            "y": block.rect_y,
+                            "width": block.rect_w,
+                            "height": block.rect_h,
+                        },
+                    )
+                    for block in page_result.blocks
+                ],
+            )
+        )
+
+    detected_sections = [
+        DetectedSectionModel(**section)
+        for section in parsed["detected_sections"]
+    ]
+
+    return UploadCVResponse(
+        success=True,
+        extraction_method="ocr_layout",
+        page_count=len(pages_out),
+        total_blocks=total_blocks,
+        pages=pages_out,
+        elapsed_seconds=round(elapsed, 3),
+        warnings=warnings,
+        data=parsed["data"],
+        detected_sections=detected_sections,
+        builder_sections=parsed["builder_sections"],
+        layout=parsed["layout"],
+        raw_text=parsed["raw_text"],
+    )
+
+
 @app.post(
     "/upload-cv",
     response_model=UploadCVResponse,
@@ -326,52 +449,54 @@ async def endpoint_upload_cv(
         raise HTTPException(status_code=500, detail=f"Failed to process CV: {exc}") from exc
 
     elapsed = time.perf_counter() - start
-    total_blocks = sum(len(page.blocks) for page in page_results)
     if elapsed > 2.0:
         warnings.append(f"Processing took {elapsed:.1f}s (target < 2s).")
-
-    pages_out: list[OCRPageModel] = []
-    for page_result in page_results:
-        pages_out.append(
-            OCRPageModel(
-                page=page_result.page,
-                image_width=page_result.image_width,
-                image_height=page_result.image_height,
-                blocks=[
-                    OCRBlockModel(
-                        text=block.text,
-                        bbox=block.bbox,
-                        confidence=block.confidence,
-                        page=block.page,
-                        rect={
-                            "x": block.rect_x,
-                            "y": block.rect_y,
-                            "width": block.rect_w,
-                            "height": block.rect_h,
-                        },
-                    )
-                    for block in page_result.blocks
-                ],
-            )
-        )
-
-    detected_sections = [
-        DetectedSectionModel(**section)
-        for section in parsed["detected_sections"]
-    ]
-
-    return UploadCVResponse(
-        success=True,
-        extraction_method="ocr_layout",
-        page_count=len(pages_out),
-        total_blocks=total_blocks,
-        pages=pages_out,
-        elapsed_seconds=round(elapsed, 3),
+    return _build_upload_cv_response(
+        page_results=page_results,
+        parsed=parsed,
+        elapsed=elapsed,
         warnings=warnings,
-        data=parsed["data"],
-        detected_sections=detected_sections,
-        builder_sections=parsed["builder_sections"],
-        raw_text=parsed["raw_text"],
+    )
+
+
+@app.post(
+    "/parse-ocr-blocks",
+    response_model=UploadCVResponse,
+    tags=["cv"],
+    summary="Re-parse edited OCR blocks into structured CV sections",
+    responses={
+        400: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+)
+async def endpoint_parse_ocr_blocks(
+    payload: ParseOCRBlocksRequest = Body(...),
+):
+    if not payload.blocks:
+        raise HTTPException(status_code=400, detail="Missing OCR blocks.")
+
+    start = time.perf_counter()
+    warnings: list[str] = []
+
+    try:
+        page_results = _build_page_results_from_blocks(payload.blocks)
+        parsed = parse_structured_cv_from_ocr(page_results)
+    except RuntimeError as exc:
+        logger.error("Parse OCR blocks pipeline error: %s", exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Parse OCR blocks failed")
+        raise HTTPException(status_code=500, detail=f"Failed to parse OCR blocks: {exc}") from exc
+
+    elapsed = time.perf_counter() - start
+    if elapsed > 2.0:
+        warnings.append(f"Re-parse took {elapsed:.1f}s (target < 2s).")
+
+    return _build_upload_cv_response(
+        page_results=page_results,
+        parsed=parsed,
+        elapsed=elapsed,
+        warnings=warnings,
     )
 
 

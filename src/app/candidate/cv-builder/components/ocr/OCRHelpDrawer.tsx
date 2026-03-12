@@ -55,6 +55,8 @@ export function OCRHelpDrawer({
                   type="button"
                   onClick={() => setIsOpen(false)}
                   className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
+                  title="Close OCR Help"
+                  aria-label="Close OCR Help"
                 >
                   <X size={18} />
                 </button>

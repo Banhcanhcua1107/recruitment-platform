@@ -46,7 +46,7 @@ function AuthErrorContent() {
 
 export default function AuthCodeErrorPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense fallback={<div>Đang tải...</div>}>
       <AuthErrorContent />
     </Suspense>
   )

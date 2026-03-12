@@ -33,6 +33,7 @@ interface PaddleBlock {
   bbox: [[number, number], [number, number], [number, number], [number, number]];
   confidence: number;
   page: number;
+  column?: "left" | "right" | "full_width";
   rect: { x: number; y: number; width: number; height: number };
 }
 
@@ -103,7 +104,38 @@ interface UploadCVResponse extends OCRUploadResponse {
     block_indices: number[];
   }>;
   builder_sections: CVSection[];
+  layout?: {
+    profile?: {
+      document_mode?: string;
+      pages?: Array<{
+        page: number;
+        mode?: string;
+        layout_mode?: string;
+        split_x: number | null;
+      }>;
+    };
+    pages?: Array<{
+      page: number;
+      mode?: string;
+      layout_mode?: string;
+      split_x: number | null;
+    }>;
+    columns?: {
+      left?: Array<Record<string, unknown>>;
+      right?: Array<Record<string, unknown>>;
+      full_width?: Array<Record<string, unknown>>;
+    };
+  };
   raw_text: string;
+}
+
+interface LayoutDebugInfo {
+  documentMode?: string;
+  pageModes: Array<{
+    page: number;
+    mode: string;
+    splitX: number | null;
+  }>;
 }
 
 async function callUploadCV(file: File): Promise<UploadCVResponse> {
@@ -129,15 +161,25 @@ async function callUploadCV(file: File): Promise<UploadCVResponse> {
  *
  * `rect` values from the backend are already 0–100 normalised.
  */
-function paddleBlocksToRaw(response: OCRUploadResponse): RawOCRBlock[] {
+function paddleBlocksToRaw(response: UploadCVResponse): RawOCRBlock[] {
   const blocks: RawOCRBlock[] = [];
+  const sectionLabelByBlockIndex = new Map<number, string>();
+  for (const section of response.detected_sections || []) {
+    const firstBlockIndex = section.block_indices?.[0];
+    if (typeof firstBlockIndex === "number" && section.title) {
+      sectionLabelByBlockIndex.set(firstBlockIndex, section.title);
+    }
+  }
+
+  let globalBlockIndex = 0;
   for (const page of response.pages) {
     for (const b of page.blocks) {
       blocks.push({
         id: `${b.page}-${b.bbox[0][0]}-${b.bbox[0][1]}-${b.bbox[2][0]}-${b.bbox[2][1]}`,
         text: b.text,
-        label: undefined,
+        label: sectionLabelByBlockIndex.get(globalBlockIndex),
         confidence: b.confidence,
+        column: b.column,
         rect: {
           x: b.rect.x,
           y: b.rect.y,
@@ -145,6 +187,7 @@ function paddleBlocksToRaw(response: OCRUploadResponse): RawOCRBlock[] {
           height: b.rect.height,
         },
       });
+      globalBlockIndex += 1;
     }
   }
   return blocks;
@@ -163,6 +206,7 @@ export function OCRPreviewModal({
   const [rawBlocks, setRawBlocks] = useState<RawOCRBlock[]>([]);
   const [draftData, setDraftData] = useState<OCRDraftData | null>(null);
   const [backendSections, setBackendSections] = useState<CVSection[] | null>(null);
+  const [layoutDebug, setLayoutDebug] = useState<LayoutDebugInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
@@ -174,6 +218,7 @@ export function OCRPreviewModal({
     setRawBlocks([]);
     setDraftData(null);
     setBackendSections(null);
+    setLayoutDebug(null);
     setError(null);
   }, []);
 
@@ -206,6 +251,14 @@ export function OCRPreviewModal({
       const parsedDraft = transformParsedCVToDraft(uploadResponse.data);
       setRawBlocks(blocks);
       setBackendSections(uploadResponse.builder_sections || null);
+      setLayoutDebug({
+        documentMode: uploadResponse.layout?.profile?.document_mode,
+        pageModes: (uploadResponse.layout?.profile?.pages || uploadResponse.layout?.pages || []).map((page) => ({
+          page: page.page,
+          mode: page.mode || page.layout_mode || "unknown",
+          splitX: page.split_x,
+        })),
+      });
       setDraftData(hasMeaningfulDraftData(parsedDraft) ? parsedDraft : null);
       setStep("preview");
     } catch (err) {
@@ -223,30 +276,15 @@ export function OCRPreviewModal({
   // ── Confirm edited blocks → parent ────────────────────────
   const handleConfirm = useCallback(
     (editedBlocks: RawOCRBlock[]) => {
-      const blocksChanged =
-        editedBlocks.length !== rawBlocks.length ||
-        editedBlocks.some((block, index) => {
-          const original = rawBlocks[index];
-          return (
-            !original ||
-            block.id !== original.id ||
-            block.text !== original.text ||
-            block.rect.x !== original.rect.x ||
-            block.rect.y !== original.rect.y ||
-            block.rect.width !== original.rect.width ||
-            block.rect.height !== original.rect.height
-          );
-        });
-
       const sections: CVSection[] =
-        !blocksChanged && backendSections && backendSections.length > 0
+        backendSections && backendSections.length > 0
           ? backendSections
           : transformRawBlocksToSections(editedBlocks, draftData);
 
       onConfirm(sections);
       resetState();
     },
-    [backendSections, draftData, onConfirm, rawBlocks, resetState]
+    [backendSections, draftData, onConfirm, resetState]
   );
 
   const handleCancelDraft = useCallback(() => resetState(), [resetState]);
@@ -371,6 +409,7 @@ export function OCRPreviewModal({
           file={selectedFile}
           initialBlocks={rawBlocks}
           parsedDraft={draftData}
+          layoutDebug={layoutDebug}
           onConfirm={handleConfirm}
           onCancel={handleCancelDraft}
         />

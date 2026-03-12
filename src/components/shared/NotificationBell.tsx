@@ -171,7 +171,7 @@ const NotificationBell: React.FC = () => {
         whileHover="hover"
         variants={bellVariants}
         className="relative flex items-center justify-center p-2.5 rounded-lg transition-all duration-200 hover:bg-slate-900/5 active:scale-95"
-        aria-label="Notifications"
+        aria-label="Thông báo"
       >
         <Bell className="w-5 h-5 text-slate-600" strokeWidth={2.5} />
 
@@ -295,10 +295,10 @@ const NotificationBell: React.FC = () => {
                     <CheckCircle className="w-12 h-12 text-slate-300" strokeWidth={1.5} />
                   </motion.div>
                   <p className="text-sm font-medium text-slate-500 tracking-tight">
-                    You're all caught up
+                    Bạn đã xem hết thông báo
                   </p>
                   <p className="text-xs text-slate-400/70 mt-1">
-                    No new notifications
+                    Hiện chưa có thông báo mới
                   </p>
                 </motion.div>
               )}

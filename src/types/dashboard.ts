@@ -1,5 +1,13 @@
 
-export type ApplicationStatus = 'pending' | 'viewed' | 'interviewing' | 'offered' | 'rejected';
+export type ApplicationStatus =
+  | 'pending'
+  | 'viewed'
+  | 'interviewing'
+  | 'offered'
+  | 'rejected'
+  | 'new'
+  | 'interview'
+  | 'hired';
 
 export interface DashboardStats {
   totalApplied: number;

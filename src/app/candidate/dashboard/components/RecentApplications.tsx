@@ -70,7 +70,9 @@ function ApplicationRow({ app }: { app: Application }) {
     rejected: { label: "Từ chối", color: "text-slate-400 bg-slate-100" },
   };
 
-  const config = statusConfig[app.status] || statusConfig.pending;
+  const config =
+    (statusConfig as Record<string, { label: string; color: string }>)[app.status] ||
+    statusConfig.pending;
   const dateStr = new Date(app.created_at).toLocaleDateString('vi-VN');
 
   return (

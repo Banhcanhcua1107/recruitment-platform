@@ -6,8 +6,9 @@ import { companySlug } from "@/lib/companies";
 import { getJobsByCompanySlug } from "@/lib/companies";
 
 // ── Static params for SSG ───────────────────────
-export function generateStaticParams() {
-  return getAllJobs().map((j) => ({ id: j.id }));
+export async function generateStaticParams() {
+  const jobs = await getAllJobs();
+  return jobs.map((j) => ({ id: j.id }));
 }
 
 // ── SEO metadata ────────────────────────────────
@@ -17,7 +18,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const job = getJobById(id);
+  const job = await getJobById(id);
   if (!job)
     return { title: "Không tìm thấy việc làm | TalentFlow" };
 
@@ -39,11 +40,11 @@ export default async function JobDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const job = getJobById(id);
+  const job = await getJobById(id);
   if (!job) notFound();
 
   const slug = companySlug(job.company_name);
-  const relatedJobs = getJobsByCompanySlug(slug)
+  const relatedJobs = (await getJobsByCompanySlug(slug))
     .filter((j) => j.id !== job.id)
     .slice(0, 6);
   const initial = job.company_name?.charAt(0) ?? "?";

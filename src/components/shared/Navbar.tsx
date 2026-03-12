@@ -1,9 +1,11 @@
 "use client";
+
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { User } from "@supabase/supabase-js";
+import { createClient } from "@/utils/supabase/client";
+import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
 import NotificationBell from "./NotificationBell";
 
 interface Profile {
@@ -12,10 +14,15 @@ interface Profile {
   role: string | null;
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  GUEST: "Khách",
+  hr: "Nhà tuyển dụng",
+  candidate: "Ứng viên",
+};
+
 export default function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
@@ -26,32 +33,35 @@ export default function Navbar() {
   useEffect(() => {
     const fetchUser = async () => {
       setMounted(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUser(user);
+
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+
+      if (authUser) {
+        setUser(authUser);
         const { data: profileData } = await supabase
           .from("profiles")
           .select("*")
-          .eq("id", user.id)
+          .eq("id", authUser.id)
           .single();
+
         setProfile(profileData);
       }
+
       setLoading(false);
     };
-    fetchUser();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    void fetchUser();
+  }, [supabase]);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/");
-    window.location.reload();
+    await signOutAndRedirect(supabase, "/login");
   };
 
   const role = profile?.role || "GUEST";
   const isLoggedIn = !!user && !loading;
 
-  // 1. Định nghĩa các tập Menu
   const guestLinks = [
     { name: "Tìm việc làm", href: "/jobs" },
     { name: "Công ty", href: "/companies" },
@@ -69,9 +79,9 @@ export default function Navbar() {
     { name: "Bảng điều khiển", href: "/hr/dashboard" },
     { name: "Tin tuyển dụng", href: "/hr/jobs" },
     { name: "Ứng viên", href: "/hr/candidates" },
+    { name: "Hồ sơ công ty", href: "/hr/company" },
   ];
 
-  // 2. Chọn menu hiển thị
   let currentLinks = guestLinks;
   if (mounted && isLoggedIn) {
     if (role === "hr") currentLinks = hrLinks;
@@ -80,44 +90,55 @@ export default function Navbar() {
     }
   }
 
+  const renderAuthButtons = () => (
+    <div className="flex items-center gap-3">
+      <Link
+        href="/login"
+        className="flex h-12 items-center rounded-xl border-2 border-primary px-6 font-bold text-primary transition-all hover:bg-primary/5"
+      >
+        Đăng nhập
+      </Link>
+      <Link
+        href="/register"
+        className="flex h-12 items-center rounded-xl bg-primary px-7 font-bold text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary/90"
+      >
+        Đăng ký
+      </Link>
+    </div>
+  );
+
+  const renderLinks = (links: Array<{ name: string; href: string }>) => (
+    <nav className="flex items-center gap-6 lg:gap-8">
+      {links.map((link) => (
+        <Link
+          key={link.href}
+          href={link.href}
+          className={`whitespace-nowrap text-[17px] font-bold transition-colors ${
+            pathname === link.href ? "text-[#2563eb]" : "text-[#334155] hover:text-[#2563eb]"
+          }`}
+        >
+          {link.name}
+        </Link>
+      ))}
+    </nav>
+  );
+
   if (!mounted) {
     return (
-      <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/95 backdrop-blur-md h-20 lg:h-24 flex items-center font-['Manrope']">
-        <div className="max-w-[1536px] w-[92%] mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-4 shrink-0">
-            <div className="size-10 lg:size-10 flex items-center justify-center">
-              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain scale-150" />
+      <header className="sticky top-0 z-50 flex h-20 w-full items-center border-b border-slate-100 bg-white/95 font-['Manrope'] backdrop-blur-md lg:h-24">
+        <div className="mx-auto flex w-[92%] max-w-[1536px] items-center justify-between">
+          <Link href="/" className="flex shrink-0 items-center gap-4">
+            <div className="flex size-10 items-center justify-center">
+              <img src="/logo.png" alt="Logo TalentFlow" className="h-full w-full scale-150 object-contain" />
             </div>
-            <h2 className="text-slate-900 text-2xl lg:text-3xl font-black tracking-tighter">TalentFlow</h2>
+            <h2 className="text-2xl font-black tracking-tighter text-slate-900 lg:text-3xl">
+              TalentFlow
+            </h2>
           </Link>
-          <div className="flex items-center gap-6 lg:gap-10 flex-1 justify-between ml-10">
-            <nav className="flex items-center gap-6 lg:gap-8">
-              {guestLinks.map((link) => (
-                <Link 
-                  key={link.href} 
-                  href={link.href} 
-                  className={`text-[17px] font-bold transition-colors whitespace-nowrap ${
-                    pathname === link.href ? "text-[#2563eb]" : "text-[#334155] hover:text-[#2563eb]"
-                  }`}
-                >
-                  {link.name}
-                </Link>
-              ))}
-            </nav>
-            <div className="flex items-center gap-3">
-              <Link 
-                href="/login" 
-                className="px-6 h-12 flex items-center border-2 border-primary text-primary rounded-xl font-bold hover:bg-primary/5 transition-all"
-              >
-                Đăng nhập
-              </Link>
-              <Link 
-                href="/register" 
-                className="px-7 h-12 flex items-center bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
-              >
-                Đăng ký
-              </Link>
-            </div>
+
+          <div className="ml-10 flex flex-1 items-center justify-between gap-6 lg:gap-10">
+            {renderLinks(guestLinks)}
+            {renderAuthButtons()}
           </div>
         </div>
       </header>
@@ -125,110 +146,86 @@ export default function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-slate-100 bg-white/95 backdrop-blur-md h-20 lg:h-24 flex items-center font-['Manrope']">
-      <div className="max-w-[1536px] w-[92%] mx-auto flex items-center justify-between">
-        
-        {/* LOGO */}
-        <Link href="/" className="flex items-center gap-4 shrink-0">
-          <div className="size-10 lg:size-10 flex items-center justify-center">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain scale-150" />
+    <header className="sticky top-0 z-50 flex h-20 w-full items-center border-b border-slate-100 bg-white/95 font-['Manrope'] backdrop-blur-md lg:h-24">
+      <div className="mx-auto flex w-[92%] max-w-[1536px] items-center justify-between">
+        <Link href="/" className="flex shrink-0 items-center gap-4">
+          <div className="flex size-10 items-center justify-center">
+            <img src="/logo.png" alt="Logo TalentFlow" className="h-full w-full scale-150 object-contain" />
           </div>
-          <h2 className="text-slate-900 text-2xl lg:text-3xl font-black tracking-tighter">TalentFlow</h2>
+          <h2 className="text-2xl font-black tracking-tighter text-slate-900 lg:text-3xl">
+            TalentFlow
+          </h2>
         </Link>
 
-        {/* CỤM MENU VÀ NÚT TÀI KHOẢN */}
         <div className="flex items-center gap-6 lg:gap-10">
-          
-          <nav className="flex items-center gap-6 lg:gap-8">
-            {currentLinks.map((link) => (
-              <Link 
-                key={link.href} 
-                href={link.href} 
-                className={`text-[17px] font-bold transition-colors whitespace-nowrap ${
-                  pathname === link.href ? "text-[#2563eb]" : "text-[#334155] hover:text-[#2563eb]"
-                }`}
-              >
-                {link.name}
-              </Link>
-            ))}
-          </nav>
+          {renderLinks(currentLinks)}
 
-          <div className="flex items-center gap-4 justify-end min-w-[160px]">
-          {loading ? (
-            /* Trong lúc load thì hiện Spinner nhỏ thay vì để trắng cả header */
-            <div className="size-6 border-2 border-slate-200 border-t-primary rounded-full animate-spin"></div>
-          ) : !isLoggedIn ? (
-            /* CHƯA ĐĂNG NHẬP */
-            <div className="flex items-center gap-3">
-            {/* Nút Đăng nhập giờ đã giống nút Đăng ký */}
-            <Link 
-              href="/login" 
-            className="px-6 h-12 flex items-center border-2 border-primary text-primary rounded-xl font-bold hover:bg-primary/5 transition-all"
-            >
-              Đăng nhập
-            </Link>
+          <div className="flex min-w-[160px] items-center justify-end gap-4">
+            {loading ? (
+              <div className="size-6 animate-spin rounded-full border-2 border-slate-200 border-t-primary" />
+            ) : !isLoggedIn ? (
+              renderAuthButtons()
+            ) : (
+              <div className="flex items-center gap-2">
+                <NotificationBell />
 
-            <Link 
-              href="/register" 
-              className="px-7 h-12 flex items-center bg-primary text-white rounded-xl font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
-            >
-              Đăng ký
-            </Link>
-          </div>
-          ) : (
-            /* ĐÃ ĐĂNG NHẬP */
-            <div className="flex items-center gap-2">
-              {/* Notification Bell */}
-              <NotificationBell />
-              
-              {/* Profile Dropdown */}
-              <div className="relative">
-                <button 
-                  onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                  className="flex items-center gap-2.5 p-1 pr-3 rounded-full border border-slate-200 hover:border-primary/50 transition-all bg-white"
-                >
-                <img 
-                  src={profile?.avatar_url || "https://placehold.co/100x100?text=U"} 
-                  className="size-9 rounded-full object-cover border border-slate-100" 
-                  alt="User" 
-                />
-                <span className="hidden xl:block font-bold text-slate-700 text-sm">
-                  {profile?.full_name?.split(" ").pop() || "Thành viên"}
-                </span>
-                <span className={`material-symbols-outlined text-slate-400 text-lg transition-transform ${showProfileDropdown ? 'rotate-180' : ''}`}>
-                  expand_more
-                </span>
-              </button>
-
-              {showProfileDropdown && (
-                <>
-                  <div className="fixed inset-0 z-0" onClick={() => setShowProfileDropdown(false)}></div>
-                  <div className="absolute right-0 mt-3 w-52 bg-white rounded-2xl shadow-2xl border border-slate-100 p-1.5 z-50">
-                    <div className="px-4 py-2 mb-1 border-b border-slate-50">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{role}</p>
-                    </div>
-                    <Link 
-                      href={role === "GUEST" ? "/role-selection" : `/${role}/dashboard`} 
-                      onClick={() => setShowProfileDropdown(false)} 
-                      className="flex items-center gap-3 p-3 hover:bg-primary/5 rounded-xl transition-all font-bold text-slate-600 text-sm"
+                <div className="relative">
+                  <button
+                    onClick={() => setShowProfileDropdown((value) => !value)}
+                    className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-white p-1 pr-3 transition-all hover:border-primary/50"
+                  >
+                    <img
+                      src={profile?.avatar_url || "https://placehold.co/100x100?text=U"}
+                      className="size-9 rounded-full border border-slate-100 object-cover"
+                      alt="Ảnh đại diện người dùng"
+                    />
+                    <span className="hidden text-sm font-bold text-slate-700 xl:block">
+                      {profile?.full_name?.split(" ").pop() || "Thành viên"}
+                    </span>
+                    <span
+                      className={`material-symbols-outlined text-lg text-slate-400 transition-transform ${
+                        showProfileDropdown ? "rotate-180" : ""
+                      }`}
                     >
-                      <span className="material-symbols-outlined text-lg">dashboard</span> 
-                      {role === "GUEST" ? "Chọn vai trò" : "Dashboard"}
-                    </Link>
-                    <hr className="my-1 border-slate-50" />
-                    <button 
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-3 p-3 hover:bg-red-50 rounded-xl transition-all font-bold text-red-500 text-sm"
-                    >
-                      <span className="material-symbols-outlined text-lg">logout</span> Đăng xuất
-                    </button>
-                  </div>
-                </>
-              )}
+                      expand_more
+                    </span>
+                  </button>
+
+                  {showProfileDropdown ? (
+                    <>
+                      <div
+                        className="fixed inset-0 z-0"
+                        onClick={() => setShowProfileDropdown(false)}
+                      />
+                      <div className="absolute right-0 z-50 mt-3 w-52 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-2xl">
+                        <div className="mb-1 border-b border-slate-50 px-4 py-2">
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            {ROLE_LABELS[role] ?? role}
+                          </p>
+                        </div>
+                        <Link
+                          href={role === "GUEST" ? "/role-selection" : `/${role}/dashboard`}
+                          onClick={() => setShowProfileDropdown(false)}
+                          className="flex items-center gap-3 rounded-xl p-3 text-sm font-bold text-slate-600 transition-all hover:bg-primary/5"
+                        >
+                          <span className="material-symbols-outlined text-lg">dashboard</span>
+                          {role === "GUEST" ? "Chọn vai trò" : "Bảng điều khiển"}
+                        </Link>
+                        <hr className="my-1 border-slate-50" />
+                        <button
+                          onClick={handleLogout}
+                          className="flex w-full items-center gap-3 rounded-xl p-3 text-sm font-bold text-red-500 transition-all hover:bg-red-50"
+                        >
+                          <span className="material-symbols-outlined text-lg">logout</span>
+                          Đăng xuất
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

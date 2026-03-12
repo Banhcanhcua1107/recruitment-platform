@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import { signInWithGoogle } from "@/utils/supabase/auth-helpers";
 import { login } from "@/app/(auth)/actions";
 
 export default function LoginPage() {
@@ -11,12 +12,7 @@ export default function LoginPage() {
 
   // 1. Google Login
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    await signInWithGoogle(supabase);
   };
 
   // 2. Xử lý Đăng nhập bằng Email/Password

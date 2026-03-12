@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import { signInWithGoogle } from "@/utils/supabase/auth-helpers";
 import { signup, verifyOtp } from "@/app/(auth)/actions";
 
 export default function RegisterPage() {
@@ -19,12 +20,7 @@ export default function RegisterPage() {
 
   // 2. Google Register
   const handleGoogleRegister = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    await signInWithGoogle(supabase);
   };
 
   // 3. Xử lý Đăng ký bằng Email

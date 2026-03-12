@@ -74,6 +74,7 @@ export interface RawOCRBlock {
   text: string;
   label?: string;
   confidence: number;
+  column?: "left" | "right" | "full_width";
   rect: { x: number; y: number; width: number; height: number };
 }
 
@@ -522,13 +523,48 @@ function formatBucketLines(
     .trim();
 }
 
+function sortRawBlocksByLayout(blocks: RawOCRBlock[]): RawOCRBlock[] {
+  const columnRank = (block: RawOCRBlock): number => {
+    if (block.column === "full_width") return block.rect.y < 20 ? 0 : 3;
+    if (block.column === "left") return 1;
+    if (block.column === "right") return 2;
+    return 1;
+  };
+
+  return [...blocks].sort((a, b) => {
+    const rankDiff = columnRank(a) - columnRank(b);
+    if (rankDiff !== 0) return rankDiff;
+    return a.rect.y - b.rect.y || a.rect.x - b.rect.x;
+  });
+}
+
+function extractSkillItems(
+  entries: Array<{ text: string; x: number }>
+): OCRDraftData["skills"] {
+  const skills: OCRDraftData["skills"] = [];
+  for (const entry of entries) {
+    const cleaned = cleanOCRText(entry.text).replace(/^[•\-*]+\s*/, "").trim();
+    if (!cleaned) continue;
+    const chunks = cleaned.split(/[,/|]+/).map((chunk) => chunk.trim()).filter(Boolean);
+    for (const chunk of chunks.length > 1 ? chunks : [cleaned]) {
+      if (chunk.length < 2) continue;
+      skills.push({ id: uuidv4(), name: chunk, level: 70 });
+    }
+  }
+
+  return skills.filter(
+    (skill, index, source) =>
+      source.findIndex(
+        (candidate) => candidate.name.toLowerCase() === skill.name.toLowerCase()
+      ) === index
+  );
+}
+
 export function transformRawBlocksToSections(
   blocks: RawOCRBlock[],
   draft?: OCRDraftData | null
 ): CVSection[] {
-  const orderedBlocks = [...blocks].sort(
-    (a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x
-  );
+  const orderedBlocks = sortRawBlocksByLayout(blocks);
 
   const buckets: Record<OCRSectionBucket, Array<{ text: string; x: number }>> = {
     objective: [],
@@ -606,33 +642,49 @@ export function transformRawBlocksToSections(
     });
   }
 
-  const sections: CVSection[] = [
-    {
-      id: uuidv4(),
-      type: "header",
-      isVisible: true,
-      containerId: "main-column",
-      data: {
-        fullName: inferredName,
-        title: inferredTitle,
-      },
-    },
-    {
-      id: uuidv4(),
-      type: "personal_info",
-      isVisible: true,
-      containerId: "main-column",
-      data: {
-        email: contact.email,
-        phone: contact.phone,
-        address: contact.address,
-        socials: contact.socials,
-      },
-    },
-  ];
-
   const objectiveText = formatBucketLines(buckets.objective);
-  if (objectiveText) {
+  const derivedDraft: OCRDraftData = {
+    fullName: inferredName || draft?.fullName || "",
+    title: inferredTitle || draft?.title || "",
+    email: contact.email || draft?.email || "",
+    phone: contact.phone || draft?.phone || "",
+    address: contact.address || draft?.address || "",
+    summary: objectiveText || draft?.summary || "",
+    experiences: draft?.experiences ?? [],
+    educations: draft?.educations ?? [],
+    skills: buckets.skills.length > 0 ? extractSkillItems(buckets.skills) : (draft?.skills ?? []),
+    projects: draft?.projects ?? [],
+    certifications: draft?.certifications ?? [],
+  };
+
+  const sections: CVSection[] = hasMeaningfulDraftData(derivedDraft)
+    ? transformDraftToSections(derivedDraft)
+    : [
+        {
+          id: uuidv4(),
+          type: "header",
+          isVisible: true,
+          containerId: "main-column",
+          data: {
+            fullName: inferredName,
+            title: inferredTitle,
+          },
+        },
+        {
+          id: uuidv4(),
+          type: "personal_info",
+          isVisible: true,
+          containerId: "main-column",
+          data: {
+            email: contact.email,
+            phone: contact.phone,
+            address: contact.address,
+            socials: contact.socials,
+          },
+        },
+      ];
+
+  if (!hasMeaningfulDraftData(derivedDraft) && objectiveText) {
     sections.push({
       id: uuidv4(),
       type: "summary",
@@ -643,12 +695,18 @@ export function transformRawBlocksToSections(
     });
   }
 
-  const customSectionMap: Array<[OCRSectionBucket, string]> = [
+  const _deprecatedCustomSectionMap: Array<[OCRSectionBucket, string]> = [
     ["skills", "Kỹ năng"],
     ["education", "Học vấn"],
     ["experience", "Kinh nghiệm làm việc"],
     ["projects", "Dự án"],
     ["certifications", "Chứng chỉ"],
+    ["activities", "Hoạt động"],
+    ["interests", "Sở thích"],
+    ["other", "Nội dung khác"],
+  ];
+
+  const customSectionMap: Array<[OCRSectionBucket, string]> = [
     ["activities", "Hoạt động"],
     ["interests", "Sở thích"],
     ["other", "Nội dung khác"],

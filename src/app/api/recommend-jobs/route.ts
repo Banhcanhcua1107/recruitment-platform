@@ -200,7 +200,7 @@ export async function POST(request: Request) {
     }
 
     // ---------- 2. Load all jobs ----------
-    const allJobs: Job[] = getAllJobs();
+    const allJobs: Job[] = await getAllJobs();
 
     // ---------- 3. Pre-filter + Ollama (with local pipeline fallback) ----------
     const TOP_K = 6;

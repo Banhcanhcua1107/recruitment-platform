@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -35,8 +36,7 @@ export default function RoleSelectionPage() {
   };
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
+    await signOutAndRedirect(supabase, "/login");
   };
 
   return (

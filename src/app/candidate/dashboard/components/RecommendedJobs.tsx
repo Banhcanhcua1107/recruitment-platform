@@ -4,7 +4,6 @@ import React, { useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import type { Job as FullJob } from "@/types/job";
 import { Job as DashJob } from "@/types/dashboard";
-import allJobsData from "@/data/real_jobs_data.json";
 
 /* ─── Skill display filter (mirrors server-side isDisplayableSkill) ─── */
 const JUNK_TAG_SET = new Set([
@@ -273,9 +272,9 @@ export default function RecommendedJobs({
 
   /* ── Pick 6 random jobs for default display ── */
   const randomJobs = useMemo(() => {
-    const shuffled = [...(allJobsData as FullJob[])].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 6) as DashJob[];
-  }, []);
+    const shuffled = [...jobs].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 6);
+  }, [jobs]);
 
   /* ── Load cached recommendations on mount ── */
   useEffect(() => {

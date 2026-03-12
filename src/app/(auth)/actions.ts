@@ -133,7 +133,7 @@ export async function updateRole(role: 'candidate' | 'employer') {
 // 4. SIGNOUT
 export async function signout() {
     const supabase = await createClient()
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'global' })
     revalidatePath('/', 'layout')
     redirect('/login')
 }

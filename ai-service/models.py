@@ -87,6 +87,7 @@ class OCRBlockModel(BaseModel):
     bbox: list[list[int]]
     confidence: float
     page: int = 1
+    column: Optional[str] = None
     rect: dict[str, float] = Field(
         default_factory=dict,
         description="{x, y, width, height} in 0–100 percent of image size",
@@ -97,6 +98,10 @@ class OCRPageModel(BaseModel):
     page: int
     image_width: int
     image_height: int
+    blocks: list[OCRBlockModel] = Field(default_factory=list)
+
+
+class ParseOCRBlocksRequest(BaseModel):
     blocks: list[OCRBlockModel] = Field(default_factory=list)
 
 
@@ -129,6 +134,7 @@ class UploadCVResponse(BaseModel):
     data: ParseCVDataModel = Field(default_factory=ParseCVDataModel)
     detected_sections: list[DetectedSectionModel] = Field(default_factory=list)
     builder_sections: list[dict[str, Any]] = Field(default_factory=list)
+    layout: dict[str, Any] = Field(default_factory=dict)
     raw_text: str = ""
 
 
