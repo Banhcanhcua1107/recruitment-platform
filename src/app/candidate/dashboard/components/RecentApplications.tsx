@@ -1,33 +1,45 @@
-
-import React from "react";
 import Link from "next/link";
-import { Application } from "@/types/dashboard";
+import type { Application } from "@/types/dashboard";
 
 interface RecentApplicationsProps {
   applications: Application[];
   loading?: boolean;
 }
 
-export default function RecentApplications({ applications, loading }: RecentApplicationsProps) {
+const statusConfig: Record<
+  string,
+  { label: string; color: string }
+> = {
+  applied: { label: "Đã nộp", color: "text-sky-700 bg-sky-50" },
+  reviewing: { label: "Đang xem xét", color: "text-amber-700 bg-amber-50" },
+  interview: { label: "Phỏng vấn", color: "text-violet-700 bg-violet-50" },
+  offer: { label: "Đề nghị", color: "text-orange-700 bg-orange-50" },
+  hired: { label: "Đã tuyển", color: "text-emerald-700 bg-emerald-50" },
+  rejected: { label: "Từ chối", color: "text-rose-700 bg-rose-50" },
+};
+
+export default function RecentApplications({
+  applications,
+  loading,
+}: RecentApplicationsProps) {
   if (loading) {
     return (
-      <div className="bg-white rounded-[40px] border border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.04)] h-[400px] animate-pulse"></div>
+      <div className="h-[400px] rounded-[40px] border border-slate-100 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.04)] animate-pulse" />
     );
   }
 
-  // Empty State
   if (applications.length === 0) {
     return (
-      <div className="bg-white rounded-[40px] border border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.04)] p-10 text-center flex flex-col items-center justify-center min-h-[400px]">
-        <div className="size-24 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-             <span className="material-symbols-outlined text-4xl text-slate-300">work_off</span>
+      <div className="flex min-h-[400px] flex-col items-center justify-center rounded-[40px] border border-slate-100 bg-white p-10 text-center shadow-[0_20px_50px_rgba(0,0,0,0.04)]">
+        <div className="mb-6 flex size-24 items-center justify-center rounded-full bg-slate-50">
+          <span className="material-symbols-outlined text-4xl text-slate-300">work_off</span>
         </div>
-        <h3 className="text-2xl font-black text-slate-900 mb-2">Chưa có ứng tuyển nào</h3>
-        <p className="text-slate-500 mb-8 max-w-md">
-          Bạn chưa nộp hồ sơ cho công việc nào. Hãy bắt đầu tìm kiếm cơ hội nghề nghiệp phù hợp với bạn ngay hôm nay.
+        <h3 className="mb-2 text-2xl font-black text-slate-900">Chưa có đơn ứng tuyển</h3>
+        <p className="mb-8 max-w-md text-slate-500">
+          Bạn chưa nộp hồ sơ cho công việc nào. Hãy chọn một vị trí phù hợp và nộp CV trực tiếp từ hệ thống.
         </p>
         <Link href="/jobs">
-          <button className="px-8 py-3 bg-primary text-white font-black rounded-xl hover:bg-primary-hover transition-all">
+          <button className="rounded-xl bg-primary px-8 py-3 font-black text-white transition-all hover:bg-primary-hover">
             Khám phá việc làm
           </button>
         </Link>
@@ -36,23 +48,27 @@ export default function RecentApplications({ applications, loading }: RecentAppl
   }
 
   return (
-    <div className="bg-white rounded-[40px] border border-slate-100 shadow-[0_20px_50px_rgba(0,0,0,0.04)] overflow-hidden">
-      <div className="px-10 py-8 border-b border-slate-50 flex justify-between items-center">
-        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Ứng tuyển gần đây</h3>
-        <Link href="/candidate/applications" className="text-primary font-black hover:underline text-lg">Xem tất cả</Link>
+    <div className="overflow-hidden rounded-[40px] border border-slate-100 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between border-b border-slate-50 px-10 py-8">
+        <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900">
+          Ứng tuyển gần đây
+        </h3>
+        <Link href="/candidate/applications" className="text-lg font-black text-primary hover:underline">
+          Xem tất cả
+        </Link>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-400 font-black text-xs uppercase tracking-widest">
+          <thead className="bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-400">
             <tr>
-              <th className="px-10 py-5">Vị trí & Công ty</th>
+              <th className="px-10 py-5">Vị trí và công ty</th>
               <th className="px-10 py-5">Ngày nộp</th>
               <th className="px-10 py-5">Trạng thái</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {applications.map((app) => (
-              <ApplicationRow key={app.id} app={app} />
+            {applications.map((application) => (
+              <ApplicationRow key={application.id} app={application} />
             ))}
           </tbody>
         </table>
@@ -62,39 +78,35 @@ export default function RecentApplications({ applications, loading }: RecentAppl
 }
 
 function ApplicationRow({ app }: { app: Application }) {
-  const statusConfig = {
-    pending: { label: "Đã gửi", color: "text-blue-600 bg-blue-50" },
-    viewed: { label: "Đã xem", color: "text-purple-600 bg-purple-50" },
-    interviewing: { label: "Phỏng vấn", color: "text-orange-600 bg-orange-50" },
-    offered: { label: "Đề nghị", color: "text-green-600 bg-green-50" },
-    rejected: { label: "Từ chối", color: "text-slate-400 bg-slate-100" },
-  };
-
-  const config =
-    (statusConfig as Record<string, { label: string; color: string }>)[app.status] ||
-    statusConfig.pending;
-  const dateStr = new Date(app.created_at).toLocaleDateString('vi-VN');
+  const config = statusConfig[app.status] ?? statusConfig.applied;
 
   return (
-    <tr className="hover:bg-slate-50 transition-all cursor-default">
+    <tr className="cursor-default transition-all hover:bg-slate-50">
       <td className="px-10 py-6">
         <div className="flex items-center gap-5">
-           {app.job.logo_url && app.job.logo_url !== "https://via.placeholder.com/150" ? (
-               <img src={app.job.logo_url} alt={app.job.company_name} className="size-14 rounded-2xl object-cover border border-slate-100" />
-           ) : (
-             <div className="size-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-2xl shadow-lg uppercase">
-               {app.job.company_name.charAt(0)}
-             </div>
-           )}
+          {app.job.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={app.job.logo_url}
+              alt={app.job.company_name}
+              className="size-14 rounded-2xl border border-slate-100 object-cover"
+            />
+          ) : (
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-slate-900 text-2xl font-black uppercase text-white shadow-lg">
+              {app.job.company_name.charAt(0)}
+            </div>
+          )}
           <div>
-            <p className="font-black text-slate-900 text-lg group-hover:text-primary transition-colors">{app.job.title}</p>
-            <p className="text-slate-400 font-bold text-base mt-0.5">{app.job.company_name}</p>
+            <p className="text-lg font-black text-slate-900">{app.job.title}</p>
+            <p className="mt-0.5 text-base font-bold text-slate-400">{app.job.company_name}</p>
           </div>
         </div>
       </td>
-      <td className="px-10 py-6 font-bold text-slate-500 text-base">{dateStr}</td>
+      <td className="px-10 py-6 text-base font-bold text-slate-500">
+        {new Date(app.created_at).toLocaleDateString("vi-VN")}
+      </td>
       <td className="px-10 py-6">
-        <span className={`px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest ${config.color}`}>
+        <span className={`rounded-full px-5 py-2 text-xs font-black uppercase tracking-widest ${config.color}`}>
           {config.label}
         </span>
       </td>

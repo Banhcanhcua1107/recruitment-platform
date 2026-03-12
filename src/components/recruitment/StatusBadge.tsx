@@ -23,15 +23,30 @@ const styles: Record<
     className: "border-amber-200 bg-amber-50 text-amber-700",
     dot: "bg-amber-500",
   },
+  applied: {
+    label: "Đã nộp",
+    className: "border-sky-200 bg-sky-50 text-sky-700",
+    dot: "bg-sky-500",
+  },
   new: {
     label: "Mới",
     className: "border-sky-200 bg-sky-50 text-sky-700",
     dot: "bg-sky-500",
   },
+  reviewing: {
+    label: "Đang xem xét",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+    dot: "bg-amber-500",
+  },
   interview: {
     label: "Phỏng vấn",
     className: "border-violet-200 bg-violet-50 text-violet-700",
     dot: "bg-violet-500",
+  },
+  offer: {
+    label: "Đề nghị",
+    className: "border-orange-200 bg-orange-50 text-orange-700",
+    dot: "bg-orange-500",
   },
   hired: {
     label: "Đã tuyển",

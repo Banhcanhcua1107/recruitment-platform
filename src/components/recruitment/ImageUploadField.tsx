@@ -85,6 +85,7 @@ export function ImageUploadField({
           type="file"
           accept="image/*"
           className="hidden"
+          aria-label="Upload image file"
           onChange={(event) => {
             const file = event.target.files?.[0] ?? null;
             void handleFileSelected(file);

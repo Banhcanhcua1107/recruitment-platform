@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import type { Job } from "@/types/job";
 import { toSlug } from "@/lib/slug";
+import { createClient } from "@/utils/supabase/client";
 
 // ────────────────────────────────────────────────
 //  HELPERS
@@ -81,6 +82,47 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
   const [sort, setSort] = React.useState<SortKey>("newest");
   const [page, setPage] = React.useState(1);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [employerCompanyName, setEmployerCompanyName] = React.useState("");
+  const [onlyMyCompanyJobs, setOnlyMyCompanyJobs] = React.useState(false);
+
+  React.useEffect(() => {
+    let mounted = true;
+
+    async function loadEmployerCompany() {
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          return;
+        }
+
+        const { data: employer } = await supabase
+          .from("employers")
+          .select("company_name")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        const nextCompany = String(employer?.company_name ?? "").trim();
+        if (
+          mounted &&
+          nextCompany &&
+          nextCompany.toLowerCase() !== "chưa cập nhật tên công ty"
+        ) {
+          setEmployerCompanyName(nextCompany);
+        }
+      } catch {
+        // Ignore client-side auth lookup failures on public page.
+      }
+    }
+
+    void loadEmployerCompany();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const activeFilterCount =
     (q ? 1 : 0) +
@@ -90,7 +132,8 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
     selectedIndustries.length +
     (salaryMin ? 1 : 0) +
     (salaryMax ? 1 : 0) +
-    (hideUnknownSalary ? 1 : 0);
+    (hideUnknownSalary ? 1 : 0) +
+    (onlyMyCompanyJobs ? 1 : 0);
 
   function clearAll() {
     setQ("");
@@ -101,6 +144,7 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
     setSalaryMin("");
     setSalaryMax("");
     setHideUnknownSalary(false);
+    setOnlyMyCompanyJobs(false);
     setSort("newest");
   }
 
@@ -141,6 +185,12 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
       );
     }
 
+    if (onlyMyCompanyJobs && employerCompanyName) {
+      list = list.filter(
+        (j) => normalize(j.company_name) === normalize(employerCompanyName)
+      );
+    }
+
     const sMin = salaryMin ? parseFloat(salaryMin) : null;
     const sMax = salaryMax ? parseFloat(salaryMax) : null;
     if (sMin !== null || sMax !== null || hideUnknownSalary) {
@@ -166,14 +216,14 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
     }
 
     return list;
-  }, [jobs, q, selectedLocation, selectedLevels, selectedTypes, selectedIndustries, salaryMin, salaryMax, hideUnknownSalary, sort]);
+  }, [jobs, q, selectedLocation, selectedLevels, selectedTypes, selectedIndustries, salaryMin, salaryMax, hideUnknownSalary, sort, onlyMyCompanyJobs, employerCompanyName]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   React.useEffect(() => {
     setPage(1);
-  }, [q, selectedLocation, selectedLevels, selectedTypes, selectedIndustries, salaryMin, salaryMax, hideUnknownSalary, sort]);
+  }, [q, selectedLocation, selectedLevels, selectedTypes, selectedIndustries, salaryMin, salaryMax, hideUnknownSalary, sort, onlyMyCompanyJobs]);
 
   // Active filter chips
   const activeChips: { label: string; onRemove: () => void }[] = [];
@@ -185,6 +235,7 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
   if (salaryMin) activeChips.push({ label: `Từ ${salaryMin} Tr`, onRemove: () => setSalaryMin("") });
   if (salaryMax) activeChips.push({ label: `Đến ${salaryMax} Tr`, onRemove: () => setSalaryMax("") });
   if (hideUnknownSalary) activeChips.push({ label: "Ẩn lương thỏa thuận", onRemove: () => setHideUnknownSalary(false) });
+  if (onlyMyCompanyJobs && employerCompanyName) activeChips.push({ label: `Job test của ${employerCompanyName}`, onRemove: () => setOnlyMyCompanyJobs(false) });
 
   // ────────────────────────────────────────────
   //  SIDEBAR CONTENT (shared desktop + drawer)
@@ -203,6 +254,25 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
           </button>
         )}
       </div>
+
+      {employerCompanyName && (
+        <FilterSection title="Chế độ test" icon="science">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={onlyMyCompanyJobs}
+              onChange={(e) => setOnlyMyCompanyJobs(e.target.checked)}
+              className="mt-1 size-4.5 rounded-md border-slate-300 text-primary focus:ring-primary/30 transition-all"
+            />
+            <span className="text-sm font-bold text-slate-600 group-hover:text-primary transition-colors">
+              Chỉ hiện job test của công ty tôi
+              <span className="block mt-1 text-xs font-semibold text-slate-400">
+                {employerCompanyName}
+              </span>
+            </span>
+          </label>
+        </FilterSection>
+      )}
 
       {/* Keyword */}
       <FilterSection title="Từ khóa" icon="search">
@@ -459,6 +529,31 @@ export default function JobFiltersClient({ jobs }: { jobs: Job[] }) {
             )}
           </button>
         </div>
+
+        {employerCompanyName && (
+          <div className="mb-6 rounded-2xl border border-primary/15 bg-primary/5 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-black text-slate-900">
+                  Chế độ test nhà tuyển dụng
+                </p>
+                <p className="text-sm text-slate-500">
+                  Lọc nhanh chỉ các job public của <span className="font-bold">{employerCompanyName}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setOnlyMyCompanyJobs((prev) => !prev)}
+                className={`inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-black transition-all ${
+                  onlyMyCompanyJobs
+                    ? "bg-primary text-white shadow-lg shadow-primary/20"
+                    : "border border-slate-200 bg-white text-slate-700 hover:border-primary/30"
+                }`}
+              >
+                {onlyMyCompanyJobs ? "Đang chỉ hiện job công ty tôi" : "Chỉ hiện job công ty tôi"}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="flex gap-8">
           {/* DESKTOP SIDEBAR */}

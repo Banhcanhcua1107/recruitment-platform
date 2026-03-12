@@ -65,14 +65,29 @@ const getSupabaseJobs = cache(async function getSupabaseJobs(): Promise<Job[]> {
     let query = supabase
       .from("jobs")
       .select("*")
+      .not("employer_id", "is", null)
       .order("posted_date", { ascending: false, nullsFirst: false });
 
-    let { data, error } = await query.eq("status", "open");
+    let { data, error } = await query
+      .eq("status", "open")
+      .eq("is_public_visible", true);
 
     if (error && error.message?.toLowerCase().includes('column "status" does not exist')) {
       const fallbackResult = await query;
       data = fallbackResult.data;
       error = fallbackResult.error;
+    }
+
+    if (
+      error &&
+      (
+        error.message?.toLowerCase().includes('column "is_public_visible" does not exist') ||
+        error.message?.toLowerCase().includes("column jobs.is_public_visible does not exist")
+      )
+    ) {
+      const fallbackVisibleResult = await query.eq("status", "open");
+      data = fallbackVisibleResult.data;
+      error = fallbackVisibleResult.error;
     }
 
     if (error || !data || data.length === 0) {

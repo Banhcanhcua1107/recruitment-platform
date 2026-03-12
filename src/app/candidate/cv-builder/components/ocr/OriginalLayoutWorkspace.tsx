@@ -775,7 +775,7 @@ function SourcePane({
       <div className="absolute left-4 right-4 top-4 z-20 flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2 shadow-xl backdrop-blur-md">
         <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-300">
           <ScanLine size={14} className="text-blue-400" />
-          Bản gốc (Source View)
+          Bản gốc (Xem nguồn)
         </h3>
         <ZoomToolbar scale={scale} onChange={onScaleChange} dark />
       </div>
@@ -1242,7 +1242,7 @@ function StructuredMirrorPane({
             <ScanLine size={11} className="text-white" />
           </div>
           <h3 className="text-[11px] font-bold uppercase tracking-widest text-slate-600">
-            Document Parsing
+            Phân tích tài liệu
           </h3>
           <span className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide bg-blue-100 text-blue-600">
             Live
@@ -1671,16 +1671,16 @@ export function OriginalLayoutWorkspace({
               <ScanLine className="text-white" size={20} />
             </div>
             <div>
-              <h2 className="font-bold text-slate-800 text-lg leading-tight">Original Layout Editor</h2>
-              <p className="text-xs text-slate-500 font-medium">Click a box to edit · Zoom synced across both panes</p>
+              <h2 className="font-bold text-slate-800 text-lg leading-tight">Trình chỉnh sửa bố cục gốc</h2>
+              <p className="text-xs text-slate-500 font-medium">Bấm vào từng ô để chỉnh sửa · Thu phóng được đồng bộ ở cả hai khung</p>
               {layoutDebug && (
                 <div className="mt-2 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">
-                    Layout: {humanizeLayoutMode(layoutDebug.documentMode)}
+                    Bố cục: {humanizeLayoutMode(layoutDebug.documentMode)}
                   </span>
                   {layoutDebug.pageModes.map((page) => (
                     <span key={page.page} className="rounded-full bg-slate-100 px-2 py-1 text-slate-600">
-                      Page {page.page}: {humanizeLayoutMode(page.mode)}
+                      Trang {page.page}: {humanizeLayoutMode(page.mode)}
                     </span>
                   ))}
                 </div>
@@ -1688,7 +1688,7 @@ export function OriginalLayoutWorkspace({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <OCRHelpDrawer buttonLabel="OCR Help" />
+            <OCRHelpDrawer buttonLabel="Trợ giúp OCR" />
             <button
               type="button"
               onClick={onCancel}

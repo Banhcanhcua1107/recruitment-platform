@@ -322,7 +322,7 @@ export function OCRPreviewModal({
             {step !== "scanning" && (
               <>
                 <div className="absolute top-4 left-4 z-20">
-                  <OCRHelpDrawer buttonLabel="Help" />
+                  <OCRHelpDrawer buttonLabel="Trợ giúp" />
                 </div>
                 <motion.button
                   aria-label="Close OCR modal"

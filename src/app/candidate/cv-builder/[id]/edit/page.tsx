@@ -288,7 +288,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
             className="flex items-center gap-1.5 px-3 py-1.5 text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-semibold transition-colors border border-blue-200"
           >
             <ScanLine size={15} />
-            Upload CV
+            Tải CV
           </button>
           <button
             onClick={() => window.print()}

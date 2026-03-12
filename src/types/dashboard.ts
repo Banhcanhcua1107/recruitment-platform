@@ -6,7 +6,10 @@ export type ApplicationStatus =
   | 'offered'
   | 'rejected'
   | 'new'
+  | 'applied'
+  | 'reviewing'
   | 'interview'
+  | 'offer'
   | 'hired';
 
 export interface DashboardStats {
@@ -61,6 +64,7 @@ export interface CandidateProfile {
 export interface DashboardData {
   user: CandidateProfile | null;
   stats: DashboardStats;
+  notificationCount: number;
   recentApplications: Application[];
   recommendedJobs: Job[];
   cvs: CV[];

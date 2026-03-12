@@ -38,7 +38,7 @@ export function ScanningOverlay({
               {fileName}
             </p>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              {isPDF ? "PDF Document" : "Image File"}
+              {isPDF ? "Tài liệu PDF" : "Tệp ảnh"}
             </p>
           </div>
 

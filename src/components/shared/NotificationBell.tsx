@@ -1,53 +1,53 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
-import { Bell, CheckCircle } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 
-interface Notification {
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { Bell, CheckCircle2, ExternalLink } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { createClient } from "@/utils/supabase/client";
+
+interface NotificationItem {
   id: string;
-  icon: string; // emoji or icon name
   title: string;
   description: string;
-  timestamp: string; // e.g., "5 phút trước", "2 giờ trước"
-  read: boolean;
+  href: string | null;
+  is_read: boolean;
+  created_at: string;
+  type: string | null;
+}
+
+function formatRelativeTime(value: string) {
+  const now = Date.now();
+  const created = new Date(value).getTime();
+  const diff = Math.max(0, Math.floor((now - created) / 1000));
+
+  if (diff < 60) return "Vừa xong";
+  if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
+  return `${Math.floor(diff / 86400)} ngày trước`;
+}
+
+function iconForType(type: string | null) {
+  switch (type) {
+    case "application_applied":
+      return "📩";
+    case "application_status_updated":
+      return "🔄";
+    case "application_submitted":
+      return "✅";
+    default:
+      return "🔔";
+  }
 }
 
 const NotificationBell: React.FC = () => {
+  const supabase = useMemo(() => createClient(), []);
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: "1",
-      icon: "📋",
-      title: "Công ty ABC tìm kiếm Frontend Developer",
-      description: "Bạn phù hợp với vị trí này",
-      timestamp: "5 phút trước",
-      read: false,
-    },
-    {
-      id: "2",
-      icon: "✅",
-      title: "Ứng dụng của bạn đã được xem xét",
-      description: "Công ty XYZ vừa xem hồ sơ của bạn",
-      timestamp: "1 giờ trước",
-      read: false,
-    },
-    {
-      id: "3",
-      icon: "💼",
-      title: "Cập nhật hồ sơ thành công",
-      description: "Hồ sơ của bạn đã được cập nhật",
-      timestamp: "2 giờ trước",
-      read: true,
-    },
-  ]);
-
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const bellButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Count unread notifications
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -69,259 +69,194 @@ const NotificationBell: React.FC = () => {
     };
   }, [isOpen]);
 
-  const handleMarkAsRead = () => {
-    setNotifications((prev) =>
-      prev.map((notif) => ({ ...notif, read: true }))
-    );
-  };
+  useEffect(() => {
+    let active = true;
 
-  // ========================
-  // ANTIGRAVITY + SAAS ANIMATIONS
-  // ========================
+    async function bootstrap() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-  // Bell button hover/wiggle animation
-  const bellVariants = {
-    rest: { rotate: 0, scale: 1 },
-    hover: {
-      rotate: [0, -8, 8, -5, 5, 0],
-      transition: { duration: 0.6, ease: "easeInOut" as const },
-    },
-  };
+      if (!active || !user) {
+        return;
+      }
 
-  // Ping animation for unread dot (subtle)
-  const pingVariants = {
-    animate: {
-      scale: [1, 1.4, 1],
-      opacity: [1, 0.4, 1],
-      transition: {
-        duration: 2,
-        repeat: Infinity,
-        ease: "easeInOut" as const,
-      },
-    },
-  };
+      setUserId(user.id);
 
-  // Popover with spring physics (Antigravity feel)
-  const dropdownVariants = {
-    hidden: {
-      opacity: 0,
-      scale: 0.95,
-      y: -12,
-      transition: {
-        duration: 0.15,
-      },
-    },
-    visible: {
-      opacity: 1,
-      scale: 1,
-      y: 0,
-      transition: {
-        type: "spring" as const,
-        stiffness: 400,
-        damping: 30,
-        mass: 0.8,
-      },
-    },
-    exit: {
-      opacity: 0,
-      scale: 0.95,
-      y: -12,
-      transition: {
-        duration: 0.15,
-      },
-    },
-  };
+      const { data, error } = await supabase
+        .from("notifications")
+        .select("id, title, description, href, is_read, created_at, type")
+        .eq("recipient_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
 
-  // Staggered container for list items
-  const containerVariants = {
-    visible: {
-      transition: {
-        staggerChildren: 0.06,
-        delayChildren: 0.1,
-      },
-    },
-  };
+      if (!active || error) {
+        return;
+      }
 
-  // Individual notification item animation (slide in + lift)
-  const itemVariants = {
-    hidden: {
-      opacity: 0,
-      x: -12,
-      y: 8,
-    },
-    visible: {
-      opacity: 1,
-      x: 0,
-      y: 0,
-      transition: {
-        type: "spring" as const,
-        stiffness: 300,
-        damping: 25,
-      },
-    },
-  };
+      setNotifications((data ?? []) as NotificationItem[]);
+    }
+
+    void bootstrap();
+
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!userId) {
+      return;
+    }
+
+    const channel = supabase
+      .channel(`notifications:${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `recipient_id=eq.${userId}`,
+        },
+        (payload) => {
+          const next = payload.new as NotificationItem | undefined;
+          const old = payload.old as NotificationItem | undefined;
+
+          setNotifications((prev) => {
+            if (payload.eventType === "INSERT" && next) {
+              return [next, ...prev.filter((item) => item.id !== next.id)].slice(0, 20);
+            }
+
+            if (payload.eventType === "UPDATE" && next) {
+              return prev.map((item) => (item.id === next.id ? next : item));
+            }
+
+            if (payload.eventType === "DELETE" && old) {
+              return prev.filter((item) => item.id !== old.id);
+            }
+
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, userId]);
+
+  const unreadCount = notifications.filter((item) => !item.is_read).length;
+
+  async function handleMarkAllAsRead() {
+    if (!userId || unreadCount === 0) {
+      return;
+    }
+
+    const unreadIds = notifications.filter((item) => !item.is_read).map((item) => item.id);
+    if (unreadIds.length === 0) {
+      return;
+    }
+
+    await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .in("id", unreadIds)
+      .eq("recipient_id", userId);
+
+    setNotifications((prev) => prev.map((item) => ({ ...item, is_read: true })));
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Bell Button - Wiggle Animation on Hover */}
       <motion.button
         ref={bellButtonRef}
-        onClick={() => setIsOpen(!isOpen)}
-        initial="rest"
-        whileHover="hover"
-        variants={bellVariants}
-        className="relative flex items-center justify-center p-2.5 rounded-lg transition-all duration-200 hover:bg-slate-900/5 active:scale-95"
+        onClick={() => setIsOpen((value) => !value)}
+        className="relative flex items-center justify-center rounded-lg p-2.5 transition-all duration-200 hover:bg-slate-900/5 active:scale-95"
         aria-label="Thông báo"
       >
-        <Bell className="w-5 h-5 text-slate-600" strokeWidth={2.5} />
+        <Bell className="h-5 w-5 text-slate-600" strokeWidth={2.5} />
 
-        {/* Red Dot Badge - Ping Animation */}
-        {unreadCount > 0 && (
-          <>
-            {/* Background ping glow */}
-            <motion.div
-              variants={pingVariants}
-              animate="animate"
-              className="absolute top-0.5 right-0.5 w-3 h-3 bg-red-500 rounded-full"
-            />
-            {/* Solid dot */}
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="absolute top-0.5 right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full shadow-lg shadow-red-500/40"
-            />
-          </>
-        )}
+        {unreadCount > 0 ? (
+          <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        ) : null}
       </motion.button>
 
-      {/* Notification Popover - Floating Antigravity Style */}
       <AnimatePresence mode="wait">
-        {isOpen && (
+        {isOpen ? (
           <motion.div
-            ref={dropdownRef}
-            variants={dropdownVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="absolute right-0 mt-4 w-96 bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-white/20 overflow-hidden z-50"
+            initial={{ opacity: 0, scale: 0.96, y: -8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -8 }}
+            className="absolute right-0 z-50 mt-4 w-96 overflow-hidden rounded-2xl border border-white/20 bg-white/95 shadow-2xl backdrop-blur-md"
           >
-            {/* Header - Monochromatic with Blue Accent */}
-            <div className="px-6 py-4 bg-gradient-to-br from-slate-50/50 to-transparent">
+            <div className="bg-gradient-to-br from-slate-50/60 to-transparent px-6 py-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
-                  Thông báo
-                </h3>
-                {unreadCount > 0 && (
-                  <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleMarkAsRead}
-                    className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                <h3 className="text-sm font-semibold text-slate-900">Thông báo</h3>
+                {unreadCount > 0 ? (
+                  <button
+                    onClick={() => void handleMarkAllAsRead()}
+                    className="text-xs font-semibold text-blue-600 transition-colors hover:text-blue-700"
                   >
                     Đánh dấu đã đọc
-                  </motion.button>
-                )}
+                  </button>
+                ) : null}
               </div>
             </div>
 
-            {/* Notification List - Staggered Animation */}
             <div className="max-h-96 overflow-y-auto bg-gradient-to-b from-slate-50/30 to-transparent">
               {notifications.length > 0 ? (
-                <motion.div
-                  variants={containerVariants}
-                  initial="hidden"
-                  animate="visible"
-                  className=""
-                >
-                  {notifications.map((notification) => (
-                    <motion.div
-                      key={notification.id}
-                      variants={itemVariants}
-                      initial="hidden"
-                      animate="visible"
-                      whileHover={{ y: -2 }}
-                      className={`px-6 py-4 transition-all duration-200 cursor-pointer group ${
-                        !notification.read
-                          ? "bg-blue-50/40"
-                          : "hover:bg-slate-50/40"
+                notifications.map((notification) => {
+                  const content = (
+                    <div
+                      className={`group flex items-start gap-3.5 px-6 py-4 transition-colors ${
+                        notification.is_read ? "hover:bg-slate-50/40" : "bg-blue-50/40"
                       }`}
                     >
-                      <div className="flex items-start gap-3.5">
-                        {/* Icon */}
-                        <motion.div
-                          whileHover={{ scale: 1.1, rotate: 5 }}
-                          className="text-xl mt-0.5 flex-shrink-0"
-                        >
-                          {notification.icon}
-                        </motion.div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <h4 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2">
-                              {notification.title}
-                            </h4>
-                            {!notification.read && (
-                              <motion.div
-                                layoutId="unreadDot"
-                                className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-1.5"
-                              />
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-600/80 mt-1.5 leading-relaxed line-clamp-2">
-                            {notification.description}
-                          </p>
-                          <p className="text-xs text-slate-500/70 mt-2.5 font-medium">
-                            {notification.timestamp}
-                          </p>
+                      <div className="mt-0.5 text-xl">{iconForType(notification.type)}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
+                            {notification.title}
+                          </h4>
+                          {!notification.is_read ? (
+                            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
+                          ) : null}
                         </div>
+                        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-slate-600/80">
+                          {notification.description}
+                        </p>
+                        <p className="mt-2.5 text-xs font-medium text-slate-500/70">
+                          {formatRelativeTime(notification.created_at)}
+                        </p>
                       </div>
-                    </motion.div>
-                  ))}
-                </motion.div>
+                      {notification.href ? (
+                        <ExternalLink className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                      ) : null}
+                    </div>
+                  );
+
+                  return notification.href ? (
+                    <Link key={notification.id} href={notification.href} onClick={() => setIsOpen(false)}>
+                      {content}
+                    </Link>
+                  ) : (
+                    <div key={notification.id}>{content}</div>
+                  );
+                })
               ) : (
-                /* Empty State - Beautiful and Minimal */
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, delay: 0.1 }}
-                  className="px-6 py-16 text-center flex flex-col items-center justify-center"
-                >
-                  <motion.div
-                    animate={{ y: [0, -4, 0] }}
-                    transition={{ duration: 3, repeat: Infinity }}
-                    className="mb-4"
-                  >
-                    <CheckCircle className="w-12 h-12 text-slate-300" strokeWidth={1.5} />
-                  </motion.div>
-                  <p className="text-sm font-medium text-slate-500 tracking-tight">
-                    Bạn đã xem hết thông báo
-                  </p>
-                  <p className="text-xs text-slate-400/70 mt-1">
-                    Hiện chưa có thông báo mới
-                  </p>
-                </motion.div>
+                <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                  <CheckCircle2 className="mb-4 h-12 w-12 text-slate-300" strokeWidth={1.5} />
+                  <p className="text-sm font-medium text-slate-500">Hiện chưa có thông báo mới</p>
+                  <p className="mt-1 text-xs text-slate-400/70">Thông báo ATS của HR và ứng viên sẽ hiển thị ở đây.</p>
+                </div>
               )}
             </div>
-
-            {/* Footer - View All Link */}
-            {notifications.length > 0 && (
-              <div className="px-6 py-3 bg-gradient-to-r from-slate-50/50 to-transparent border-t border-slate-200/50 text-center">
-                <motion.a
-                  href="/candidate/notifications"
-                  whileHover={{ x: 4 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors inline-flex items-center gap-1"
-                >
-                  Xem tất cả
-                  <motion.span animate={{ x: [0, 3, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>
-                    →
-                  </motion.span>
-                </motion.a>
-              </div>
-            )}
           </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
     </div>
   );

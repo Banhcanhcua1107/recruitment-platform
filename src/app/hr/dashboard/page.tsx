@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getEmployerPipelineMetrics } from "@/lib/applications";
 import { DashboardStatsCard } from "@/components/recruitment/DashboardStatsCard";
 import { RecruitmentChart } from "@/components/recruitment/RecruitmentChart";
 import { StatusBadge } from "@/components/recruitment/StatusBadge";
@@ -10,13 +11,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getActivityLogs, getApplicationsTrend, getDashboardStats, getPipelineMetrics } from "@/lib/recruitment";
+import { getActivityLogs, getApplicationsTrend, getDashboardStats } from "@/lib/recruitment";
 
 export default async function HRDashboardPage() {
   const [stats, trend, pipeline, activityLogs] = await Promise.all([
     getDashboardStats(),
     getApplicationsTrend(),
-    getPipelineMetrics(),
+    getEmployerPipelineMetrics(),
     getActivityLogs(6),
   ]);
 

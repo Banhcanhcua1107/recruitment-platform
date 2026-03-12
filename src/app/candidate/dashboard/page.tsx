@@ -9,7 +9,16 @@ import ProfileStrength from "./components/ProfileStrength";
 import CVList from "./components/CVList";
 
 export default function CandidateDashboard() {
-  const { user, stats, recentApplications, recommendedJobs, cvs, isLoading, error } = useCandidateDashboard();
+  const {
+    user,
+    stats,
+    notificationCount,
+    recentApplications,
+    recommendedJobs,
+    cvs,
+    isLoading,
+    error,
+  } = useCandidateDashboard();
 
   if (error) {
      return <div className="p-10 text-center text-red-500 font-bold">Error loading dashboard: {error}</div>;
@@ -19,7 +28,7 @@ export default function CandidateDashboard() {
     <div className="max-w-[1440px] mx-auto px-6 lg:px-10 py-10 space-y-12">
       
       {/* 1. HEADER */}
-      <WelcomeHeader user={user} notificationCount={2} />
+      <WelcomeHeader user={user} notificationCount={notificationCount} />
 
       {/* 2. STATS CARDS */}
       <StatsGrid stats={stats} loading={isLoading} />

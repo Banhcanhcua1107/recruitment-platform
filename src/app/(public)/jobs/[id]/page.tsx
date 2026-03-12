@@ -1,17 +1,16 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
+import { ApplyJobCard } from "@/components/jobs/ApplyJobCard";
+import { companySlug, getJobsByCompanySlug } from "@/lib/companies";
 import { getAllJobs, getJobById } from "@/lib/jobs";
-import { companySlug } from "@/lib/companies";
-import { getJobsByCompanySlug } from "@/lib/companies";
 
-// ── Static params for SSG ───────────────────────
 export async function generateStaticParams() {
   const jobs = await getAllJobs();
-  return jobs.map((j) => ({ id: j.id }));
+  return jobs.map((job) => ({ id: job.id }));
 }
 
-// ── SEO metadata ────────────────────────────────
 export async function generateMetadata({
   params,
 }: {
@@ -19,8 +18,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { id } = await params;
   const job = await getJobById(id);
-  if (!job)
-    return { title: "Không tìm thấy việc làm | TalentFlow" };
+
+  if (!job) {
+    return {
+      title: "Không tìm thấy việc làm | TalentFlow",
+    };
+  }
 
   return {
     title: `${job.title} - ${job.company_name} | TalentFlow`,
@@ -33,7 +36,6 @@ export async function generateMetadata({
   };
 }
 
-// ── Page ────────────────────────────────────────
 export default async function JobDetailPage({
   params,
 }: {
@@ -41,250 +43,181 @@ export default async function JobDetailPage({
 }) {
   const { id } = await params;
   const job = await getJobById(id);
-  if (!job) notFound();
+
+  if (!job) {
+    notFound();
+  }
 
   const slug = companySlug(job.company_name);
   const relatedJobs = (await getJobsByCompanySlug(slug))
-    .filter((j) => j.id !== job.id)
+    .filter((item) => item.id !== job.id)
     .slice(0, 6);
   const initial = job.company_name?.charAt(0) ?? "?";
-  const hasCompanyLogo =
-    job.logo_url &&
-    !job.logo_url.includes("placeholder");
+  const hasCompanyLogo = Boolean(job.logo_url && !job.logo_url.includes("placeholder"));
 
   return (
     <main className="min-h-screen bg-[#f6f7f8]">
-      {/* ── cover banner ── */}
-      <div className="h-64 md:h-80 relative bg-slate-200 overflow-hidden">
+      <div className="relative h-64 overflow-hidden bg-slate-200 md:h-80">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={job.cover_url}
+          src={job.cover_url || "https://placehold.co/1600x480?text=TalentFlow"}
           alt=""
-          className="w-full h-full object-cover"
+          className="h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-linear-to-t from-slate-900/80 via-slate-900/20 to-transparent" />
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 -mt-24 relative z-10 pb-20">
-        {/* ── header card ── */}
-        <div className="bg-white rounded-[28px] border border-slate-100 shadow-xl shadow-slate-200/40 p-6 md:p-10 mb-8">
-          <div className="flex flex-col lg:flex-row gap-8 items-start justify-between">
-            <div className="flex flex-col sm:flex-row gap-6 items-start flex-1 min-w-0">
-              {/* logo */}
-              <div className="size-24 rounded-2xl border border-slate-100 bg-white p-3 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+      <div className="relative z-10 mx-auto -mt-24 max-w-6xl px-6 pb-20">
+        <div className="mb-8 rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40 md:p-10">
+          <div className="grid grid-cols-1 gap-8 min-[900px]:grid-cols-[420px_minmax(0,1fr)]">
+            <div className="w-full min-w-0 min-[900px]:w-[420px] min-[900px]:min-w-[420px] min-[900px]:flex-shrink-0">
+              <div className="flex min-w-0 flex-col items-start gap-6 sm:flex-row">
+              <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={job.logo_url}
+                  src={job.logo_url || "https://placehold.co/128x128?text=Logo"}
                   alt={job.company_name}
-                  className="w-full h-full object-contain"
+                  className="h-full w-full object-contain"
                 />
               </div>
 
-              <div className="flex-1 min-w-0">
-                <h1 className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-900 leading-tight mb-2">
+              <div className="min-w-0 flex-1">
+                <h1 className="mb-2 whitespace-normal break-words text-2xl font-black leading-tight text-slate-900 [word-break:keep-all] md:text-3xl lg:text-4xl">
                   {job.title}
                 </h1>
                 <Link
                   href={`/companies/${slug}`}
-                  className="text-lg md:text-xl font-bold text-slate-600 hover:text-primary transition-colors"
+                  className="text-lg font-bold text-slate-600 transition-colors hover:text-primary md:text-xl"
                 >
                   {job.company_name}
                 </Link>
 
-                {/* pills */}
                 <div className="mt-5 flex flex-wrap gap-2.5">
-                  <Pill icon="location_on" text={job.location} />
-                  <Pill icon="payments" text={job.salary} accent />
-                  {job.employment_type && (
-                    <Pill icon="work" text={job.employment_type} />
-                  )}
-                  {job.level && <Pill icon="badge" text={job.level} />}
-                  {job.deadline && (
-                    <Pill icon="event" text={`Hạn nộp: ${job.deadline}`} />
-                  )}
+                  <Pill icon="location_on" text={job.location || "Chưa cập nhật"} />
+                  <Pill icon="payments" text={job.salary || "Thỏa thuận"} accent />
+                  {job.employment_type ? <Pill icon="work" text={job.employment_type} /> : null}
+                  {job.level ? <Pill icon="badge" text={job.level} /> : null}
+                  {job.deadline ? <Pill icon="event" text={`Hạn nộp: ${job.deadline}`} /> : null}
                 </div>
               </div>
             </div>
+            </div>
 
-            {/* apply CTA (desktop) */}
-            <div className="hidden lg:flex flex-col gap-3 shrink-0 min-w-[200px]">
-              {job.source_url && (
-                <a
-                  href={job.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 h-14 w-full bg-primary hover:bg-primary-hover text-white font-black text-lg rounded-2xl shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5"
-                >
-                  <span className="material-symbols-outlined text-xl">send</span>
-                  Ứng tuyển
-                </a>
-              )}
-              <button
-                className="flex items-center justify-center gap-2 h-14 w-full rounded-2xl border-2 border-slate-100 bg-white text-slate-600 font-black hover:border-slate-300 hover:bg-slate-50 transition-all hover:-translate-y-0.5"
-                title="Lưu tin"
-              >
-                <span className="material-symbols-outlined text-xl">bookmark_border</span>
-                Lưu tin
-              </button>
+            <div className="hidden w-full max-w-[600px] min-w-0 justify-self-end min-[900px]:block">
+              <ApplyJobCard
+                jobId={job.id}
+                jobTitle={job.title}
+                companyName={job.company_name}
+                sourceUrl={job.source_url}
+                compact
+              />
             </div>
           </div>
         </div>
 
-        {/* ── body grid ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* left – main content */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* description */}
-            {job.description?.length > 0 && (
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          <div className="space-y-8 lg:col-span-2">
+            {job.description?.length ? (
               <Section title="Mô tả công việc" icon="description">
-                <ul className="space-y-2 text-slate-700 font-semibold leading-relaxed">
-                  {job.description.map((line, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-primary mt-1 shrink-0">•</span>
+                <ul className="space-y-2 text-slate-700">
+                  {job.description.map((line, index) => (
+                    <li key={index} className="flex gap-2">
+                      <span className="mt-1 shrink-0 text-primary">•</span>
                       <span>{line}</span>
                     </li>
                   ))}
                 </ul>
               </Section>
-            )}
+            ) : null}
 
-            {/* requirements */}
-            {job.requirements?.length > 0 && (
+            {job.requirements?.length ? (
               <Section title="Yêu cầu ứng viên" icon="checklist">
-                <ul className="space-y-2 text-slate-700 font-semibold leading-relaxed">
-                  {job.requirements.map((line, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-primary mt-1 shrink-0">✓</span>
+                <ul className="space-y-2 text-slate-700">
+                  {job.requirements.map((line, index) => (
+                    <li key={index} className="flex gap-2">
+                      <span className="mt-1 shrink-0 text-primary">✓</span>
                       <span>{line}</span>
                     </li>
                   ))}
                 </ul>
               </Section>
-            )}
+            ) : null}
 
-            {/* benefits */}
-            {job.benefits?.length > 0 && (
+            {job.benefits?.length ? (
               <Section title="Quyền lợi" icon="volunteer_activism">
                 <div className="flex flex-wrap gap-2">
-                  {job.benefits.map((b, i) => (
+                  {job.benefits.map((item, index) => (
                     <span
-                      key={i}
-                      className="px-4 py-2 bg-emerald-50 text-emerald-700 font-bold text-sm rounded-xl"
+                      key={index}
+                      className="rounded-xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700"
                     >
-                      {b}
+                      {item}
                     </span>
                   ))}
                 </div>
               </Section>
-            )}
+            ) : null}
           </div>
 
-          {/* right – sidebar info */}
           <aside className="space-y-6">
-            <div className="sticky top-6">
-              <div className="bg-white rounded-[24px] border border-slate-100 p-6 shadow-sm space-y-6">
-                <h3 className="font-black text-lg text-slate-900 flex items-center gap-2">
+            <div className="sticky top-6 space-y-6">
+              <div className="min-[900px]:hidden">
+                <ApplyJobCard
+                  jobId={job.id}
+                  jobTitle={job.title}
+                  companyName={job.company_name}
+                  sourceUrl={job.source_url}
+                />
+              </div>
+
+              <div className="rounded-[24px] border border-slate-100 bg-white p-6 shadow-sm">
+                <h3 className="mb-6 flex items-center gap-2 text-lg font-black text-slate-900">
                   <span className="material-symbols-outlined text-primary">info</span>
                   Thông tin chung
                 </h3>
                 <div className="space-y-5">
-                  <InfoRow
-                    icon="work"
-                    label="Hình thức"
-                    value={job.employment_type}
-                  />
+                  <InfoRow icon="work" label="Hình thức" value={job.employment_type} />
                   <InfoRow icon="badge" label="Cấp bậc" value={job.level} />
-                  {job.experience_level && (
-                    <InfoRow
-                      icon="trending_up"
-                      label="Kinh nghiệm"
-                      value={job.experience_level}
-                    />
-                  )}
-                  {job.education_level && (
-                    <InfoRow
-                      icon="school"
-                      label="Học vấn"
-                      value={job.education_level}
-                    />
-                  )}
-                  {job.age_range && (
-                    <InfoRow
-                      icon="group"
-                      label="Độ tuổi"
-                      value={job.age_range}
-                    />
-                  )}
-                  {job.full_address && (
-                    <InfoRow
-                      icon="pin_drop"
-                      label="Địa chỉ"
-                      value={job.full_address}
-                    />
-                  )}
-                  {job.industry?.length > 0 && (
-                    <InfoRow
-                      icon="category"
-                      label="Ngành nghề"
-                      value={job.industry.join(", ")}
-                    />
-                  )}
+                  <InfoRow icon="trending_up" label="Kinh nghiệm" value={job.experience_level} />
+                  <InfoRow icon="school" label="Học vấn" value={job.education_level} />
+                  <InfoRow icon="group" label="Độ tuổi" value={job.age_range} />
+                  <InfoRow icon="pin_drop" label="Địa chỉ" value={job.full_address} />
+                  {job.industry?.length ? (
+                    <InfoRow icon="category" label="Ngành nghề" value={job.industry.join(", ")} />
+                  ) : null}
                 </div>
               </div>
 
-              {/* mobile/tablet apply */}
-              <div className="lg:hidden space-y-3 mt-6">
-                {job.source_url && (
-                  <a
-                    href={job.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 h-14 w-full bg-primary hover:bg-primary-hover text-white font-black text-lg rounded-2xl shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5"
-                  >
-                    <span className="material-symbols-outlined text-xl">send</span>
-                    Ứng tuyển
-                  </a>
-                )}
-                <button
-                  className="flex items-center justify-center gap-2 h-14 w-full rounded-2xl border-2 border-slate-100 bg-white text-slate-600 font-black hover:border-slate-300 hover:bg-slate-50 transition-all hover:-translate-y-0.5"
-                  title="Lưu tin"
-                >
-                  <span className="material-symbols-outlined text-xl">bookmark_border</span>
-                  Lưu tin
-                </button>
-              </div>
-
-              {/* ── Company block ── */}
               <Link
                 href={`/companies/${slug}`}
-                className="block mt-6 bg-white rounded-[24px] border border-slate-100 p-6 shadow-sm hover:border-primary/30 hover:shadow-md transition-all group"
+                className="group block rounded-[24px] border border-slate-100 bg-white p-6 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
               >
-                <h3 className="font-black text-lg text-slate-900 flex items-center gap-2 mb-4">
+                <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-slate-900">
                   <span className="material-symbols-outlined text-primary">business</span>
                   Về công ty
                 </h3>
                 <div className="flex items-center gap-4">
-                  <div className="size-14 rounded-xl border border-slate-100 bg-white flex items-center justify-center shrink-0 overflow-hidden">
+                  <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
                     {hasCompanyLogo ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
+                      // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={job.logo_url}
                         alt={job.company_name}
-                        className="w-full h-full object-contain p-1"
+                        className="h-full w-full object-contain p-1"
                       />
                     ) : (
                       <span className="text-xl font-black text-primary">{initial}</span>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-black text-slate-900 group-hover:text-primary transition-colors line-clamp-1">
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-1 font-black text-slate-900 transition-colors group-hover:text-primary">
                       {job.company_name}
                     </p>
-                    <p className="text-xs font-bold text-slate-400 line-clamp-1 mt-0.5">
+                    <p className="mt-0.5 line-clamp-1 text-xs font-bold text-slate-400">
                       {job.location || "Chưa cập nhật"}
                     </p>
                   </div>
-                  <span className="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors shrink-0">
+                  <span className="material-symbols-outlined shrink-0 text-slate-400 transition-colors group-hover:text-primary">
                     arrow_forward
                   </span>
                 </div>
@@ -293,53 +226,51 @@ export default async function JobDetailPage({
           </aside>
         </div>
 
-        {/* ── Related jobs at this company ── */}
-        {relatedJobs.length > 0 && (
+        {relatedJobs.length ? (
           <section className="mt-10">
-            <h2 className="flex items-center gap-3 text-2xl font-black text-slate-900 mb-6 tracking-tight">
-              <span className="flex items-center justify-center size-10 rounded-xl bg-primary/10 text-primary">
+            <h2 className="mb-6 flex items-center gap-3 text-2xl font-black tracking-tight text-slate-900">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 <span className="material-symbols-outlined text-2xl">business</span>
               </span>
               Các việc làm khác tại {job.company_name}
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {relatedJobs.map((rj) => (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {relatedJobs.map((item) => (
                 <Link
-                  key={rj.id}
-                  href={`/jobs/${rj.id}`}
-                  className="group bg-white rounded-2xl border border-slate-100 p-5 shadow-sm hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5 transition-all duration-300 flex flex-col"
+                  key={item.id}
+                  href={`/jobs/${item.id}`}
+                  className="group flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
                 >
-                  <h4 className="text-base font-black text-slate-900 group-hover:text-primary transition-colors line-clamp-2 leading-snug mb-2">
-                    {rj.title}
+                  <h4 className="mb-2 line-clamp-2 text-base font-black leading-snug text-slate-900 transition-colors group-hover:text-primary">
+                    {item.title}
                   </h4>
                   <div className="mb-3">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/5 text-primary font-black text-xs rounded-lg border border-primary/10">
-                      {rj.salary || "Thỏa thuận"}
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-primary/10 bg-primary/5 px-2.5 py-1 text-xs font-black text-primary">
+                      {item.salary || "Thỏa thuận"}
                     </span>
                   </div>
                   <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1.5">
                     <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
                       <span className="material-symbols-outlined text-base">location_on</span>
-                      {rj.location}
+                      {item.location}
                     </span>
-                    {rj.deadline && (
+                    {item.deadline ? (
                       <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
                         <span className="material-symbols-outlined text-base">schedule</span>
-                        {rj.deadline}
+                        {item.deadline}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </Link>
               ))}
             </div>
           </section>
-        )}
+        ) : null}
 
-        {/* ── back link ── */}
         <div className="mt-14 inline-block">
           <Link
             href="/jobs"
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-slate-100 bg-white text-slate-600 font-black hover:text-primary hover:border-primary/30 hover:shadow-sm hover:-translate-x-1 transition-all"
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-slate-100 bg-white px-6 py-3 font-black text-slate-600 transition-all hover:-translate-x-1 hover:border-primary/30 hover:text-primary hover:shadow-sm"
           >
             <span className="material-symbols-outlined text-xl">arrow_back</span>
             Danh sách việc làm
@@ -350,12 +281,10 @@ export default async function JobDetailPage({
   );
 }
 
-// ── small helper components (server, no "use client") ──
-
 function Pill({
   icon,
   text,
-  accent,
+  accent = false,
 }: {
   icon: string;
   text: string;
@@ -363,13 +292,14 @@ function Pill({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-bold border ${
+      className={[
+        "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold",
         accent
-          ? "bg-primary/5 text-primary border-primary/10"
-          : "bg-slate-50 text-slate-600 border-slate-200"
-      }`}
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-slate-50 text-slate-700",
+      ].join(" ")}
     >
-      <span className="material-symbols-outlined text-[18px]">{icon}</span>
+      <span className="material-symbols-outlined text-base">{icon}</span>
       {text}
     </span>
   );
@@ -382,23 +312,16 @@ function Section({
 }: {
   title: string;
   icon: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-[24px] border border-slate-100 p-6 md:p-10 shadow-sm relative overflow-hidden group">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-[100px] -z-10 transition-transform group-hover:scale-110" />
-      <h2 className="flex items-center gap-3 text-2xl font-black text-slate-900 mb-6">
-        <span className="flex items-center justify-center size-10 rounded-xl bg-primary/10 text-primary">
-          <span className="material-symbols-outlined text-2xl">
-            {icon}
-          </span>
-        </span>
+    <section className="rounded-[24px] border border-slate-100 bg-white p-8 shadow-sm">
+      <h2 className="mb-5 flex items-center gap-2 text-xl font-black text-slate-900">
+        <span className="material-symbols-outlined text-primary">{icon}</span>
         {title}
       </h2>
-      <div className="text-slate-600 text-base leading-relaxed">
-        {children}
-      </div>
-    </div>
+      {children}
+    </section>
   );
 }
 
@@ -409,20 +332,18 @@ function InfoRow({
 }: {
   icon: string;
   label: string;
-  value: string;
+  value?: string | null;
 }) {
+  if (!value) {
+    return null;
+  }
+
   return (
-    <div className="flex items-start gap-3.5 group">
-      <span className="flex items-center justify-center size-10 rounded-[10px] bg-slate-50 text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
-        <span className="material-symbols-outlined text-xl">
-          {icon}
-        </span>
-      </span>
-      <div className="pt-0.5">
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-0.5">
-          {label}
-        </p>
-        <p className="text-sm font-bold text-slate-700">{value}</p>
+    <div className="flex items-start gap-3">
+      <span className="material-symbols-outlined mt-0.5 text-slate-400">{icon}</span>
+      <div>
+        <p className="text-xs font-black uppercase tracking-widest text-slate-400">{label}</p>
+        <p className="text-sm font-semibold leading-relaxed text-slate-700">{value}</p>
       </div>
     </div>
   );

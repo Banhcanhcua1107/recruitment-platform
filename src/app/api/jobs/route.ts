@@ -13,7 +13,10 @@ export async function GET(req: Request) {
   const sort = searchParams.get("sort") || "newest";
 
   const buildQuery = () => {
-    let query = supabase.from("jobs").select("*", { count: "exact" });
+    let query = supabase
+      .from("jobs")
+      .select("*", { count: "exact" })
+      .not("employer_id", "is", null);
 
     if (q) {
       query = query.or(`title.ilike.%${q}%,description.ilike.%${q}%`);
@@ -37,7 +40,9 @@ export async function GET(req: Request) {
     return query.range(from, to);
   };
 
-  let { data, count, error } = await buildQuery().eq("status", "open");
+  let { data, count, error } = await buildQuery()
+    .eq("status", "open")
+    .eq("is_public_visible", true);
 
   if (
     error &&
@@ -47,6 +52,19 @@ export async function GET(req: Request) {
     data = fallbackResult.data;
     count = fallbackResult.count;
     error = fallbackResult.error;
+  }
+
+  if (
+    error &&
+    (
+      error.message?.toLowerCase().includes('column "is_public_visible" does not exist') ||
+      error.message?.toLowerCase().includes("column jobs.is_public_visible does not exist")
+    )
+  ) {
+    const fallbackVisibleResult = await buildQuery().eq("status", "open");
+    data = fallbackVisibleResult.data;
+    count = fallbackVisibleResult.count;
+    error = fallbackVisibleResult.error;
   }
 
   if (error) {

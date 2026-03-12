@@ -1,4 +1,6 @@
 import { recordCandidateViewedAction, updateApplicationStatusAction } from "@/app/hr/actions";
+import { PaginationBar } from "@/components/recruitment/PaginationBar";
+import { StatusBadge } from "@/components/recruitment/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -10,8 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { StatusBadge } from "@/components/recruitment/StatusBadge";
-import { PaginationBar } from "@/components/recruitment/PaginationBar";
 import type {
   PaginatedResult,
   RecruitmentCandidate,
@@ -19,15 +19,20 @@ import type {
 } from "@/types/recruitment";
 
 const PIPELINE_OPTIONS: RecruitmentPipelineStatus[] = [
-  "new",
+  "applied",
+  "reviewing",
   "interview",
+  "offer",
   "hired",
   "rejected",
 ];
 
 const PIPELINE_LABELS: Record<RecruitmentPipelineStatus, string> = {
   new: "Mới",
+  applied: "Đã nộp",
+  reviewing: "Đang xem xét",
   interview: "Phỏng vấn",
+  offer: "Đề nghị",
   hired: "Đã tuyển",
   rejected: "Từ chối",
 };
@@ -43,14 +48,14 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
       <CardHeader>
         <CardTitle>Ứng viên</CardTitle>
         <p className="text-sm text-slate-500">
-          Theo dõi hồ sơ ứng tuyển, cập nhật pipeline và lưu lịch sử thao tác.
+          Theo dõi hồ sơ ứng tuyển, cập nhật pipeline và mở CV trực tiếp từ ATS.
         </p>
       </CardHeader>
       <CardContent className="px-0 pb-0">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="pl-6">Tên ứng viên</TableHead>
+              <TableHead className="pl-6">Ứng viên</TableHead>
               <TableHead>Vị trí ứng tuyển</TableHead>
               <TableHead>Trạng thái</TableHead>
               <TableHead>Ngày nộp</TableHead>
@@ -61,7 +66,7 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
             {data.items.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="px-6 py-16 text-center text-slate-500">
-                  Không có ứng viên phù hợp với bộ lọc hiện tại.
+                  Chưa có ứng viên phù hợp với bộ lọc hiện tại.
                 </TableCell>
               </TableRow>
             ) : (
@@ -71,6 +76,9 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
                     <div className="space-y-1">
                       <p className="font-semibold text-slate-900">{candidate.fullName}</p>
                       <p className="text-xs text-slate-400">{candidate.email}</p>
+                      {candidate.phone ? (
+                        <p className="text-xs text-slate-400">{candidate.phone}</p>
+                      ) : null}
                     </div>
                   </TableCell>
                   <TableCell>{candidate.appliedPosition}</TableCell>
@@ -83,16 +91,8 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
                   <TableCell className="pr-6">
                     <div className="flex flex-col items-end gap-2">
                       <form action={updateApplicationStatusAction} className="flex items-center gap-2">
-                        <input
-                          type="hidden"
-                          name="applicationId"
-                          value={candidate.applicationId}
-                        />
-                        <Select
-                          name="status"
-                          defaultValue={candidate.status}
-                          className="w-[150px]"
-                        >
+                        <input type="hidden" name="applicationId" value={candidate.applicationId} />
+                        <Select name="status" defaultValue={candidate.status} className="w-[160px]">
                           {PIPELINE_OPTIONS.map((status) => (
                             <option key={status} value={status}>
                               {PIPELINE_LABELS[status]}
@@ -103,13 +103,9 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
                           Lưu
                         </Button>
                       </form>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                         <form action={recordCandidateViewedAction}>
-                          <input
-                            type="hidden"
-                            name="applicationId"
-                            value={candidate.applicationId}
-                          />
+                          <input type="hidden" name="applicationId" value={candidate.applicationId} />
                           <Button variant="ghost" size="sm" type="submit">
                             Ghi nhận xem
                           </Button>
@@ -121,9 +117,15 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
                             rel="noreferrer"
                             className={buttonVariants("outline", "sm")}
                           >
-                            Xem CV
+                            Tải CV
                           </a>
                         ) : null}
+                        <a
+                          href={`mailto:${candidate.email}`}
+                          className={buttonVariants("outline", "sm")}
+                        >
+                          Liên hệ
+                        </a>
                       </div>
                     </div>
                   </TableCell>

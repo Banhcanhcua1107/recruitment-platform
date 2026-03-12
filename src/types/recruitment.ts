@@ -2,7 +2,10 @@ export type JobStatus = "open" | "closed" | "draft";
 
 export type RecruitmentPipelineStatus =
   | "new"
+  | "applied"
+  | "reviewing"
   | "interview"
+  | "offer"
   | "hired"
   | "rejected";
 
@@ -60,6 +63,7 @@ export interface RecruitmentJob {
   postedAt: string | null;
   createdAt: string | null;
   candidateCount: number;
+  isPublicVisible: boolean;
 }
 
 export interface RecruitmentCompanyProfile {
@@ -80,6 +84,7 @@ export interface RecruitmentCandidate {
   email: string;
   phone: string | null;
   resumeUrl: string | null;
+  coverLetter?: string | null;
   appliedPosition: string;
   status: RecruitmentPipelineStatus;
   rawStatus: AnyApplicationStatus;

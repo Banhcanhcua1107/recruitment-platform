@@ -19,7 +19,7 @@ import type {
   RecruitmentTrendPoint,
 } from "@/types/recruitment";
 
-const PIPELINE_LABELS: Record<RecruitmentPipelineStatus, string> = {
+const PIPELINE_LABELS: Record<string, string> = {
   new: "Mới",
   interview: "Phỏng vấn",
   hired: "Đã tuyển",
@@ -62,6 +62,8 @@ const JOB_OPTIONAL_COLUMN_MARKERS = [
   'column "status" does not exist',
   "column jobs.description does not exist",
   'column "description" does not exist',
+  "column jobs.is_public_visible does not exist",
+  'column "is_public_visible" does not exist',
 ];
 
 function getErrorMessage(error: unknown) {
@@ -184,6 +186,8 @@ function getStatusAliases(status: RecruitmentPipelineStatus): string[] {
       return ["hired", "offered"];
     case "rejected":
       return ["rejected"];
+    default:
+      return ["new", "pending", "viewed"];
   }
 }
 
@@ -567,7 +571,7 @@ export async function getJobs(
   let query = supabase
     .from("jobs")
     .select(
-      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, created_at",
+      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, created_at, is_public_visible",
       { count: "exact" }
     );
 
@@ -665,6 +669,7 @@ export async function getJobs(
       postedAt: row.posted_date,
       createdAt: row.created_at,
       candidateCount: candidateCountMap.get(String(row.id)) ?? 0,
+      isPublicVisible: row.is_public_visible ?? true,
     })),
     total: count ?? 0,
     page,
@@ -678,7 +683,7 @@ export async function getJobById(id: string) {
   let { data, error } = await supabase
     .from("jobs")
     .select(
-      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, employer_id"
+      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, employer_id, is_public_visible"
     )
     .eq("id", id)
     .eq("employer_id", employer.id)
@@ -734,6 +739,7 @@ export async function getJobById(id: string) {
     postedAt: data.posted_date ?? null,
     createdAt: null,
     candidateCount: 0,
+    isPublicVisible: (data as { is_public_visible?: boolean | null }).is_public_visible ?? true,
   };
 }
 
@@ -964,6 +970,7 @@ export async function createJob(input: JobUpsertInput) {
     title: input.title,
     location: input.location,
     status: input.status,
+    is_public_visible: true,
     description: serializeDescriptionForCurrentSchema(input.description),
     employer_id: employer.id,
     company_name: companyProfile.companyName.trim() || COMPANY_NAME_PLACEHOLDER,
@@ -1010,6 +1017,7 @@ export async function updateJob(id: string, input: JobUpsertInput) {
       title: input.title,
       location: input.location,
       status: input.status,
+      is_public_visible: true,
       description: serializeDescriptionForCurrentSchema(input.description),
       company_name: companyProfile.companyName.trim() || COMPANY_NAME_PLACEHOLDER,
       logo_url: input.logoUrl || companyProfile.logoUrl,
@@ -1061,6 +1069,27 @@ export async function closeJob(id: string) {
     supabase,
     employer.id,
     `Đã đóng tin tuyển dụng: ${data?.title ?? id}`
+  );
+}
+
+export async function toggleJobPublicVisibility(id: string, isPublicVisible: boolean) {
+  const { supabase, employer } = await getRecruitmentContext();
+  const { data, error } = await supabase
+    .from("jobs")
+    .update({ is_public_visible: isPublicVisible })
+    .eq("id", id)
+    .eq("employer_id", employer.id)
+    .select("title")
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  await logActivity(
+    supabase,
+    employer.id,
+    `${isPublicVisible ? "Đã bật" : "Đã ẩn"} hiển thị public cho tin tuyển dụng: ${data?.title ?? id}`
   );
 }
 

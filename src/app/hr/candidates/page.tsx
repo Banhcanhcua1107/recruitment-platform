@@ -2,7 +2,8 @@ import { CandidateTable } from "@/components/recruitment/CandidateTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { getCandidates, getJobPositionOptions } from "@/lib/recruitment";
+import { getEmployerCandidates } from "@/lib/applications";
+import { getJobPositionOptions } from "@/lib/recruitment";
 
 interface CandidatesPageProps {
   searchParams: Promise<{
@@ -23,10 +24,17 @@ export default async function HRCandidatesPage({
   const page = params.page ?? "1";
 
   const [candidates, positions] = await Promise.all([
-    getCandidates({
+    getEmployerCandidates({
       q,
       position,
-      status: status as "all" | "new" | "interview" | "hired" | "rejected",
+      status: status as
+        | "all"
+        | "applied"
+        | "reviewing"
+        | "interview"
+        | "offer"
+        | "hired"
+        | "rejected",
       page: Number(page),
       limit: 8,
     }),
@@ -40,10 +48,10 @@ export default async function HRCandidatesPage({
           Quản lý ứng viên
         </p>
         <h1 className="text-4xl font-black tracking-tight text-slate-900 lg:text-5xl">
-          Theo dõi ứng viên và cập nhật pipeline
+          Theo dõi đơn ứng tuyển và cập nhật pipeline
         </h1>
         <p className="max-w-2xl text-base text-slate-500 lg:text-lg">
-          Tìm kiếm hồ sơ ứng viên, lọc theo vị trí và trạng thái, sau đó cập nhật pipeline ngay trong bảng.
+          Tìm kiếm hồ sơ ứng viên, lọc theo vị trí và trạng thái, sau đó cập nhật ngay trong bảng.
         </p>
       </section>
 
@@ -68,12 +76,17 @@ export default async function HRCandidatesPage({
             </Select>
             <Select name="status" defaultValue={status}>
               <option value="all">Tất cả trạng thái</option>
-              <option value="new">Mới</option>
+              <option value="applied">Đã nộp</option>
+              <option value="reviewing">Đang xem xét</option>
               <option value="interview">Phỏng vấn</option>
+              <option value="offer">Đề nghị</option>
               <option value="hired">Đã tuyển</option>
               <option value="rejected">Từ chối</option>
             </Select>
-            <button className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-primary/30 hover:bg-slate-50" type="submit">
+            <button
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-primary/30 hover:bg-slate-50"
+              type="submit"
+            >
               Áp dụng
             </button>
           </form>

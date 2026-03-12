@@ -1,26 +1,15 @@
-import { createClient } from "@/utils/supabase/server";
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
+import { getJobById } from "@/lib/jobs";
 
 export async function GET(
-  _: NextRequest,
-  { params }: { params: Promise<{ id: string }> } // Fix type signature for Next.js 15
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const supabase = await createClient();
+  const job = await getJobById(id);
 
-  // Validate ID (Supabase id is bigint, user passes string number)
-  if (!id) {
-      return NextResponse.json({ message: "Invalid ID" }, { status: 400 });
-  }
-
-  const { data: job, error } = await supabase
-    .from("jobs")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error || !job) {
-    return NextResponse.json({ message: "Job not found" }, { status: 404 });
+  if (!job) {
+    return NextResponse.json({ error: "Không tìm thấy tin tuyển dụng." }, { status: 404 });
   }
 
   return NextResponse.json(job);

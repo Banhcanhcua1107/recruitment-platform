@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { closeJobAction } from "@/app/hr/actions";
+import { closeJobAction, toggleJobPublicVisibilityAction } from "@/app/hr/actions";
+import { PaginationBar } from "@/components/recruitment/PaginationBar";
+import { StatusBadge } from "@/components/recruitment/StatusBadge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -10,8 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { StatusBadge } from "@/components/recruitment/StatusBadge";
-import { PaginationBar } from "@/components/recruitment/PaginationBar";
 import type { PaginatedResult, RecruitmentJob } from "@/types/recruitment";
 
 interface JobTableProps {
@@ -26,7 +26,7 @@ export function JobTable({ data, query }: JobTableProps) {
         <div>
           <CardTitle>Tin tuyển dụng</CardTitle>
           <p className="text-sm text-slate-500">
-            Tìm kiếm, chỉnh sửa và đóng tin ngay trong một bảng quản lý.
+            Quản lý tin tuyển dụng của công ty và bật/tắt hiển thị public để test luồng ATS.
           </p>
         </div>
         <Link className={buttonVariants("default", "lg")} href="/hr/jobs/create">
@@ -40,6 +40,7 @@ export function JobTable({ data, query }: JobTableProps) {
               <TableHead className="pl-6">Tiêu đề</TableHead>
               <TableHead>Địa điểm</TableHead>
               <TableHead>Trạng thái</TableHead>
+              <TableHead>Public</TableHead>
               <TableHead>Ngày đăng</TableHead>
               <TableHead>Số ứng viên</TableHead>
               <TableHead className="pr-6 text-right">Thao tác</TableHead>
@@ -48,7 +49,7 @@ export function JobTable({ data, query }: JobTableProps) {
           <TableBody>
             {data.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="px-6 py-16 text-center text-slate-500">
+                <TableCell colSpan={7} className="px-6 py-16 text-center text-slate-500">
                   Không có tin tuyển dụng phù hợp với bộ lọc hiện tại.
                 </TableCell>
               </TableRow>
@@ -66,6 +67,18 @@ export function JobTable({ data, query }: JobTableProps) {
                     <StatusBadge status={job.status} />
                   </TableCell>
                   <TableCell>
+                    <span
+                      className={[
+                        "inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-widest",
+                        job.isPublicVisible
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : "border-slate-200 bg-slate-100 text-slate-600",
+                      ].join(" ")}
+                    >
+                      {job.isPublicVisible ? "Hiện" : "Ẩn"}
+                    </span>
+                  </TableCell>
+                  <TableCell>
                     {job.postedAt
                       ? new Date(job.postedAt).toLocaleDateString("vi-VN")
                       : "Không có"}
@@ -78,6 +91,17 @@ export function JobTable({ data, query }: JobTableProps) {
                       <Button variant="outline" size="sm">
                         <Link href={`/hr/jobs/${job.id}`}>Chỉnh sửa</Link>
                       </Button>
+                      <form action={toggleJobPublicVisibilityAction}>
+                        <input type="hidden" name="id" value={job.id} />
+                        <input
+                          type="hidden"
+                          name="isPublicVisible"
+                          value={job.isPublicVisible ? "false" : "true"}
+                        />
+                        <Button variant="outline" size="sm" type="submit">
+                          {job.isPublicVisible ? "Ẩn public" : "Hiện public"}
+                        </Button>
+                      </form>
                       {job.status !== "closed" ? (
                         <form action={closeJobAction}>
                           <input type="hidden" name="id" value={job.id} />

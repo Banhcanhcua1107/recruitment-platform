@@ -16,6 +16,7 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@hookform/resolvers": "^5.2.2",
         "@huggingface/inference": "^4.13.14",
+        "@react-pdf/renderer": "^4.3.2",
         "@supabase/ssr": "^0.8.0",
         "@supabase/supabase-js": "^2.93.3",
         "@tiptap/extension-bubble-menu": "^3.20.0",
@@ -32,6 +33,7 @@
         "framer-motion": "^12.34.5",
         "lucide-react": "^0.563.0",
         "next": "16.1.6",
+        "nodemailer": "^6.10.1",
         "openai": "^6.17.0",
         "react": "19.2.3",
         "react-dom": "19.2.3",
@@ -49,6 +51,7 @@
     "devDependencies": {
         "@tailwindcss/postcss": "^4.1.18",
         "@types/node": "^20",
+        "@types/nodemailer": "^6.4.17",
         "@types/react": "^19",
         "@types/react-dom": "^19",
         "autoprefixer": "^10.4.23",

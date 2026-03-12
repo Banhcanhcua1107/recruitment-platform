@@ -12,7 +12,7 @@ interface OCRHelpDrawerProps {
 
 export function OCRHelpDrawer({
   buttonClassName = "",
-  buttonLabel = "OCR Guide",
+  buttonLabel = "Trợ giúp OCR",
 }: OCRHelpDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -46,17 +46,17 @@ export function OCRHelpDrawer({
             >
               <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-900">OCR Help</h2>
+                  <h2 className="text-base font-semibold text-slate-900">Trợ giúp OCR</h2>
                   <p className="text-xs text-slate-500">
-                    Pipeline, caveats, and repo docs for CV Builder OCR
+                    Quy trình, lưu ý và tài liệu repo cho tính năng OCR trong CV Builder
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
                   className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100"
-                  title="Close OCR Help"
-                  aria-label="Close OCR Help"
+                  title="Đóng trợ giúp OCR"
+                  aria-label="Đóng trợ giúp OCR"
                 >
                   <X size={18} />
                 </button>

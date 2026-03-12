@@ -2,12 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { updateApplicationStatusForEmployer } from "@/lib/applications";
 import {
   closeJob,
   createJob,
   recordCandidateViewed,
+  toggleJobPublicVisibility,
   updateCompanyProfile,
-  updateApplicationStatus,
   updateJob,
 } from "@/lib/recruitment";
 import type {
@@ -99,15 +100,26 @@ export async function closeJobAction(formData: FormData) {
   revalidatePath("/hr/jobs");
 }
 
+export async function toggleJobPublicVisibilityAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const isPublicVisible = String(formData.get("isPublicVisible") ?? "false") === "true";
+
+  await toggleJobPublicVisibility(id, isPublicVisible);
+  revalidatePath("/hr/jobs");
+  revalidatePath("/jobs");
+  revalidatePath("/companies");
+}
+
 export async function updateApplicationStatusAction(formData: FormData) {
   const applicationId = String(formData.get("applicationId") ?? "");
   const status = String(
-    formData.get("status") ?? "new"
+    formData.get("status") ?? "applied"
   ) as RecruitmentPipelineStatus;
 
-  await updateApplicationStatus(applicationId, status);
+  await updateApplicationStatusForEmployer(applicationId, status);
   revalidatePath("/hr/dashboard");
   revalidatePath("/hr/candidates");
+  revalidatePath("/candidate/applications");
 }
 
 export async function recordCandidateViewedAction(formData: FormData) {
