@@ -1,0 +1,99 @@
+{
+    "success": true,
+    "extraction_method": "paddle_ppocrv5_ppstructurev3",
+    "ocr_provider": "PP-OCRv5 + PP-StructureV3",
+    "page_count": 1,
+    "total_blocks": 18,
+    "blocks": [{
+            "type": "header",
+            "text": "Nguyen Van A",
+            "bbox": [120, 50, 480, 90],
+            "page": 1,
+            "layout_type": "title"
+        },
+        {
+            "type": "work_experience",
+            "text": "Software Engineer at ABC Company",
+            "bbox": [120, 200, 600, 260],
+            "page": 1,
+            "layout_type": "text"
+        }
+    ],
+    "pages": [{
+        "page": 1,
+        "image_width": 1654,
+        "image_height": 2339,
+        "blocks": [{
+            "text": "Nguyen Van A",
+            "bbox": [
+                [120, 50],
+                [480, 50],
+                [480, 90],
+                [120, 90]
+            ],
+            "confidence": 0.9921,
+            "page": 1,
+            "column": null,
+            "rect": {
+                "x": 7.255,
+                "y": 2.138,
+                "width": 21.765,
+                "height": 1.71
+            }
+        }]
+    }],
+    "elapsed_seconds": 1.842,
+    "timings": {
+        "ocr_seconds": 0.941,
+        "layout_seconds": 0.611,
+        "total_seconds": 1.842
+    },
+    "warnings": [],
+    "data": {
+        "full_name": "Nguyen Van A",
+        "job_title": "Software Engineer",
+        "contact": {
+            "email": "nguyenvana@example.com",
+            "phone": "+84 912 345 678",
+            "linkedin": "https://linkedin.com/in/nguyenvana",
+            "address": "Ho Chi Minh City"
+        },
+        "summary": "Backend engineer with 4 years of experience building recruitment systems.",
+        "skills": ["Python", "FastAPI", "PostgreSQL"],
+        "experience": [{
+            "company": "ABC Company",
+            "title": "Software Engineer",
+            "start_date": "2022",
+            "end_date": "Present",
+            "description": "Built CV parsing and job matching services."
+        }],
+        "education": [],
+        "projects": [],
+        "certifications": [],
+        "languages": ["Vietnamese", "English"],
+        "raw_text": "Nguyen Van A\nSoftware Engineer\n..."
+    },
+    "detected_sections": [],
+    "builder_sections": [],
+    "layout": {
+        "profile": {
+            "document_mode": "single_column",
+            "pages": [{
+                "page": 1,
+                "mode": "single_column",
+                "split_x": null
+            }]
+        },
+        "pages": [],
+        "columns": {
+            "left": [],
+            "right": [],
+            "full_width": []
+        },
+        "reading_order": []
+    },
+    "markdown_pages": [
+        "# Nguyen Van A\n\n## Experience\nSoftware Engineer at ABC Company"
+    ],
+    "raw_text": "Nguyen Van A\nSoftware Engineer\n..."
+}

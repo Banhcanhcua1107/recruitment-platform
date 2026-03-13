@@ -2,18 +2,27 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { FileText, ScanLine } from "lucide-react";
+import { AlertCircle, FileText, RefreshCcw, ScanLine, Upload } from "lucide-react";
 
 interface ScanningOverlayProps {
   fileName: string;
   fileType: string;
+  isLoading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  onUploadNew?: () => void;
 }
 
 export function ScanningOverlay({
   fileName,
   fileType,
+  isLoading = true,
+  error = null,
+  onRetry,
+  onUploadNew,
 }: ScanningOverlayProps) {
   const isPDF = fileType.includes("pdf");
+  const hasError = !isLoading && Boolean(error);
 
   return (
     <motion.div
@@ -34,7 +43,7 @@ export function ScanningOverlay({
           </div>
 
           <div className="text-center">
-            <p className="max-w-[200px] break-words text-center text-sm font-bold text-slate-700">
+            <p className="max-w-50 wrap-break-word text-center text-sm font-bold text-slate-700">
               {fileName}
             </p>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -60,7 +69,7 @@ export function ScanningOverlay({
         </div>
 
         <motion.div
-          className="pointer-events-none absolute left-0 right-0 h-[2px]"
+          className="pointer-events-none absolute left-0 right-0 h-0.5"
           style={{
             background:
               "linear-gradient(90deg, transparent, #3b82f6 20%, #2563eb 50%, #3b82f6 80%, transparent)",
@@ -130,39 +139,74 @@ export function ScanningOverlay({
       </div>
 
       <div className="flex flex-col items-center gap-3">
-        <motion.div
-          className="flex items-center gap-2"
-          animate={{ opacity: [0.5, 1, 0.5] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <ScanLine size={16} className="text-blue-600" />
-          <span className="text-sm font-bold text-blue-700">
-            AI đang phân tích CV...
-          </span>
-        </motion.div>
-
-        <p className="max-w-xs text-center text-xs text-slate-400">
-          Đang trích xuất thông tin cá nhân, kinh nghiệm, kỹ năng và học vấn từ
-          CV của bạn
-        </p>
-
-        <div className="mt-2 flex items-center gap-1.5">
-          {[0, 1, 2].map((index) => (
+        {isLoading ? (
+          <>
             <motion.div
-              key={index}
-              className="h-2 w-2 rounded-full bg-blue-500"
-              animate={{
-                scale: [1, 1.4, 1],
-                opacity: [0.3, 1, 0.3],
-              }}
-              transition={{
-                duration: 1.2,
-                repeat: Infinity,
-                delay: index * 0.3,
-              }}
-            />
-          ))}
-        </div>
+              className="flex items-center gap-2"
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <ScanLine size={16} className="text-blue-600" />
+              <span className="text-sm font-bold text-blue-700">
+                Dang xu ly CV...
+              </span>
+            </motion.div>
+
+            <p className="max-w-xs text-center text-xs text-slate-400">
+              Dang trich xuat thong tin ca nhan, kinh nghiem, ky nang va hoc van tu CV cua ban
+            </p>
+
+            <div className="mt-2 flex items-center gap-1.5">
+              {[0, 1, 2].map((index) => (
+                <motion.div
+                  key={index}
+                  className="h-2 w-2 rounded-full bg-blue-500"
+                  animate={{
+                    scale: [1, 1.4, 1],
+                    opacity: [0.3, 1, 0.3],
+                  }}
+                  transition={{
+                    duration: 1.2,
+                    repeat: Infinity,
+                    delay: index * 0.3,
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {hasError ? (
+          <div className="w-full max-w-sm rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-center">
+            <div className="flex items-center justify-center gap-2 text-red-600">
+              <AlertCircle size={16} />
+              <span className="text-sm font-bold">Khong the xu ly CV</span>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-red-500">{error}</p>
+            <div className="mt-4 flex items-center justify-center gap-3">
+              {onRetry ? (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800"
+                >
+                  <RefreshCcw size={14} />
+                  Thu lai
+                </button>
+              ) : null}
+              {onUploadNew ? (
+                <button
+                  type="button"
+                  onClick={onUploadNew}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+                >
+                  <Upload size={14} />
+                  Upload CV moi
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
     </motion.div>
   );

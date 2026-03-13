@@ -50,9 +50,17 @@ class ParseCVCertificationModel(BaseModel):
     date_obtained: Optional[str] = None
 
 
+class ParseCVProfileModel(BaseModel):
+    full_name: Optional[str] = None
+    job_title: Optional[str] = None
+    career_objective: Optional[str] = None
+    summary: Optional[str] = None
+
+
 class ParseCVDataModel(BaseModel):
     full_name: Optional[str] = None
     job_title: Optional[str] = None
+    profile: ParseCVProfileModel = Field(default_factory=ParseCVProfileModel)
     contact: ParseCVContactModel = Field(default_factory=ParseCVContactModel)
     summary: Optional[str] = None
     skills: list[str] = Field(default_factory=list)
@@ -82,7 +90,7 @@ class ParseCVResponse(BaseModel):
 # ╚══════════════════════════════════════════════════════════════╝
 
 class OCRBlockModel(BaseModel):
-    """Single detected text region returned by RapidOCR."""
+    """Single detected text region returned by the OCR provider."""
     text: str
     bbox: list[list[int]]
     confidence: float
@@ -114,6 +122,20 @@ class OCRUploadResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class StructuredOCRBlockModel(BaseModel):
+    type: str
+    text: str
+    bbox: list[int] = Field(default_factory=list, description="[x1, y1, x2, y2] in pixels")
+    page: int = 1
+    layout_type: Optional[str] = None
+
+
+class OCRProcessingTimingsModel(BaseModel):
+    ocr_seconds: float = 0.0
+    layout_seconds: float = 0.0
+    total_seconds: float = 0.0
+
+
 class DetectedSectionModel(BaseModel):
     type: str
     title: str
@@ -126,15 +148,19 @@ class DetectedSectionModel(BaseModel):
 class UploadCVResponse(BaseModel):
     success: bool = True
     extraction_method: str = "ocr_layout"
+    ocr_provider: str = ""
     page_count: int = 0
     total_blocks: int = 0
+    blocks: list[StructuredOCRBlockModel] = Field(default_factory=list)
     pages: list[OCRPageModel] = Field(default_factory=list)
     elapsed_seconds: float = 0.0
+    timings: OCRProcessingTimingsModel = Field(default_factory=OCRProcessingTimingsModel)
     warnings: list[str] = Field(default_factory=list)
     data: ParseCVDataModel = Field(default_factory=ParseCVDataModel)
     detected_sections: list[DetectedSectionModel] = Field(default_factory=list)
     builder_sections: list[dict[str, Any]] = Field(default_factory=list)
     layout: dict[str, Any] = Field(default_factory=dict)
+    markdown_pages: list[str] = Field(default_factory=list)
     raw_text: str = ""
 
 

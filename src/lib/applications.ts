@@ -242,26 +242,36 @@ export async function applyToJob(input: {
   const { supabase, user } = await getAuthenticatedUser();
   const candidate = await ensureCandidateDirectory(supabase, user);
 
-  const { data: existingApplication, error: existingError } = await supabase
-    .from("applications")
-    .select("id, status")
-    .eq("job_id", input.jobId)
-    .eq("candidate_id", user.id)
-    .maybeSingle();
-
-  if (existingError) {
-    throw new Error(existingError.message);
-  }
-
-  if (existingApplication) {
-    throw new Error("Bạn đã ứng tuyển vào công việc này rồi.");
-  }
-
-  const { data: job, error: jobError } = await supabase
+  const { data: jobWithHrEmail, error: jobWithHrEmailError } = await supabase
     .from("jobs")
-    .select("id, title, company_name, employer_id, status")
+    .select("id, title, company_name, location, employer_id, status, hr_email")
     .eq("id", input.jobId)
     .maybeSingle();
+
+  const shouldFallbackToLegacyJobSelect =
+    !!jobWithHrEmailError &&
+    isApplicationSchemaError(jobWithHrEmailError, ["hr_email", "column", "schema cache"]);
+
+  const { data: legacyJob, error: legacyJobError } = shouldFallbackToLegacyJobSelect
+    ? await supabase
+        .from("jobs")
+        .select("id, title, company_name, location, employer_id, status")
+        .eq("id", input.jobId)
+        .maybeSingle()
+    : { data: null, error: null };
+
+  const jobError = shouldFallbackToLegacyJobSelect ? legacyJobError : jobWithHrEmailError;
+  const job = (shouldFallbackToLegacyJobSelect ? legacyJob : jobWithHrEmail) as
+    | {
+        id: string;
+        title: string;
+        company_name: string | null;
+        location: string | null;
+        employer_id: string | null;
+        status: string | null;
+        hr_email?: string | null;
+      }
+    | null;
 
   if (jobError || !job) {
     throw new Error(jobError?.message ?? "Không tìm thấy tin tuyển dụng.");
@@ -463,15 +473,23 @@ export async function applyToJob(input: {
   let emailSent = false;
   let emailError: string | null = null;
 
-  if (employer?.email && candidate.email) {
+  const hrEmailFromPosting = String(job.hr_email || "").trim();
+  const hrEmail = hrEmailFromPosting || employer?.email || "";
+
+  if (!candidate.email) {
+    emailError = "Không có email ứng viên để gửi xác nhận nộp đơn.";
+  } else if (!hrEmail) {
+    emailError = "Tin tuyển dụng chưa có email HR để nhận thông báo ứng tuyển.";
+  } else {
     try {
       await sendApplicationSubmittedEmails({
-        hrEmail: employer.email,
+        hrEmail,
         candidateEmail: candidate.email,
         candidateName: candidate.full_name,
         candidatePhone: candidate.phone,
         jobTitle: String(job.title),
         companyName: String(employer.company_name || job.company_name || "Nhà tuyển dụng"),
+        jobLocation: String(job.location || ""),
         coverLetter: input.coverLetter,
         cvFilePath: filePath,
       });

@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể nộp đơn.";
-    const status = message === "Unauthorized" ? 401 : message.includes("đã ứng tuyển") ? 409 : 500;
+    const status = message === "Unauthorized" ? 401 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

@@ -78,6 +78,103 @@ export interface RawOCRBlock {
   rect: { x: number; y: number; width: number; height: number };
 }
 
+function normalizeBlockText(text: string): string {
+  return text.trim().replace(/\s+/g, " ");
+}
+
+function stripAccents(text: string): string {
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function blockArea(block: RawOCRBlock): number {
+  return Math.max(0, block.rect.width) * Math.max(0, block.rect.height);
+}
+
+function blockIoU(left: RawOCRBlock, right: RawOCRBlock): number {
+  const leftX1 = left.rect.x;
+  const leftY1 = left.rect.y;
+  const leftX2 = left.rect.x + left.rect.width;
+  const leftY2 = left.rect.y + left.rect.height;
+
+  const rightX1 = right.rect.x;
+  const rightY1 = right.rect.y;
+  const rightX2 = right.rect.x + right.rect.width;
+  const rightY2 = right.rect.y + right.rect.height;
+
+  const interX1 = Math.max(leftX1, rightX1);
+  const interY1 = Math.max(leftY1, rightY1);
+  const interX2 = Math.min(leftX2, rightX2);
+  const interY2 = Math.min(leftY2, rightY2);
+  if (interX2 <= interX1 || interY2 <= interY1) {
+    return 0;
+  }
+
+  const intersection = (interX2 - interX1) * (interY2 - interY1);
+  const union = blockArea(left) + blockArea(right) - intersection;
+  return union > 0 ? intersection / union : 0;
+}
+
+function looksLikeHeadingText(text: string): boolean {
+  const normalized = normalizeBlockText(text);
+  if (!normalized || normalized.length > 80) return false;
+  if (normalized.split(/\s+/).length > 8) return false;
+  if (/[.!?]/.test(normalized)) return false;
+
+  const compact = stripAccents(normalized).replace(/\s+/g, "").toUpperCase();
+  if (/(HOCVAN|DUAN|PROJECTS?|KYNANG|SKILLS?|KINHNGHIEM|EXPERIENCE|LIENHE|CONTACT|CHUNGCHI|CERTIFICATE|CERTIFICATION|CERTIF)/i.test(compact)) {
+    return true;
+  }
+
+  const letters = normalized.match(/[A-Za-zÀ-ỹ]/g) ?? [];
+  const uppercase = normalized.match(/[A-ZÀ-Ỹ]/g) ?? [];
+  return letters.length > 0 && uppercase.length / letters.length >= 0.65;
+}
+
+export function removeDuplicateBlocks(blocks: RawOCRBlock[]): RawOCRBlock[] {
+  const uniqueBlocks: RawOCRBlock[] = [];
+
+  const sortedBlocks = [...blocks].sort((left, right) => {
+    const topDiff = left.rect.y - right.rect.y;
+    if (Math.abs(topDiff) > 0.001) return topDiff;
+    const leftDiff = left.rect.x - right.rect.x;
+    if (Math.abs(leftDiff) > 0.001) return leftDiff;
+    return blockArea(right) - blockArea(left);
+  });
+
+  for (const block of sortedBlocks) {
+    const normalizedText = normalizeBlockText(block.text);
+    if (!normalizedText) continue;
+
+    const duplicateIndex = uniqueBlocks.findIndex((existing) => {
+      return normalizeBlockText(existing.text) === normalizedText && blockIoU(existing, block) > 0.7;
+    });
+
+    if (duplicateIndex === -1) {
+      uniqueBlocks.push(block);
+      continue;
+    }
+
+    const existing = uniqueBlocks[duplicateIndex];
+    const preferred = looksLikeHeadingText(normalizedText)
+      ? (blockArea(existing) >= blockArea(block) ? existing : block)
+      : (existing.confidence > block.confidence
+          ? existing
+          : block.confidence > existing.confidence
+            ? block
+            : blockArea(existing) >= blockArea(block)
+              ? existing
+              : block);
+
+    uniqueBlocks[duplicateIndex] = preferred;
+  }
+
+  return uniqueBlocks.sort((left, right) => {
+    const topDiff = left.rect.y - right.rect.y;
+    if (Math.abs(topDiff) > 0.001) return topDiff;
+    return left.rect.x - right.rect.x;
+  });
+}
+
 export interface OriginalLayoutFormState {
   blocks: RawOCRBlock[];
 }
@@ -88,6 +185,12 @@ export interface ParsedCVResponse {
   data: {
     full_name: string | null;
     job_title?: string | null;
+    profile?: {
+      full_name: string | null;
+      job_title?: string | null;
+      career_objective?: string | null;
+      summary?: string | null;
+    };
     contact: {
       email: string | null;
       phone: string | null;
@@ -198,6 +301,8 @@ export function cleanOCRText(text: string | null | undefined): string {
 export function transformParsedCVToDraft(
   parsed: ParsedCVResponse["data"]
 ): OCRDraftData {
+  const profile = parsed.profile;
+
   const experiences = parsed.experience
     .map((exp) => ({
       id: uuidv4(),
@@ -274,12 +379,12 @@ export function transformParsedCVToDraft(
     );
 
   return {
-    fullName: cleanOCRText(parsed.full_name),
-    title: cleanOCRText(parsed.job_title),
+    fullName: cleanOCRText(profile?.full_name ?? parsed.full_name),
+    title: cleanOCRText(profile?.job_title ?? parsed.job_title),
     email: cleanOCRText(parsed.contact.email),
     phone: cleanOCRText(parsed.contact.phone),
     address: cleanOCRText(parsed.contact.address),
-    summary: cleanOCRText(parsed.summary),
+    summary: cleanOCRText(profile?.career_objective ?? profile?.summary ?? parsed.summary),
     experiences,
     educations,
     skills,
@@ -332,7 +437,7 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
     id: uuidv4(),
     type: "personal_info",
     isVisible: true,
-    containerId: "main-column",
+    containerId: "sidebar-column",
     data: {
       email: draft.email,
       phone: draft.phone,
@@ -396,7 +501,7 @@ export function transformDraftToSections(draft: OCRDraftData): CVSection[] {
       type: "skill_list",
       title: "Kỹ năng",
       isVisible: true,
-      containerId: "main-column",
+      containerId: "sidebar-column",
       data: {
         items: draft.skills.map((skill) => ({
           id: skill.id,

@@ -43,7 +43,25 @@ export const Canvas = () => {
         }
     };
 
-    const sections = cv.sections.filter(s => s.containerId === 'main-column');
+    const sidebarSections = cv.sections.filter(s => s.containerId === 'sidebar-column');
+    const mainSections = cv.sections.filter(s => s.containerId !== 'sidebar-column');
+
+    const renderSectionList = (sections: typeof cv.sections) => (
+        <SortableContext 
+            items={sections.map(s => s.id)}
+            strategy={verticalListSortingStrategy}
+        >
+            {sections.map(section => (
+                <EditableBlock key={section.id} id={section.id}>
+                    <div className="mb-4">
+                        <CVComponentRenderer section={section} theme={cv.theme} />
+                    </div>
+                </EditableBlock>
+            ))}
+        </SortableContext>
+    );
+
+    const hasSections = cv.sections.length > 0;
 
     return (
         <div 
@@ -58,21 +76,23 @@ export const Canvas = () => {
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
             >
-                <SortableContext 
-                    items={sections.map(s => s.id)}
-                    strategy={verticalListSortingStrategy}
-                >
-                    {sections.map(section => (
-                        <EditableBlock key={section.id} id={section.id}>
-                             <div className="mb-4">
-                                <CVComponentRenderer section={section} theme={cv.theme} />
-                             </div>
-                        </EditableBlock>
-                    ))}
-                </SortableContext>
+                {sidebarSections.length > 0 ? (
+                    <div className="grid grid-cols-[minmax(240px,0.34fr)_minmax(0,0.66fr)] gap-8 items-start">
+                        <aside className="min-h-full rounded-2xl bg-slate-50/90 px-5 py-6 border border-slate-200/80">
+                            {renderSectionList(sidebarSections)}
+                        </aside>
+                        <section>
+                            {renderSectionList(mainSections)}
+                        </section>
+                    </div>
+                ) : (
+                    <section>
+                        {renderSectionList(mainSections)}
+                    </section>
+                )}
              </DndContext>
 
-             {sections.length === 0 && (
+             {!hasSections && (
                  <div className="h-60 border-2 border-dashed border-slate-200 rounded-lg flex flex-col items-center justify-center text-slate-400 bg-slate-50">
                     <span className="material-symbols-outlined text-4xl mb-2">post_add</span>
                     <p>Your CV is empty.</p>

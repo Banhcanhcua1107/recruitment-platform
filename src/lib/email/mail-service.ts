@@ -12,24 +12,34 @@ export interface SendEmailPayload {
   attachments?: Attachment[];
 }
 
-function getSmtpConfig(): SMTPTransport.Options {
-  const user = process.env.GMAIL_SMTP_USER || process.env.SMTP_USER;
-  const pass = process.env.GMAIL_SMTP_PASS || process.env.SMTP_PASS;
+function getRequiredEnv(name: string) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Thiếu biến môi trường bắt buộc: ${name}.`);
+  }
+  return value;
+}
 
-  if (!user || !pass) {
-    throw new Error("Thiếu GMAIL_SMTP_USER/GMAIL_SMTP_PASS (hoặc SMTP_USER/SMTP_PASS).");
+function getSmtpConfig(): SMTPTransport.Options {
+  const host = getRequiredEnv("SMTP_HOST");
+  const user = getRequiredEnv("SMTP_USER");
+  const pass = getRequiredEnv("SMTP_PASS");
+  const rawPort = process.env.SMTP_PORT?.trim() || "587";
+  const port = Number(rawPort);
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error("SMTP_PORT không hợp lệ. Vui lòng cấu hình cổng SMTP dạng số dương.");
   }
 
   return {
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT || 587),
+    host,
+    port,
     secure: String(process.env.SMTP_SECURE || "false") === "true",
     auth: { user, pass },
   };
 }
 
 function getFromAddress() {
-  return process.env.SMTP_FROM || process.env.GMAIL_SMTP_USER || process.env.SMTP_USER;
+  return process.env.SMTP_FROM?.trim() || "";
 }
 
 let transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null = null;
@@ -44,7 +54,7 @@ function getTransporter() {
 export async function sendEmail(payload: SendEmailPayload) {
   const from = getFromAddress();
   if (!from) {
-    throw new Error("Thiếu SMTP_FROM (hoặc SMTP_USER/GMAIL_SMTP_USER) để gửi email.");
+    throw new Error("Thiếu SMTP_FROM để gửi email.");
   }
 
   const info = await getTransporter().sendMail({

@@ -36,7 +36,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, ZoomIn, ZoomOut, Maximize, ScanLine, Phone, Mail, MapPin, UserCircle2 } from "lucide-react";
 import { OCRHelpDrawer } from "./OCRHelpDrawer";
-import { cleanOCRText } from "./ocr-types";
+import { cleanOCRText, removeDuplicateBlocks } from "./ocr-types";
 import type { OCRDraftData, RawOCRBlock, OriginalLayoutFormState } from "./ocr-types";
 
 // ── CV Parsing Types ─────────────────────────────────────────
@@ -1583,6 +1583,7 @@ export function OriginalLayoutWorkspace({
   const [scale, setScale] = useState(1);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const syncingRef = useRef(false);
+  const uniqueInitialBlocks = useMemo(() => removeDuplicateBlocks(initialBlocks), [initialBlocks]);
 
   const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
   const leftScrollRef = useRef<HTMLDivElement>(null);
@@ -1597,16 +1598,16 @@ export function OriginalLayoutWorkspace({
   }, []);
 
   // Parse CV structure from OCR blocks (stable — depends only on initial block positions)
-  const parsedCV = useMemo(() => parseCVFromBlocks(initialBlocks), [initialBlocks]);
+  const parsedCV = useMemo(() => parseCVFromBlocks(uniqueInitialBlocks), [uniqueInitialBlocks]);
 
   const { register, control, handleSubmit } = useForm<OriginalLayoutFormState>({
-    defaultValues: { blocks: initialBlocks },
+    defaultValues: { blocks: uniqueInitialBlocks },
   });
   const { fields } = useFieldArray({ control, name: "blocks" });
 
   const mappedBoxes = useMemo<MappedBox[]>(() => {
     if (imageSize.width === 0 || imageSize.height === 0) return [];
-    return initialBlocks.map((block, i) => {
+    return uniqueInitialBlocks.map((block, i) => {
       const x = clamp(block.rect.x);
       const y = clamp(block.rect.y);
       const w = clamp(block.rect.width, 0, 100 - x);
@@ -1627,7 +1628,7 @@ export function OriginalLayoutWorkspace({
       };
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialBlocks, imageSize, parsedCV.items]);
+  }, [uniqueInitialBlocks, imageSize, parsedCV.items]);
 
   const handleLeftScroll = useCallback(() => {
     if (syncingRef.current) return;
@@ -1708,7 +1709,7 @@ export function OriginalLayoutWorkspace({
                 <span className="relative inline-flex h-3 w-3 rounded-full bg-blue-400" />
               </span>
               <Check size={16} />
-              Xác nhận &amp; Chuyển sang CV Builder
+             Chuyển sang CV Builder
             </motion.button>
           </div>
         </div>

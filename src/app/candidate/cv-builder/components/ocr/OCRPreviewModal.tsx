@@ -12,6 +12,7 @@ import {
   type OCRDraftData,
   type RawOCRBlock,
   hasMeaningfulDraftData,
+  removeDuplicateBlocks,
   transformParsedCVToDraft,
   transformRawBlocksToSections,
 } from "./ocr-types";
@@ -190,7 +191,7 @@ function paddleBlocksToRaw(response: UploadCVResponse): RawOCRBlock[] {
       globalBlockIndex += 1;
     }
   }
-  return blocks;
+  return removeDuplicateBlocks(blocks);
 }
 
 // ----------------------------------------------------------------
@@ -202,7 +203,9 @@ export function OCRPreviewModal({
   onConfirm,
 }: OCRPreviewModalProps) {
   const [step, setStep] = useState<ModalStep>("upload");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
   const [rawBlocks, setRawBlocks] = useState<RawOCRBlock[]>([]);
   const [draftData, setDraftData] = useState<OCRDraftData | null>(null);
   const [backendSections, setBackendSections] = useState<CVSection[] | null>(null);
@@ -210,11 +213,17 @@ export function OCRPreviewModal({
   const [error, setError] = useState<string | null>(null);
   const requestIdRef = useRef(0);
 
+  const showUploadStep = !file;
+  const showScanningStep = Boolean(file) && step === "scanning";
+  const showPreviewStep = step === "preview" && rawBlocks.length > 0 && Boolean(file);
+
   // ── Reset ──────────────────────────────────────────────
   const resetState = useCallback(() => {
     requestIdRef.current += 1;
     setStep("upload");
-    setSelectedFile(null);
+    setFile(null);
+    setIsUploading(false);
+    setOcrLoading(false);
     setRawBlocks([]);
     setDraftData(null);
     setBackendSections(null);
@@ -228,16 +237,22 @@ export function OCRPreviewModal({
   }, [onClose, resetState]);
 
   // ── File selected → run OCR ─────────────────────────────
-  const handleFileSelected = useCallback(async (file: File) => {
+  const handleFileSelected = useCallback(async (nextFile: File) => {
     const requestId = ++requestIdRef.current;
-    setSelectedFile(file);
+    setFile(nextFile);
+    setIsUploading(true);
+    setOcrLoading(true);
     setStep("scanning");
     setError(null);
+    setRawBlocks([]);
     setDraftData(null);
     setBackendSections(null);
+    setLayoutDebug(null);
 
     try {
-      const uploadResponse = await callUploadCV(file);
+      const uploadResponse = await callUploadCV(nextFile);
+
+      if (requestIdRef.current !== requestId) return;
 
       if (!uploadResponse.success || uploadResponse.total_blocks === 0) {
         throw new Error(
@@ -260,6 +275,8 @@ export function OCRPreviewModal({
         })),
       });
       setDraftData(hasMeaningfulDraftData(parsedDraft) ? parsedDraft : null);
+      setIsUploading(false);
+      setOcrLoading(false);
       setStep("preview");
     } catch (err) {
       if (requestIdRef.current !== requestId) return;
@@ -268,10 +285,21 @@ export function OCRPreviewModal({
         /failed to fetch|cors|network|err_failed/i.test(rawMessage)
           ? "Không thể kết nối tới AI service ở http://localhost:8000. Hãy kiểm tra backend đã chạy và đã reload route /upload-cv."
           : rawMessage;
+      setIsUploading(false);
+      setOcrLoading(false);
       setError(message);
-      setStep("upload");
+      setStep("scanning");
     }
   }, []);
+
+  const handleRetry = useCallback(() => {
+    if (!file || ocrLoading) return;
+    void handleFileSelected(file);
+  }, [file, handleFileSelected, ocrLoading]);
+
+  const handleUploadNew = useCallback(() => {
+    resetState();
+  }, [resetState]);
 
   // ── Confirm edited blocks → parent ────────────────────────
   const handleConfirm = useCallback(
@@ -307,7 +335,7 @@ export function OCRPreviewModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={step !== "scanning" ? handleClose : undefined}
+            onClick={!ocrLoading ? handleClose : undefined}
           />
 
           {/* Modal Container */}
@@ -319,7 +347,7 @@ export function OCRPreviewModal({
             className="relative z-10 w-full max-w-3xl max-h-[90vh] mx-4 overflow-y-auto"
           >
             {/* Close button */}
-            {step !== "scanning" && (
+            {!ocrLoading && (
               <>
                 <div className="absolute top-4 left-4 z-20">
                   <OCRHelpDrawer buttonLabel="Trợ giúp" />
@@ -340,7 +368,7 @@ export function OCRPreviewModal({
             <div className="bg-white/95 backdrop-blur-xl rounded-3xl border border-slate-200/40 shadow-2xl shadow-slate-900/20 p-8">
 
               {/* Title (upload step only) */}
-              {step === "upload" && (
+              {showUploadStep && (
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -360,14 +388,14 @@ export function OCRPreviewModal({
 
               {/* Step content */}
               <AnimatePresence mode="wait">
-                {step === "upload" ? (
+                {showUploadStep ? (
                   <motion.div
                     key="upload"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
                   >
-                    <OCRUploadZone onFileSelected={handleFileSelected} />
+                    <OCRUploadZone onFileSelected={handleFileSelected} disabled={isUploading || ocrLoading} />
                     <OCRPipelineGuide />
 
                     {error && (
@@ -383,7 +411,7 @@ export function OCRPreviewModal({
                       </motion.div>
                     )}
                   </motion.div>
-                ) : step === "scanning" && selectedFile ? (
+                ) : showScanningStep && file ? (
                   <motion.div
                     key="scanning"
                     initial={{ opacity: 0, x: -20 }}
@@ -391,8 +419,12 @@ export function OCRPreviewModal({
                     exit={{ opacity: 0, x: 20 }}
                   >
                     <ScanningOverlay
-                      fileName={selectedFile.name}
-                      fileType={selectedFile.type}
+                      fileName={file.name}
+                      fileType={file.type}
+                      isLoading={ocrLoading}
+                      error={error}
+                      onRetry={error ? handleRetry : undefined}
+                      onUploadNew={error ? handleUploadNew : undefined}
                     />
                   </motion.div>
                 ) : null}
@@ -403,10 +435,10 @@ export function OCRPreviewModal({
       )}
 
       {/* The workspace opens full-screen once OCR is complete */}
-      {isOpen && step === "preview" && rawBlocks.length > 0 && selectedFile && (
+      {isOpen && showPreviewStep && file && (
         <OriginalLayoutWorkspace
           key="ocr-workspace"
-          file={selectedFile}
+          file={file}
           initialBlocks={rawBlocks}
           parsedDraft={draftData}
           layoutDebug={layoutDebug}

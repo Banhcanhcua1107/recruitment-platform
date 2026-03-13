@@ -57,16 +57,29 @@ class PageColumnLayout:
 
 
 HEADING_KEYWORDS: list[tuple[str, str, re.Pattern[str]]] = [
-    ("career_objective", "Muc tieu nghe nghiep", re.compile(r"MUC TIEU|OBJECTIVE|CAREER OBJECTIVE|GIOI THIEU|VE BAN THAN", re.I)),
-    ("work_experience", "Kinh nghiem lam viec", re.compile(r"KINH NGHIEM|WORK EXPERIENCE|EXPERIENCE|CONG TAC", re.I)),
-    ("projects", "Du an", re.compile(r"DU AN|PROJECTS|DO AN", re.I)),
-    ("skills", "Ky nang", re.compile(r"KY NANG|SKILLS|NANG LUC", re.I)),
-    ("education", "Hoc van", re.compile(r"HOC VAN|EDUCATION|TRINH DO", re.I)),
-    ("contact", "Thong tin lien he", re.compile(r"LIEN HE|CONTACT|THONG TIN CA NHAN", re.I)),
+    ("career_objective", "Muc tieu nghe nghiep", re.compile(r"MUC\s*TIEU|OBJECTIVE|CAREER\s*OBJECTIVE|GIOI\s*THIEU|VE\s*BAN\s*THAN", re.I)),
+    ("work_experience", "Kinh nghiem lam viec", re.compile(r"KINH\s*NGHIEM|WORK\s*EXPERIENCE|EXPERIENCE|CONG\s*TAC", re.I)),
+    ("projects", "Du an", re.compile(r"DU\s*AN|PROJECTS?|DO\s*AN", re.I)),
+    ("skills", "Ky nang", re.compile(r"KY\s*NANG|SKILLS?|NANG\s*LUC", re.I)),
+    ("education", "Hoc van", re.compile(r"HOC\s*VAN|EDUCATION|TRINH\s*DO", re.I)),
+    ("contact", "Thong tin lien he", re.compile(r"LIEN\s*HE|CONTACT|THONG\s*TIN\s*CA\s*NHAN", re.I)),
     ("certifications", "Chung chi", re.compile(r"CHUNG CHI|CERTIF|GIAY CHUNG NHAN", re.I)),
     ("activities", "Hoat dong", re.compile(r"HOAT DONG|ACTIVIT|NGOAI KHOA", re.I)),
     ("interests", "So thich", re.compile(r"SO THICH|INTEREST|HOBBY", re.I)),
 ]
+
+CONTACT_PREFIX_PATTERNS: dict[str, re.Pattern[str]] = {
+    "email": re.compile(r"^(email|e-mail|mail)\s*[:\-]?\s*", re.I),
+    "phone": re.compile(r"^(phone|mobile|tel|sdt|so dien thoai|dien thoai)\s*[:\-]?\s*", re.I),
+    "address": re.compile(r"^(address|dia chi|dia diem|location)\s*[:\-]?\s*", re.I),
+    "linkedin": re.compile(r"^(linkedin|github|facebook|portfolio|website|web)\s*[:\-]?\s*", re.I),
+}
+
+SKILL_HEADING_RE = re.compile(r"\b(ky\s*nang|skills?|tech\s*stack|cong\s*nghe|ngon\s*ngu\s*lap\s*trinh|technologies?)\b", re.I)
+EDUCATION_HEADING_RE = re.compile(r"\b(hoc\s*van|education|academic|dao\s*tao|truong|university|college)\b", re.I)
+PROJECT_HEADING_RE = re.compile(r"\b(du\s*an|projects?|san\s*pham|product)\b", re.I)
+SUMMARY_HEADING_RE = re.compile(r"\b(muc\s*tieu|objective|summary|gioi\s*thieu|ve\s*ban\s*than|profile)\b", re.I)
+NOISE_LINE_RE = re.compile(r"^[\s\W_]*[?CO0o]{1,3}[\s\W_]*$")
 
 TECH_KEYWORDS = {
     "react", "reactjs", "vue", "angular", "nextjs", "nuxt", "node", "nodejs",
@@ -106,13 +119,27 @@ def _clean_line_text(text: str) -> str:
     text = re.sub(r"^PREV:\s*", "", text, flags=re.I)
     text = re.sub(r"^NEXT:\s*", "", text, flags=re.I)
     text = re.sub(r"\.\s*\.\s*\.\s*\(not provided in the user's message\)", "", text, flags=re.I)
+    text = re.sub(r"^[\s|:;,_~`]+|[\s|:;,_~`]+$", "", text)
+    text = re.sub(r"\s*[|¦]{2,}\s*", " ", text)
+    text = re.sub(r"\s*[•·▪◦]+\s*", " • ", text)
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)
     text = re.sub(r"([,.;:!?])(?![\s\n]|$)", r"\1 ", text)
     return re.sub(r"\s{2,}", " ", text).strip()
 
 
+def _is_ocr_noise_text(text: str) -> bool:
+    cleaned = _clean_line_text(text)
+    if not cleaned:
+        return True
+    if NOISE_LINE_RE.match(cleaned):
+        return True
+    alnum = re.sub(r"[^A-Za-z0-9À-ỹ]", "", cleaned)
+    return len(alnum) <= 1
+
+
 def _looks_like_email(text: str) -> bool:
-    return bool(re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", text, re.I))
+    normalized = _normalize_contact_value(text)
+    return bool(re.search(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", normalized, re.I))
 
 
 def _looks_like_phone(text: str) -> bool:
@@ -126,6 +153,58 @@ def _looks_like_url(text: str) -> bool:
 
 def _looks_like_address(text: str) -> bool:
     return bool(re.search(r"\b(tp\.?|hcm|ha noi|ho chi minh|quan|district|ward|duong|street|phuong)\b", _strip_accents(text), re.I))
+
+
+def _strip_contact_prefix(text: str) -> tuple[str, str | None]:
+    cleaned = _clean_line_text(text)
+    normalized = _strip_accents(cleaned)
+    for field_name, pattern in CONTACT_PREFIX_PATTERNS.items():
+        if pattern.search(normalized):
+            return pattern.sub("", cleaned).strip(), field_name
+    return cleaned, None
+
+
+def _extract_contact_fields(lines: list[OCRLine], base_contact: dict[str, Any] | None = None) -> dict[str, Any]:
+    contact = {
+        "email": "",
+        "phone": "",
+        "address": "",
+        "linkedin": "",
+        "socials": [],
+    }
+    if base_contact:
+        contact.update(base_contact)
+
+    for line in lines:
+        value, explicit_field = _strip_contact_prefix(line.text)
+        if not value:
+            continue
+        value = _normalize_contact_value(value)
+        if explicit_field == "email" or _looks_like_email(value):
+            contact["email"] = value
+            continue
+        if explicit_field == "phone" or _looks_like_phone(value):
+            contact["phone"] = value
+            continue
+        if explicit_field == "address" or _looks_like_address(value):
+            contact["address"] = value
+            continue
+        if explicit_field == "linkedin" or _looks_like_url(value):
+            network = "LinkedIn" if "linkedin" in value.lower() else ("GitHub" if "github" in value.lower() else "Link")
+            if network == "LinkedIn":
+                contact["linkedin"] = value
+            if not any(item["url"] == value for item in contact["socials"]):
+                contact["socials"].append({"network": network, "url": value})
+
+    return contact
+
+
+def _normalize_contact_value(value: str) -> str:
+    normalized = _clean_line_text(value)
+    normalized = re.sub(r"(?<=@)\s+|\s+(?=@)", "", normalized)
+    normalized = re.sub(r"(?<=\.)\s+|\s+(?=\.)", "", normalized)
+    normalized = re.sub(r"(?<=\w)\s+(?=\d)", "", normalized)
+    return normalized.strip()
 
 
 def _is_probable_heading(line: OCRLine, median_font_size: float, prev_gap: float) -> tuple[bool, tuple[str, str] | None]:
@@ -187,7 +266,7 @@ def _build_page_layout(page: OCRPageResult, block_offset: int) -> PageColumnLayo
     blocks: list[OCRLayoutBlock] = []
     for local_index, block in enumerate(page.blocks):
         text = _clean_line_text(block.text)
-        if not text:
+        if _is_ocr_noise_text(text):
             continue
         x = block.rect_x
         y = block.rect_y
@@ -397,6 +476,49 @@ def group_ocr_blocks_into_lines(page_results: list[OCRPageResult]) -> list[OCRLi
     return lines
 
 
+def _keyword_fallback_sections(lines: list[OCRLine]) -> list[CVSection]:
+    fallback_sections: dict[str, CVSection] = {}
+    current_section: CVSection | None = None
+
+    def ensure_section(section_type: str, title: str) -> CVSection:
+        section = fallback_sections.get(section_type)
+        if section is None:
+            section = CVSection(type=section_type, title=title)
+            fallback_sections[section_type] = section
+        return section
+
+    for line in lines:
+        text = _clean_line_text(line.text)
+        if _is_ocr_noise_text(text):
+            continue
+
+        stripped_value, explicit_contact = _strip_contact_prefix(text)
+        if explicit_contact or _looks_like_email(stripped_value) or _looks_like_phone(stripped_value) or _looks_like_address(stripped_value) or _looks_like_url(stripped_value):
+            ensure_section("contact", "Thông tin liên hệ").lines.append(line)
+            current_section = None
+            continue
+
+        normalized = _strip_accents(text).lower()
+        heading_meta: tuple[str, str] | None = None
+        if SKILL_HEADING_RE.search(normalized):
+            heading_meta = ("skills", "Kỹ năng")
+        elif EDUCATION_HEADING_RE.search(normalized):
+            heading_meta = ("education", "Học vấn")
+        elif PROJECT_HEADING_RE.search(normalized):
+            heading_meta = ("projects", "Dự án")
+        elif SUMMARY_HEADING_RE.search(normalized):
+            heading_meta = ("career_objective", "Mục tiêu nghề nghiệp")
+
+        if heading_meta is not None:
+            current_section = ensure_section(heading_meta[0], heading_meta[1])
+            continue
+
+        if current_section is not None:
+            current_section.lines.append(line)
+
+    return [section for section in fallback_sections.values() if section.lines]
+
+
 def detect_cv_sections(page_results: list[OCRPageResult]) -> list[CVSection]:
     layouts = detect_columns(page_results)
     lines = [line for layout in layouts for stream in _split_layout_streams(layout) for line in stream]
@@ -431,6 +553,12 @@ def detect_cv_sections(page_results: list[OCRPageResult]) -> list[CVSection]:
     if preamble.lines:
         ordered_sections.append(preamble)
     ordered_sections.extend(section for section in sections if section.lines or section.type in {"skills", "education", "work_experience", "projects", "career_objective"})
+
+    existing_types = {section.type for section in ordered_sections}
+    for fallback_section in _keyword_fallback_sections(lines):
+        if fallback_section.type not in existing_types:
+            ordered_sections.append(fallback_section)
+
     return ordered_sections
 
 
@@ -716,13 +844,13 @@ def _build_outline_nodes(lines: list[OCRLine]) -> list[dict[str, Any]]:
     return roots
 
 
-def _create_builder_section(section_type: str, title: str, data: dict[str, Any]) -> dict[str, Any]:
+def _create_builder_section(section_type: str, title: str, data: dict[str, Any], container_id: str = "main-column") -> dict[str, Any]:
     return {
         "id": str(uuid4()),
         "type": section_type,
         "title": title,
         "isVisible": True,
-        "containerId": "main-column",
+        "containerId": container_id,
         "data": data,
     }
 
@@ -731,29 +859,57 @@ def _infer_header_and_contact(sections: list[CVSection]) -> tuple[str, str, dict
     preamble_lines = sections[0].lines if sections and sections[0].type == "header" else []
     name = ""
     title = ""
-    contact = {"email": "", "phone": "", "address": "", "socials": []}
+    contact = {"email": "", "phone": "", "address": "", "linkedin": "", "socials": []}
 
     for line in preamble_lines:
-        if not name and not _looks_like_email(line.text) and not _looks_like_phone(line.text) and not _looks_like_url(line.text) and len(line.text) <= 48:
-            name = line.text
+        normalized_text = _normalize_contact_value(line.text)
+        if not name and not _looks_like_email(normalized_text) and not _looks_like_phone(normalized_text) and not _looks_like_url(normalized_text) and len(normalized_text) <= 48:
+            name = normalized_text
             continue
-        if not title and not _looks_like_email(line.text) and not _looks_like_phone(line.text) and len(line.text) <= 72:
-            title = line.text
+        if not title and not _looks_like_email(normalized_text) and not _looks_like_phone(normalized_text) and len(normalized_text) <= 72:
+            title = normalized_text
             continue
-        if not contact["email"] and _looks_like_email(line.text):
-            contact["email"] = line.text
+        if not contact["email"] and _looks_like_email(normalized_text):
+            contact["email"] = normalized_text
             continue
-        if not contact["phone"] and _looks_like_phone(line.text):
-            contact["phone"] = line.text
+        if not contact["phone"] and _looks_like_phone(normalized_text):
+            contact["phone"] = normalized_text
             continue
-        if _looks_like_url(line.text):
-            network = "LinkedIn" if "linkedin" in line.text.lower() else "Link"
-            contact["socials"].append({"network": network, "url": line.text})
+        if _looks_like_url(normalized_text):
+            network = "LinkedIn" if "linkedin" in normalized_text.lower() else "Link"
+            contact["socials"].append({"network": network, "url": normalized_text})
             continue
-        if not contact["address"] and _looks_like_address(line.text):
-            contact["address"] = line.text
+        if not contact["address"] and _looks_like_address(normalized_text):
+            contact["address"] = normalized_text
+
+    contact_section_lines = [line for section in sections if section.type == "contact" for line in section.lines]
+    if contact_section_lines:
+        extracted = _extract_contact_fields(contact_section_lines, contact)
+        contact["email"] = extracted.get("email", "")
+        contact["phone"] = extracted.get("phone", "")
+        contact["address"] = extracted.get("address", "")
+        contact["linkedin"] = extracted.get("linkedin", "")
+        contact["socials"] = extracted.get("socials", [])
 
     return name, title, contact
+
+
+def _clean_skill_items(items: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for item in items:
+        normalized = _clean_line_text(item)
+        normalized = re.sub(r"^(?:ky nang|skills?)\s*[:\-]?\s*", "", normalized, flags=re.I)
+        normalized = _clean_line_text(normalized)
+        if _is_ocr_noise_text(normalized):
+            continue
+        cleaned.append(normalized)
+    return list(dict.fromkeys(cleaned))
+
+
+def _section_container(section_type: str) -> str:
+    if section_type in {"personal_info", "skill_list"}:
+        return "sidebar-column"
+    return "main-column"
 
 
 def _serialize_layout(layouts: list[PageColumnLayout]) -> dict[str, Any]:
@@ -824,6 +980,12 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
     structured = {
         "full_name": full_name or None,
         "job_title": job_title or None,
+        "profile": {
+            "full_name": full_name or None,
+            "job_title": job_title or None,
+            "career_objective": None,
+            "summary": None,
+        },
         "contact": {
             "email": contact["email"] or None,
             "phone": contact["phone"] or None,
@@ -846,6 +1008,7 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
             "header",
             "",
             {"fullName": full_name, "title": job_title},
+            container_id="main-column",
         ),
     ]
     personal_info_title = "Thông tin liên hệ"
@@ -871,14 +1034,17 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
 
         if section.type == "career_objective":
             structured["summary"] = section.content or None
+            structured["profile"]["career_objective"] = section.content or None
+            structured["profile"]["summary"] = section.content or None
             builder_sections.append(
-                _create_builder_section("summary", section.title, {"text": section.content})
+                _create_builder_section("summary", section.title, {"text": section.content}, container_id=_section_container("summary"))
             )
         elif section.type == "contact":
             personal_info_title = section.title or personal_info_title
             contact_items: list[dict[str, str]] = []
             for line in section.lines:
-                value = line.text.strip()
+                value, _ = _strip_contact_prefix(line.text)
+                value = _normalize_contact_value(value)
                 if not value:
                     continue
                 if _looks_like_email(value):
@@ -926,6 +1092,7 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
                             for item in items
                         ],
                     },
+                    container_id=_section_container("experience_list"),
                 )
             )
         elif section.type == "projects":
@@ -951,10 +1118,11 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
                             for item in items
                         ],
                     },
+                    container_id=_section_container("project_list"),
                 )
             )
         elif section.type == "skills":
-            items = parse_skills(section.lines)
+            items = _clean_skill_items(parse_skills(section.lines))
             structured["skills"] = items
             section_payload["items"] = items
             builder_sections.append(
@@ -967,6 +1135,7 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
                             for item in items
                         ],
                     },
+                    container_id=_section_container("skill_list"),
                 )
             )
         elif section.type == "education":
@@ -989,6 +1158,7 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
                             for item in items
                         ],
                     },
+                    container_id=_section_container("education_list"),
                 )
             )
         elif section.type == "certifications":
@@ -1010,6 +1180,7 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
                             for item in items
                         ],
                     },
+                    container_id=_section_container("certificate_list"),
                 )
             )
         else:
@@ -1018,6 +1189,7 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
                     "rich_outline",
                     section.title,
                     {"nodes": _build_outline_nodes(section.lines)},
+                    container_id=_section_container("rich_outline"),
                 )
             )
 
@@ -1029,8 +1201,14 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
             "personal_info",
             personal_info_title,
             personal_info_data,
+            container_id=_section_container("personal_info"),
         ),
     )
+
+    layout["section_layout"] = {
+        "left_column": ["personal_info", "skill_list"],
+        "right_column": ["header", "summary", "education_list", "project_list", "experience_list", "certificate_list"],
+    }
 
     return {
         "data": structured,

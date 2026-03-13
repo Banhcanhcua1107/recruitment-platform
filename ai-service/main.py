@@ -7,7 +7,7 @@ Endpoints
 POST /parse-cv      Extract and structure a CV from uploaded file.
 POST /match-job     Compute semantic similarity between CV text and JD.
 GET  /health        Liveness probe.
-POST /ocr/upload    Raw OCR (RapidOCR bounding boxes) — kept for editor.
+POST /ocr/upload    Raw OCR (PP-OCRv5 bounding boxes) — kept for editor.
 
 Run
 ---
@@ -35,10 +35,13 @@ from models import (
     ParseOCRBlocksRequest,
     OCRUploadResponse,
     ParseCVResponse,
+    OCRProcessingTimingsModel,
+    StructuredOCRBlockModel,
     UploadCVResponse,
 )
 from services.cv_parser import parse_cv
 from services.cv_layout_parser import parse_structured_cv_from_ocr
+from services.ocr_pipeline import InvalidCVFormatError, OCRPipelineError, process_cv, run_ppocrv5
 
 # ── Logging ──────────────────────────────────────────────────
 
@@ -69,7 +72,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="CV Processing API",
-    description="AI-powered CV parsing (pdfplumber / RapidOCR) and job-matching (Ollama).",
+    description="AI-powered CV parsing (PP-OCRv5 / PP-StructureV3) and job-matching (Ollama).",
     version="3.0.0",
     lifespan=lifespan,
     responses={
@@ -244,7 +247,7 @@ def _validate_upload_bytes(
     if not is_known:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type '{ct}'. Accepted: PNG, JPG, WEBP, PDF, DOCX.",
+            detail=f"Unsupported file type '{ct}'. Accepted: PNG, JPG, WEBP, PDF.",
         )
 
     size_mb = len(file_bytes) / (1024 * 1024)
@@ -266,19 +269,14 @@ def _run_ocr_pipeline(
     min_confidence: float,
     apply_llm_correction: bool,
 ):
-    from services.ocr_service import run_ocr
-    effective_ct = (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        if filename.lower().endswith(".docx") or "wordprocessingml" in content_type
-        else content_type
-    )
-    return run_ocr(
+    del apply_llm_correction
+    result = run_ppocrv5(
         file_bytes,
-        content_type=effective_ct,
+        content_type=content_type,
         filename=filename,
         min_confidence=min_confidence,
-        apply_llm_correction=apply_llm_correction,
     )
+    return result["pages"]
 
 
 def _build_page_results_from_blocks(blocks: list) -> list:
@@ -390,16 +388,72 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
     return UploadCVResponse(
         success=True,
         extraction_method="ocr_layout",
+        ocr_provider="",
         page_count=len(pages_out),
         total_blocks=total_blocks,
+        blocks=[],
         pages=pages_out,
         elapsed_seconds=round(elapsed, 3),
+        timings=OCRProcessingTimingsModel(total_seconds=round(elapsed, 3)),
         warnings=warnings,
         data=parsed["data"],
         detected_sections=detected_sections,
         builder_sections=parsed["builder_sections"],
         layout=parsed["layout"],
+        markdown_pages=[],
         raw_text=parsed["raw_text"],
+    )
+
+
+def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings: list[str]) -> UploadCVResponse:
+    from models import OCRBlockModel, OCRPageModel
+
+    page_results = result["page_results"]
+    pages_out: list[OCRPageModel] = []
+    for page_result in page_results:
+        pages_out.append(
+            OCRPageModel(
+                page=page_result.page,
+                image_width=page_result.image_width,
+                image_height=page_result.image_height,
+                blocks=[
+                    OCRBlockModel(
+                        text=block.text,
+                        bbox=block.bbox,
+                        confidence=block.confidence,
+                        page=block.page,
+                        rect={
+                            "x": block.rect_x,
+                            "y": block.rect_y,
+                            "width": block.rect_w,
+                            "height": block.rect_h,
+                        },
+                    )
+                    for block in page_result.blocks
+                ],
+            )
+        )
+
+    detected_sections = [DetectedSectionModel(**section) for section in result["detected_sections"]]
+    structured_blocks = [StructuredOCRBlockModel(**block) for block in result["blocks"]]
+
+    return UploadCVResponse(
+        success=True,
+        extraction_method=str(result["extraction_method"]),
+        ocr_provider=str(result["ocr_provider"]),
+        page_count=int(result["page_count"]),
+        total_blocks=int(result["total_blocks"]),
+        blocks=structured_blocks,
+        pages=pages_out,
+        elapsed_seconds=float(result["timings"]["total_seconds"]),
+        timings=OCRProcessingTimingsModel(**result["timings"]),
+        warnings=warnings,
+        data=result["data"],
+        detected_sections=detected_sections,
+        builder_sections=result["builder_sections"],
+        layout=result["layout"],
+        markdown_pages=result["markdown_pages"],
+        raw_text=str(result["raw_text"]),
     )
 
 
@@ -407,7 +461,7 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
     "/upload-cv",
     response_model=UploadCVResponse,
     tags=["cv"],
-    summary="OCR + layout section detection + builder blocks in one pass",
+    summary="PP-OCRv5 + PP-StructureV3 CV extraction in one pass",
     responses={
         400: {"model": ErrorResponse},
         503: {"model": ErrorResponse},
@@ -421,27 +475,25 @@ async def endpoint_upload_cv(
     ct, _ = _validate_upload_bytes(
         file_bytes=file_bytes,
         max_size_mb=MAX_OCR_SIZE_MB,
-        allowed=ALLOWED_OCR_TYPES,
+        allowed={"image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf", "application/octet-stream"},
         content_type=file.content_type or "",
         filename=file.filename or "",
-        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf", ".docx"},
+        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf"},
     )
 
     start = time.perf_counter()
     warnings: list[str] = []
 
     try:
-        from models import OCRBlockModel, OCRPageModel
-
-        page_results = _run_ocr_pipeline(
+        pipeline_result = process_cv(
             file_bytes=file_bytes,
             content_type=ct,
             filename=file.filename or "",
             min_confidence=min_confidence,
-            apply_llm_correction=False,
         )
-        parsed = parse_structured_cv_from_ocr(page_results)
-    except RuntimeError as exc:
+    except InvalidCVFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OCRPipelineError as exc:
         logger.error("Upload CV OCR pipeline error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -451,10 +503,8 @@ async def endpoint_upload_cv(
     elapsed = time.perf_counter() - start
     if elapsed > 2.0:
         warnings.append(f"Processing took {elapsed:.1f}s (target < 2s).")
-    return _build_upload_cv_response(
-        page_results=page_results,
-        parsed=parsed,
-        elapsed=elapsed,
+    return _build_upload_cv_response_from_pipeline(
+        result=pipeline_result,
         warnings=warnings,
     )
 
@@ -510,7 +560,7 @@ async def endpoint_parse_ocr_blocks(
     "/ocr/upload",
     response_model=OCRUploadResponse,
     tags=["ocr"],
-    summary="RapidOCR: detect and return text-region bounding boxes",
+    summary="PP-OCRv5: detect and return text-region bounding boxes",
     responses={
         400: {"model": ErrorResponse},
         503: {"model": ErrorResponse},
@@ -524,10 +574,10 @@ async def endpoint_ocr_upload(
     ct, _ = _validate_upload_bytes(
         file_bytes=file_bytes,
         max_size_mb=MAX_OCR_SIZE_MB,
-        allowed=ALLOWED_OCR_TYPES,
+        allowed={"image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf", "application/octet-stream"},
         content_type=file.content_type or "",
         filename=file.filename or "",
-        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf", ".docx"},
+        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf"},
     )
 
     start = time.perf_counter()
@@ -543,7 +593,9 @@ async def endpoint_ocr_upload(
             apply_llm_correction=False,
         )
 
-    except RuntimeError as exc:
+    except InvalidCVFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OCRPipelineError as exc:
         logger.error("OCR pipeline error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:

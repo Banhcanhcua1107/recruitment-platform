@@ -11,6 +11,7 @@ interface ApplicationSubmittedEmailInput {
   candidatePhone?: string | null;
   jobTitle: string;
   companyName: string;
+  jobLocation?: string | null;
   coverLetter?: string | null;
   cvFilePath: string;
 }
@@ -43,6 +44,15 @@ function getContentTypeFromPath(filePath: string) {
   return "application/pdf";
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment> {
   const admin = createAdminClient();
   const { data, error } = await admin.storage.from("cv_uploads").download(filePath);
@@ -52,8 +62,9 @@ async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment>
   }
 
   const buffer = Buffer.from(await data.arrayBuffer());
+  const filename = filePath.split("/").pop() || "resume.pdf";
   return {
-    filename: "resume.pdf",
+    filename,
     content: buffer,
     contentType: getContentTypeFromPath(filePath),
   };
@@ -64,71 +75,87 @@ export async function sendApplicationSubmittedEmails(
 ) {
   const safeCandidateName = input.candidateName || input.candidateEmail;
   const attachment = await getCvAttachmentFromStorage(input.cvFilePath);
-  const safeCoverLetter = (input.coverLetter || "Ứng viên chưa cung cấp thư giới thiệu.").trim();
+  const safeCoverLetter = input.coverLetter?.trim() || "";
   const safePhone = (input.candidatePhone || "Chưa cung cấp").trim();
+  const safeLocation = (input.jobLocation || "Chưa cập nhật").trim();
+  const hasCandidateMessage = safeCoverLetter.length > 0;
 
   await Promise.all([
     sendEmail({
       to: input.hrEmail,
-      subject: `New Candidate Application - ${input.jobTitle}`,
+      subject: `New Job Application - ${input.jobTitle} - ${safeCandidateName}`,
       text: [
-        "Hello HR,",
+        "Dear HR Team,",
         "",
-        "A new candidate has applied for your job posting.",
+        "A new candidate has submitted an application.",
         "",
-        `Candidate Name: ${safeCandidateName}`,
-        `Email: ${input.candidateEmail}`,
-        `Phone: ${safePhone}`,
+        "Candidate Information",
+        `- Name: ${safeCandidateName}`,
+        `- Email: ${input.candidateEmail}`,
+        `- Phone: ${safePhone}`,
         "",
-        "Position Applied:",
-        input.jobTitle,
+        "Job Information",
+        `- Job Title: ${input.jobTitle}`,
+        `- Company Name: ${input.companyName}`,
+        `- Job Location: ${safeLocation}`,
         "",
-        "Cover Letter:",
-        safeCoverLetter,
+        "Candidate Message",
+        hasCandidateMessage ? safeCoverLetter : "- Not provided",
         "",
-        "The candidate resume is attached.",
+        "The candidate CV is attached to this email.",
       ]
         .filter(Boolean)
         .join("\n"),
       html: `
-        <p>Hello HR,</p>
-        <p>A new candidate has applied for your job posting.</p>
+        <p>Dear HR Team,</p>
+        <p>A new candidate has submitted an application.</p>
+        <p><strong>Candidate Information</strong></p>
         <ul>
-          <li><strong>Candidate Name:</strong> ${safeCandidateName}</li>
-          <li><strong>Email:</strong> ${input.candidateEmail}</li>
-          <li><strong>Phone:</strong> ${safePhone}</li>
+          <li><strong>Name:</strong> ${escapeHtml(safeCandidateName)}</li>
+          <li><strong>Email:</strong> ${escapeHtml(input.candidateEmail)}</li>
+          <li><strong>Phone:</strong> ${escapeHtml(safePhone)}</li>
         </ul>
-        <p><strong>Position Applied:</strong><br/>${input.jobTitle}</p>
-        <p><strong>Cover Letter:</strong><br/>${safeCoverLetter.replace(/\n/g, "<br/>")}</p>
-        <p>The candidate resume is attached.</p>
+        <p><strong>Job Information</strong></p>
+        <ul>
+          <li><strong>Job title:</strong> ${escapeHtml(input.jobTitle)}</li>
+          <li><strong>Company name:</strong> ${escapeHtml(input.companyName)}</li>
+          <li><strong>Job location:</strong> ${escapeHtml(safeLocation)}</li>
+        </ul>
+        <p><strong>Candidate message</strong></p>
+        <p>${hasCandidateMessage ? escapeHtml(safeCoverLetter).replace(/\n/g, "<br/>") : "Not provided"}</p>
+        <p>The candidate CV is attached to this email.</p>
       `,
       attachments: [attachment],
     }),
     sendEmail({
       to: input.candidateEmail,
-      subject: "Your application has been received",
+      subject: `Application Submitted Successfully - ${input.jobTitle}`,
       text: [
-        `Hello ${safeCandidateName},`,
+        `Dear ${safeCandidateName},`,
         "",
-        "Thank you for applying to the position:",
-        input.jobTitle,
+        "Your application has been submitted successfully.",
         "",
-        `at ${input.companyName}.`,
+        `Job title: ${input.jobTitle}`,
+        `Company name: ${input.companyName}`,
         "",
-        "Our HR team will review your application and contact you if you are shortlisted.",
+        "The employer will review your CV and application details.",
+        "Please wait for further contact from the recruitment team.",
         "",
-        `Best regards,`,
+        "Best regards,",
         input.companyName,
         "",
         `Track your application: ${getBaseUrl()}/candidate/applications`,
       ].join("\n"),
       html: `
-        <p>Hello ${safeCandidateName},</p>
-        <p>Thank you for applying to the position:</p>
-        <p><strong>${input.jobTitle}</strong></p>
-        <p>at <strong>${input.companyName}</strong>.</p>
-        <p>Our HR team will review your application and contact you if you are shortlisted.</p>
-        <p>Best regards,<br/>${input.companyName}</p>
+        <p>Dear ${escapeHtml(safeCandidateName)},</p>
+        <p>Your application has been submitted successfully.</p>
+        <p>
+          <strong>Job title:</strong> ${escapeHtml(input.jobTitle)}<br/>
+          <strong>Company name:</strong> ${escapeHtml(input.companyName)}
+        </p>
+        <p>The employer will review your CV and application details.</p>
+        <p>Please wait for further contact from the recruitment team.</p>
+        <p>Best regards,<br/>${escapeHtml(input.companyName)}</p>
         <p><a href="${getBaseUrl()}/candidate/applications">Track your application</a></p>
       `,
     }),
