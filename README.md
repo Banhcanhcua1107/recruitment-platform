@@ -105,9 +105,6 @@ SMTP_PASS=your_app_password
 
 ---
 
-## 🤝 Đóng góp (Contribution)
-
-Mọi yêu cầu đóng góp vui lòng mở Issue hoặc tạo Pull Request. Chúng tôi luôn hoan nghênh các cải tiến về AI và UX!
-
+## 🤝 
 ---
 *Dự án đạt tiêu chuẩn chất lượng NPC001.*
