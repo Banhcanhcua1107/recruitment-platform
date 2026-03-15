@@ -21,11 +21,14 @@ from __future__ import annotations
 import logging
 import os
 import time
+import uuid
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
 from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.responses import Response
 
 from models import (
     DetectedSectionModel,
@@ -41,7 +44,13 @@ from models import (
 )
 from services.cv_parser import parse_cv
 from services.cv_layout_parser import parse_structured_cv_from_ocr
-from services.ocr_pipeline import InvalidCVFormatError, OCRPipelineError, process_cv, run_ppocrv5
+from services.ocr_pipeline import (
+    InvalidCVFormatError,
+    OCRPipelineError,
+    build_preview_payload,
+    process_cv,
+    run_ppocrv5,
+)
 
 # ── Logging ──────────────────────────────────────────────────
 
@@ -51,6 +60,30 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("cv-processing")
+
+
+@dataclass
+class PreviewAsset:
+    content: bytes
+    media_type: str
+    filename: str
+    file_type: str
+    created_at: float
+
+
+PREVIEW_STORE: dict[str, PreviewAsset] = {}
+PREVIEW_TTL_SECONDS = int(os.getenv("CV_PREVIEW_TTL_SECONDS", "1800"))
+
+
+def _cleanup_preview_store(now: float | None = None) -> None:
+    ts = now if now is not None else time.time()
+    expired_keys = [
+        key
+        for key, value in PREVIEW_STORE.items()
+        if ts - value.created_at > PREVIEW_TTL_SECONDS
+    ]
+    for key in expired_keys:
+        PREVIEW_STORE.pop(key, None)
 
 
 # ── Lifespan ─────────────────────────────────────────────────
@@ -117,6 +150,16 @@ ALLOWED_CV_TYPES = {
     "application/pdf",
     "application/octet-stream",
     "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+ALLOWED_CV_TYPES_V2 = {
+    "application/pdf",
+    "image/jpeg",
+    "image/jpg",
     "image/png",
     "image/webp",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -178,6 +221,114 @@ async def endpoint_parse_cv(
     logger.info("Parsed CV – %d words extracted in %.2fs", word_count, elapsed)
 
     return ParseCVResponse(**result)
+
+
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  POST /parse-cv-v2  (unified output for all formats)         ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+@app.post(
+    "/parse-cv-v2",
+    tags=["cv"],
+    summary="Parse a CV into unified JSON (PDF / image / DOCX)",
+    responses={400: {"model": ErrorResponse}},
+)
+async def endpoint_parse_cv_v2(
+    file: UploadFile = File(..., description="CV file: PDF, PNG, JPG, WEBP or DOCX"),
+):
+    """
+    Returns a **unified** JSON regardless of file type:
+
+    ```json
+    {
+      "success": true,
+      "file_type": "pdf | image | docx",
+      "extracted_text": "...",
+      "blocks": [{"text": "...", "bbox": [x1, y1, x2, y2]}]
+    }
+    ```
+
+    - **PDF / Image** → OCR bounding boxes in `blocks`
+    - **DOCX** → direct text extraction; `blocks` is empty list
+    """
+    from services.cv_parser import detect_file_type, extract_text_from_docx, extract_text_from_image, extract_text_from_pdf
+    from services.ocr_service import run_ocr
+
+    ct = (file.content_type or "").lower()
+    fname = file.filename or ""
+    ext = os.path.splitext(fname)[-1].lower()
+
+    is_known = ct in ALLOWED_CV_TYPES_V2 or ext in {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".docx"}
+    if not is_known:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": f"Unsupported file type '{ct}'. Accepted: PDF, PNG, JPG, WEBP, DOCX."},
+        )
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        return JSONResponse(status_code=400, content={"success": False, "message": "Uploaded file is empty."})
+
+    size_mb = len(file_bytes) / (1024 * 1024)
+    if size_mb > MAX_FILE_SIZE_MB:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": f"File too large ({size_mb:.1f} MB). Max {MAX_FILE_SIZE_MB} MB."},
+        )
+
+    file_type = detect_file_type(ct, fname)
+    start = time.perf_counter()
+
+    try:
+        blocks: list[dict] = []
+        extracted_text = ""
+
+        if file_type == "docx":
+            extracted_text = extract_text_from_docx(file_bytes)
+
+        elif file_type == "pdf":
+            raw_text, _avatar, _pages = extract_text_from_pdf(file_bytes)
+            extracted_text = raw_text
+            # Also run OCR to get bounding boxes
+            try:
+                page_results = run_ocr(file_bytes, content_type=ct, filename=fname)
+                for page in page_results:
+                    for blk in page.blocks:
+                        if blk.bbox and len(blk.bbox) >= 2:
+                            x1 = blk.bbox[0][0]; y1 = blk.bbox[0][1]
+                            x2 = blk.bbox[2][0]; y2 = blk.bbox[2][1]
+                            blocks.append({"text": blk.text, "bbox": [x1, y1, x2, y2]})
+            except Exception as ocr_err:
+                logger.warning("OCR blocks skipped for PDF: %s", ocr_err)
+
+        else:  # image
+            page_results = run_ocr(file_bytes, content_type=ct, filename=fname)
+            text_parts = []
+            for page in page_results:
+                for blk in page.blocks:
+                    text_parts.append(blk.text)
+                    if blk.bbox and len(blk.bbox) >= 2:
+                        x1 = blk.bbox[0][0]; y1 = blk.bbox[0][1]
+                        x2 = blk.bbox[2][0]; y2 = blk.bbox[2][1]
+                        blocks.append({"text": blk.text, "bbox": [x1, y1, x2, y2]})
+            extracted_text = "\n".join(text_parts)
+
+    except Exception as exc:
+        logger.exception("parse-cv-v2 failed")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": "Unable to extract text from the uploaded CV."},
+        )
+
+    elapsed = time.perf_counter() - start
+    logger.info("parse-cv-v2 [%s] – %d chars in %.2fs", file_type, len(extracted_text), elapsed)
+
+    return JSONResponse(content={
+        "success": True,
+        "file_type": file_type,
+        "extracted_text": extracted_text,
+        "blocks": blocks,
+    })
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -247,7 +398,7 @@ def _validate_upload_bytes(
     if not is_known:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type '{ct}'. Accepted: PNG, JPG, WEBP, PDF.",
+            detail=f"Unsupported file type '{ct}'. Accepted: PNG, JPG, WEBP, PDF, DOCX.",
         )
 
     size_mb = len(file_bytes) / (1024 * 1024)
@@ -387,6 +538,9 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
 
     return UploadCVResponse(
         success=True,
+        document_type="cv",
+        document_confidence=1.0,
+        document_signals=["manual_parse_ocr_blocks"],
         extraction_method="ocr_layout",
         ocr_provider="",
         page_count=len(pages_out),
@@ -402,6 +556,7 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
         layout=parsed["layout"],
         markdown_pages=[],
         raw_text=parsed["raw_text"],
+        content=parsed["raw_text"],
     )
 
 
@@ -439,6 +594,9 @@ def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings:
 
     return UploadCVResponse(
         success=True,
+        document_type=str(result.get("document_type") or "cv"),
+        document_confidence=float(result.get("document_confidence") or 0.0),
+        document_signals=[str(item) for item in result.get("document_signals", [])],
         extraction_method=str(result["extraction_method"]),
         ocr_provider=str(result["ocr_provider"]),
         page_count=int(result["page_count"]),
@@ -454,6 +612,88 @@ def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings:
         layout=result["layout"],
         markdown_pages=result["markdown_pages"],
         raw_text=str(result["raw_text"]),
+        content=str(result.get("content") or result["raw_text"]),
+    )
+
+
+@app.post(
+    "/preview/upload",
+    tags=["cv"],
+    summary="Prepare CV preview asset (DOCX converted to PDF)",
+    responses={400: {"model": ErrorResponse}},
+)
+async def endpoint_prepare_cv_preview(
+    file: UploadFile = File(...),
+):
+    file_bytes = await file.read()
+    ct, ext = _validate_upload_bytes(
+        file_bytes=file_bytes,
+        max_size_mb=MAX_OCR_SIZE_MB,
+        allowed={
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "image/webp",
+            "application/pdf",
+            "application/octet-stream",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+        content_type=file.content_type or "",
+        filename=file.filename or "",
+        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf", ".docx"},
+    )
+
+    try:
+        payload = build_preview_payload(
+            file_bytes,
+            content_type=ct,
+            filename=file.filename or f"upload{ext}",
+        )
+    except InvalidCVFormatError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OCRPipelineError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Preview generation failed")
+        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {exc}") from exc
+
+    _cleanup_preview_store()
+    preview_id = uuid.uuid4().hex
+    PREVIEW_STORE[preview_id] = PreviewAsset(
+        content=payload["preview_bytes"],
+        media_type=str(payload["preview_mime"]),
+        filename=str(payload["preview_filename"]),
+        file_type=str(payload["file_type"]),
+        created_at=time.time(),
+    )
+
+    return {
+        "success": True,
+        "file_type": PREVIEW_STORE[preview_id].file_type,
+        "preview_id": preview_id,
+        "preview_url": f"/preview/{preview_id}",
+    }
+
+
+@app.get(
+    "/preview/{preview_id}",
+    tags=["cv"],
+    summary="Read CV preview asset",
+    responses={404: {"model": ErrorResponse}},
+)
+async def endpoint_get_cv_preview(preview_id: str):
+    _cleanup_preview_store()
+    asset = PREVIEW_STORE.get(preview_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Preview asset not found or expired.")
+
+    return Response(
+        content=asset.content,
+        media_type=asset.media_type,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'inline; filename="{asset.filename}"',
+        },
     )
 
 
@@ -475,10 +715,11 @@ async def endpoint_upload_cv(
     ct, _ = _validate_upload_bytes(
         file_bytes=file_bytes,
         max_size_mb=MAX_OCR_SIZE_MB,
-        allowed={"image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf", "application/octet-stream"},
+        allowed={"image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf", "application/octet-stream",
+                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
         content_type=file.content_type or "",
         filename=file.filename or "",
-        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf"},
+        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf", ".docx"},
     )
 
     start = time.perf_counter()
@@ -503,6 +744,7 @@ async def endpoint_upload_cv(
     elapsed = time.perf_counter() - start
     if elapsed > 2.0:
         warnings.append(f"Processing took {elapsed:.1f}s (target < 2s).")
+    warnings.extend([str(item) for item in pipeline_result.get("warnings", []) if str(item).strip()])
     return _build_upload_cv_response_from_pipeline(
         result=pipeline_result,
         warnings=warnings,
@@ -574,10 +816,11 @@ async def endpoint_ocr_upload(
     ct, _ = _validate_upload_bytes(
         file_bytes=file_bytes,
         max_size_mb=MAX_OCR_SIZE_MB,
-        allowed={"image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf", "application/octet-stream"},
+        allowed={"image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf", "application/octet-stream",
+                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
         content_type=file.content_type or "",
         filename=file.filename or "",
-        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf"},
+        allowed_exts={".png", ".jpg", ".jpeg", ".webp", ".pdf", ".docx"},
     )
 
     start = time.perf_counter()

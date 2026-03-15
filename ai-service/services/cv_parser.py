@@ -119,28 +119,55 @@ def extract_text_from_image(
 
 
 def extract_text_from_docx(docx_bytes: bytes) -> str:
-    """Extract plain text from a DOCX file via python-docx."""
+    """Extract plain text from a DOCX file via python-docx.
+
+    Extracts in document order:
+    - Paragraphs (including list items detected by numPr or style name)
+    - Table cell contents (row-by-row, cells joined by tab)
+    """
     try:
         from docx import Document  # python-docx
+        from docx.oxml.ns import qn
     except ImportError as exc:
         raise RuntimeError("python-docx is not installed: pip install python-docx") from exc
 
     doc = Document(io.BytesIO(docx_bytes))
-    paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-    return "\n".join(paragraphs)
+    parts: list[str] = []
+
+    for element in doc.element.body:
+        tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
+
+        if tag == "p":
+            from docx.text.paragraph import Paragraph
+            para = Paragraph(element, doc)
+            text = para.text.strip()
+            if not text:
+                continue
+            style_name = (para.style.name or "").lower()
+            pPr = element.find(qn("w:pPr"))
+            has_num = pPr is not None and pPr.find(qn("w:numPr")) is not None
+            if has_num or "list" in style_name:
+                parts.append(f"• {text}")
+            else:
+                parts.append(text)
+
+        elif tag == "tbl":
+            from docx.table import Table
+            table = Table(element, doc)
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    parts.append("\t".join(cells))
+
+    return "\n".join(parts)
 
 
-# ─────────────────────────────────────────────────────────────────────
-# Step 3 — Pre-processing: fix OCR broken spacing before LLM
-# ─────────────────────────────────────────────────────────────────────
 
 # Patterns that indicate a Vietnamese diacritic character split across a space:
-# e.g. "l àm" → "làm", "vi ệc" → "việc"
+# e.g. "l àm" -> "làm", "vi ệc" -> "việc"
 _BROKEN_VI_PATTERNS = [
-    # Lone 1-2 char cluster followed by a space then a Vietnamese-accented char
     (re.compile(r'(?<=[a-zA-Z])(\s)(?=[àáâãèéêìíîòóôõùúûýăđêôơưÀÁÂÃÈÉÊÌÍÎÒÓÔÕÙÚÛÝĂĐÔƠƯ])'), ''),
-    # Vietnamese-accented char followed by space then a bare Latin letter (continuation)
-    (re.compile(r'(?<=[àáâãèéêìíîòóôõùúûýăđôơưÀÁÂÃÈÉÊÌÍÎÒÓÔÕÙÚÛÝĂĐÔƠƯ])(\s)(?=[a-zA-Z])'), ''),
+    (re.compile(r'(?<=[àáâãèéêìíîòóôõùúûýăđêôơưÀÁÂÃÈÉÊÌÍÎÒÓÔÕÙÚÛÝĂĐÔƠƯ])(\s)(?=[a-zA-Z])'), ''),
 ]
 
 

@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ScanLine } from "lucide-react";
 import { OCRUploadZone } from "./OCRUploadZone";
@@ -55,6 +55,8 @@ interface OCRUploadResponse {
 // ── API call: POST /upload-cv ───────────────────────────
 
 interface UploadCVResponse extends OCRUploadResponse {
+  document_type?: "cv" | "non_cv_document";
+  content?: string;
   extraction_method: string;
   data: {
     full_name: string | null;
@@ -139,6 +141,85 @@ interface LayoutDebugInfo {
   }>;
 }
 
+type AnalysisStage = "pending" | "processing" | "done";
+
+interface AnalysisSectionState {
+  key: "personal" | "skills" | "education" | "experience";
+  label: string;
+  detail: string;
+  state: AnalysisStage;
+}
+
+const DEFAULT_ANALYSIS_SECTIONS: AnalysisSectionState[] = [
+  {
+    key: "personal",
+    label: "Personal Information",
+    detail: "Name, contact and profile header",
+    state: "pending",
+  },
+  {
+    key: "skills",
+    label: "Skills",
+    detail: "Core skills and technologies",
+    state: "pending",
+  },
+  {
+    key: "education",
+    label: "Education",
+    detail: "Schools, degrees and timelines",
+    state: "pending",
+  },
+  {
+    key: "experience",
+    label: "Experience",
+    detail: "Work history and achievements",
+    state: "pending",
+  },
+];
+
+function setSectionState(
+  sections: AnalysisSectionState[],
+  key: AnalysisSectionState["key"],
+  state: AnalysisStage,
+  detail?: string
+): AnalysisSectionState[] {
+  return sections.map((section) =>
+    section.key === key
+      ? {
+          ...section,
+          state,
+          detail: detail ?? section.detail,
+        }
+      : section
+  );
+}
+
+async function estimateFilePages(file: File): Promise<number> {
+  const lowerName = file.name.toLowerCase();
+
+  if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/.test(lowerName)) {
+    return 1;
+  }
+
+  if (/\.docx$/.test(lowerName) || file.type.includes("wordprocessingml.document")) {
+    // DOCX has no trivial page count in-browser; use a stable estimate for progress UI.
+    const text = await file.text().catch(() => "");
+    const paragraphGuess = Math.max(1, Math.floor(text.length / 1500));
+    return Math.min(12, paragraphGuess);
+  }
+
+  if (file.type.includes("pdf") || /\.pdf$/.test(lowerName)) {
+    const buffer = await file.arrayBuffer();
+    const raw = new TextDecoder("latin1").decode(buffer);
+    const matches = raw.match(/\/Type\s*\/Page\b/g);
+    if (matches && matches.length > 0) {
+      return Math.max(1, Math.min(50, matches.length));
+    }
+  }
+
+  return 1;
+}
+
 async function callUploadCV(file: File): Promise<UploadCVResponse> {
   const formData = new FormData();
   formData.append("file", file);
@@ -178,6 +259,7 @@ function paddleBlocksToRaw(response: UploadCVResponse): RawOCRBlock[] {
       blocks.push({
         id: `${b.page}-${b.bbox[0][0]}-${b.bbox[0][1]}-${b.bbox[2][0]}-${b.bbox[2][1]}`,
         text: b.text,
+        page: b.page,
         label: sectionLabelByBlockIndex.get(globalBlockIndex),
         confidence: b.confidence,
         column: b.column,
@@ -211,6 +293,13 @@ export function OCRPreviewModal({
   const [backendSections, setBackendSections] = useState<CVSection[] | null>(null);
   const [layoutDebug, setLayoutDebug] = useState<LayoutDebugInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewMimeType, setPreviewMimeType] = useState<string | null>(null);
+  const [estimatedPages, setEstimatedPages] = useState(1);
+  const [scanningPage, setScanningPage] = useState(1);
+  const [analysisComplete, setAnalysisComplete] = useState(false);
+  const [analysisSections, setAnalysisSections] = useState<AnalysisSectionState[]>(DEFAULT_ANALYSIS_SECTIONS);
+  const [documentType, setDocumentType] = useState<"cv" | "non_cv_document">("cv");
+  const [documentContent, setDocumentContent] = useState("");
   const requestIdRef = useRef(0);
 
   const showUploadStep = !file;
@@ -229,7 +318,61 @@ export function OCRPreviewModal({
     setBackendSections(null);
     setLayoutDebug(null);
     setError(null);
+    setPreviewMimeType(null);
+    setEstimatedPages(1);
+    setScanningPage(1);
+    setAnalysisComplete(false);
+    setAnalysisSections(DEFAULT_ANALYSIS_SECTIONS);
+    setDocumentType("cv");
+    setDocumentContent("");
   }, []);
+
+  useEffect(() => {
+    if (!ocrLoading) return;
+
+    const interval = window.setInterval(() => {
+      setScanningPage((current) => {
+        if (current >= estimatedPages) return estimatedPages;
+        return current + 1;
+      });
+    }, 1200);
+
+    return () => window.clearInterval(interval);
+  }, [estimatedPages, ocrLoading]);
+
+  useEffect(() => {
+    if (!ocrLoading) return;
+
+    let timeoutId = 0;
+    setAnalysisSections((current) => setSectionState(current, "personal", "processing", "Detecting profile and contacts..."));
+
+    timeoutId = window.setTimeout(() => {
+      setAnalysisSections((current) => {
+        const afterPersonal = setSectionState(current, "personal", "done", "Personal information detected");
+        return setSectionState(afterPersonal, "skills", "processing", "Extracting skill keywords...");
+      });
+    }, 1500);
+
+    const timeoutId2 = window.setTimeout(() => {
+      setAnalysisSections((current) => {
+        const afterSkills = setSectionState(current, "skills", "done", "Skills clustered");
+        return setSectionState(afterSkills, "education", "processing", "Parsing education timeline...");
+      });
+    }, 2900);
+
+    const timeoutId3 = window.setTimeout(() => {
+      setAnalysisSections((current) => {
+        const afterEducation = setSectionState(current, "education", "done", "Education section parsed");
+        return setSectionState(afterEducation, "experience", "processing", "Normalizing work experiences...");
+      });
+    }, 4300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearTimeout(timeoutId2);
+      window.clearTimeout(timeoutId3);
+    };
+  }, [ocrLoading]);
 
   const handleClose = useCallback(() => {
     resetState();
@@ -248,13 +391,39 @@ export function OCRPreviewModal({
     setDraftData(null);
     setBackendSections(null);
     setLayoutDebug(null);
+    setPreviewMimeType(null);
+    setAnalysisSections(DEFAULT_ANALYSIS_SECTIONS);
+    setAnalysisComplete(false);
+    setScanningPage(1);
+    setDocumentType("cv");
+    setDocumentContent("");
+
+    const lowerName = nextFile.name.toLowerCase();
+    const isDocxFile = nextFile.type.includes("wordprocessingml.document") || lowerName.endsWith(".docx");
+
+    if (isDocxFile) {
+      setPreviewMimeType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    } else if ((nextFile.type || "").startsWith("image/")) {
+      setPreviewMimeType(nextFile.type || "image/png");
+    } else {
+      setPreviewMimeType("application/pdf");
+    }
+
+    try {
+      const pageEstimate = await estimateFilePages(nextFile);
+      if (requestIdRef.current !== requestId) return;
+      setEstimatedPages(pageEstimate);
+    } catch {
+      setEstimatedPages(1);
+    }
 
     try {
       const uploadResponse = await callUploadCV(nextFile);
 
       if (requestIdRef.current !== requestId) return;
 
-      if (!uploadResponse.success || uploadResponse.total_blocks === 0) {
+      const hasExtractedContent = Boolean((uploadResponse.content || uploadResponse.raw_text || "").trim());
+      if (!uploadResponse.success || (!hasExtractedContent && uploadResponse.total_blocks === 0)) {
         throw new Error(
           uploadResponse.total_blocks === 0
             ? "Không phát hiện văn bản nào trong tài liệu."
@@ -262,10 +431,16 @@ export function OCRPreviewModal({
         );
       }
 
-      const blocks = paddleBlocksToRaw(uploadResponse);
+      const blocks = uploadResponse.total_blocks > 0 ? paddleBlocksToRaw(uploadResponse) : [];
       const parsedDraft = transformParsedCVToDraft(uploadResponse.data);
+      const resolvedDocumentType = uploadResponse.document_type === "non_cv_document" ? "non_cv_document" : "cv";
+      setDocumentType(resolvedDocumentType);
+      setDocumentContent(uploadResponse.content || uploadResponse.raw_text || "");
       setRawBlocks(blocks);
       setBackendSections(uploadResponse.builder_sections || null);
+      const resolvedPageCount = Math.max(1, uploadResponse.page_count || 1);
+      setEstimatedPages(resolvedPageCount);
+      setScanningPage(resolvedPageCount);
       setLayoutDebug({
         documentMode: uploadResponse.layout?.profile?.document_mode,
         pageModes: (uploadResponse.layout?.profile?.pages || uploadResponse.layout?.pages || []).map((page) => ({
@@ -274,10 +449,65 @@ export function OCRPreviewModal({
           splitX: page.split_x,
         })),
       });
+      if (resolvedDocumentType === "non_cv_document") {
+        setAnalysisSections([
+          {
+            key: "personal",
+            label: "Document Type",
+            detail: "Detected as non-CV document",
+            state: "done",
+          },
+          {
+            key: "skills",
+            label: "OCR Extraction",
+            detail: "Extracted full document text",
+            state: "done",
+          },
+          {
+            key: "education",
+            label: "CV Parsing",
+            detail: "Skipped to avoid incorrect CV mapping",
+            state: "done",
+          },
+          {
+            key: "experience",
+            label: "Structured Output",
+            detail: "Showing generic document content",
+            state: "done",
+          },
+        ]);
+      } else {
+        setAnalysisSections((current) =>
+          current.map((section) => {
+            if (section.key === "personal") {
+              const hasContact = Boolean(uploadResponse.data.contact.email || uploadResponse.data.contact.phone);
+              return { ...section, state: "done", detail: hasContact ? "Contact information parsed" : "Profile extracted" };
+            }
+            if (section.key === "skills") {
+              const count = uploadResponse.data.skills?.length || 0;
+              return { ...section, state: "done", detail: `${count} skill${count === 1 ? "" : "s"} extracted` };
+            }
+            if (section.key === "education") {
+              const count = uploadResponse.data.education?.length || 0;
+              return { ...section, state: "done", detail: `${count} education entr${count === 1 ? "y" : "ies"}` };
+            }
+            const count = uploadResponse.data.experience?.length || 0;
+            return { ...section, state: "done", detail: `${count} experience entr${count === 1 ? "y" : "ies"}` };
+          })
+        );
+      }
+      setAnalysisComplete(true);
       setDraftData(hasMeaningfulDraftData(parsedDraft) ? parsedDraft : null);
       setIsUploading(false);
       setOcrLoading(false);
-      setStep("preview");
+      if (resolvedDocumentType === "cv" && blocks.length > 0) {
+        window.setTimeout(() => {
+          if (requestIdRef.current !== requestId) return;
+          setStep("preview");
+        }, 500);
+      } else {
+        setStep("scanning");
+      }
     } catch (err) {
       if (requestIdRef.current !== requestId) return;
       const rawMessage = err instanceof Error ? err.message : "Lỗi không xác định";
@@ -344,7 +574,11 @@ export function OCRPreviewModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="relative z-10 w-full max-w-3xl max-h-[90vh] mx-4 overflow-y-auto"
+            className={`relative z-10 mx-4 ${
+              showScanningStep
+                ? "w-[95vw] max-w-400 h-[90vh] max-h-[90vh] overflow-hidden"
+                : "w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+            }`}
           >
             {/* Close button */}
             {!ocrLoading && (
@@ -365,7 +599,11 @@ export function OCRPreviewModal({
             )}
 
             {/* Content Card */}
-            <div className="bg-white/95 backdrop-blur-xl rounded-3xl border border-slate-200/40 shadow-2xl shadow-slate-900/20 p-8">
+            <div
+              className={`bg-white/95 backdrop-blur-xl rounded-3xl border border-slate-200/40 shadow-2xl shadow-slate-900/20 ${
+                showScanningStep ? "h-full overflow-hidden p-5" : "p-8"
+              }`}
+            >
 
               {/* Title (upload step only) */}
               {showUploadStep && (
@@ -417,11 +655,20 @@ export function OCRPreviewModal({
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
+                    className="h-full"
                   >
                     <ScanningOverlay
                       fileName={file.name}
                       fileType={file.type}
+                      file={file}
+                      previewMimeType={previewMimeType}
                       isLoading={ocrLoading}
+                      currentPage={scanningPage}
+                      totalPages={estimatedPages}
+                      analysisComplete={analysisComplete}
+                      documentType={documentType}
+                      documentContent={documentContent}
+                      sectionStates={analysisSections}
                       error={error}
                       onRetry={error ? handleRetry : undefined}
                       onUploadNew={error ? handleUploadNew : undefined}

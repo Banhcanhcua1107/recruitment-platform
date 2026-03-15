@@ -50,7 +50,7 @@ export default function HomePage() {
                 </p>
 
                 {/* CTA Buttons */}
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap gap-4" suppressHydrationWarning>
                   <Link 
                     href="/jobs" 
                     className="btn-shine inline-flex items-center h-14 px-8 bg-primary hover:bg-primary-hover text-white text-lg font-bold rounded-2xl shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 active:scale-95"

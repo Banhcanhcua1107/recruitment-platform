@@ -72,6 +72,7 @@ export interface OCRBoundingBox {
 export interface RawOCRBlock {
   id: string;
   text: string;
+  page?: number;
   label?: string;
   confidence: number;
   column?: "left" | "right" | "full_width";
@@ -134,6 +135,8 @@ export function removeDuplicateBlocks(blocks: RawOCRBlock[]): RawOCRBlock[] {
   const uniqueBlocks: RawOCRBlock[] = [];
 
   const sortedBlocks = [...blocks].sort((left, right) => {
+    const pageDiff = (left.page ?? 1) - (right.page ?? 1);
+    if (pageDiff !== 0) return pageDiff;
     const topDiff = left.rect.y - right.rect.y;
     if (Math.abs(topDiff) > 0.001) return topDiff;
     const leftDiff = left.rect.x - right.rect.x;
@@ -146,7 +149,9 @@ export function removeDuplicateBlocks(blocks: RawOCRBlock[]): RawOCRBlock[] {
     if (!normalizedText) continue;
 
     const duplicateIndex = uniqueBlocks.findIndex((existing) => {
-      return normalizeBlockText(existing.text) === normalizedText && blockIoU(existing, block) > 0.7;
+      return (existing.page ?? 1) === (block.page ?? 1)
+        && normalizeBlockText(existing.text) === normalizedText
+        && blockIoU(existing, block) > 0.7;
     });
 
     if (duplicateIndex === -1) {
@@ -169,6 +174,8 @@ export function removeDuplicateBlocks(blocks: RawOCRBlock[]): RawOCRBlock[] {
   }
 
   return uniqueBlocks.sort((left, right) => {
+    const pageDiff = (left.page ?? 1) - (right.page ?? 1);
+    if (pageDiff !== 0) return pageDiff;
     const topDiff = left.rect.y - right.rect.y;
     if (Math.abs(topDiff) > 0.001) return topDiff;
     return left.rect.x - right.rect.x;

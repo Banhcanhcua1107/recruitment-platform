@@ -112,7 +112,8 @@ function clamp(val: number, min = 0, max = 100): number {
 function stableKey(block: RawOCRBlock): string {
   if (block.id) return block.id;
   const { x, y, width, height } = block.rect;
-  return `${x.toFixed(3)}-${y.toFixed(3)}-${width.toFixed(3)}-${height.toFixed(3)}`;
+  const page = block.page ?? 1;
+  return `${page}-${x.toFixed(3)}-${y.toFixed(3)}-${width.toFixed(3)}-${height.toFixed(3)}`;
 }
 
 function revokeObjectUrlLater(url: string, delayMs = 15000): void {
@@ -219,7 +220,7 @@ function parseCVFromBlocks(blocks: RawOCRBlock[]): ParsedCV {
   const sidebar = blocks
     .map((b, i) => ({ ...b, origIndex: i }))
     .filter((b) => b.column ? b.column === "left" : b.rect.x + b.rect.width / 2 < sidebarBreakX)
-    .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+    .sort((a, b) => (a.page ?? 1) - (b.page ?? 1) || a.rect.y - b.rect.y || a.rect.x - b.rect.x);
 
   const mainContent = blocks
     .map((b, i) => ({ ...b, origIndex: i }))
@@ -227,7 +228,7 @@ function parseCVFromBlocks(blocks: RawOCRBlock[]): ParsedCV {
       if (b.column) return b.column === "right" || b.column === "full_width";
       return b.rect.x + b.rect.width / 2 >= sidebarBreakX;
     })
-    .sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
+    .sort((a, b) => (a.page ?? 1) - (b.page ?? 1) || a.rect.y - b.rect.y || a.rect.x - b.rect.x);
 
   // ── Sidebar parsing ──────────────────────────────────────────
   let sidebarSection: SectionType = "other";
@@ -630,14 +631,14 @@ function SourceOCRBox({
   imageSize,
 }: {
   index: number;
-  mappedBox: MappedBox;
+        mappedBox: MappedBox;
   register: UseFormRegister<OriginalLayoutFormState>;
   isActive: boolean;
   onActivate: () => void;
   imageSize: { width: number; height: number };
 }) {
   const { pct, confidence, sectionType, column, label } = mappedBox;
-  const fontSize = Math.max(6, (pct.numHeight / 100) * imageSize.height * 0.65);
+        const fontSize = Math.max(6, (pct.numHeight / 100) * imageSize.height * 0.65);
   const isLowConf = confidence < 0.5;
   const style = SECTION_BOX[sectionType] ?? SECTION_BOX.other;
   const columnStyle =
@@ -755,7 +756,11 @@ function SourcePane({
   isScanning: boolean;
 }) {
   const [sourceUrl, setSourceUrl] = useState("");
+  const [docxText, setDocxText] = useState("");
+  const [docxLoading, setDocxLoading] = useState(false);
+  const [docxError, setDocxError] = useState<string | null>(null);
   const isPdf = file?.type === "application/pdf" || file?.name?.toLowerCase().endsWith(".pdf");
+  const isDocx = file?.type?.includes("wordprocessingml.document") || file?.name?.toLowerCase().endsWith(".docx");
 
   useEffect(() => {
     if (!file) return;
@@ -764,11 +769,51 @@ function SourcePane({
     if (isPdf) {
       onImageLoad(600, 849);
     }
+    if (isDocx) {
+      onImageLoad(720, 980);
+    }
     return () => {
       revokeObjectUrlLater(url);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadDocxText() {
+      if (!file || !isDocx) {
+        setDocxText("");
+        setDocxError(null);
+        return;
+      }
+
+      setDocxLoading(true);
+      setDocxError(null);
+
+      try {
+        const mammoth = await import("mammoth");
+        const buffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+        if (!mounted) return;
+        setDocxText(result.value || "(Empty DOCX content)");
+      } catch (error) {
+        if (!mounted) return;
+        const message = error instanceof Error ? error.message : "Failed to render DOCX preview.";
+        setDocxError(message);
+      } finally {
+        if (mounted) {
+          setDocxLoading(false);
+        }
+      }
+    }
+
+    void loadDocxText();
+
+    return () => {
+      mounted = false;
+    };
+  }, [file, isDocx]);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-l-2xl border-r border-slate-700/50 bg-slate-900">
@@ -822,6 +867,30 @@ function SourcePane({
                     }}
                   />
                 </object>
+              ) : isDocx ? (
+                <div
+                  style={{
+                    width: 720,
+                    minHeight: 980,
+                    maxHeight: 980,
+                    overflowY: "auto",
+                    display: "block",
+                    background: "white",
+                    padding: 24,
+                  }}
+                >
+                  {docxLoading ? (
+                    <div className="flex h-full min-h-230 items-center justify-center text-sm text-slate-500">
+                      Rendering DOCX preview...
+                    </div>
+                  ) : docxError ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                      {docxError}
+                    </div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{docxText}</pre>
+                  )}
+                </div>
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
@@ -1215,11 +1284,11 @@ function StructuredMirrorPane({
             >
               <div className={`flex items-start gap-2 ${className}`}>
                 {line.marker ? (
-                  <span className="mt-[2px] shrink-0 text-slate-400">{line.marker}</span>
+                  <span className="mt-0.5 shrink-0 text-slate-400">{line.marker}</span>
                 ) : line.level > 0 ? (
-                  <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
+                  <span className="mt-1.75 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300" />
                 ) : null}
-                <span className="flex-1 whitespace-pre-wrap break-words">{line.content}</span>
+                <span className="flex-1 whitespace-pre-wrap wrap-break-word">{line.content}</span>
               </div>
             </div>
           );

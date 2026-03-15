@@ -147,6 +147,9 @@ class DetectedSectionModel(BaseModel):
 
 class UploadCVResponse(BaseModel):
     success: bool = True
+    document_type: str = "cv"
+    document_confidence: float = 0.0
+    document_signals: list[str] = Field(default_factory=list)
     extraction_method: str = "ocr_layout"
     ocr_provider: str = ""
     page_count: int = 0
@@ -162,6 +165,7 @@ class UploadCVResponse(BaseModel):
     layout: dict[str, Any] = Field(default_factory=dict)
     markdown_pages: list[str] = Field(default_factory=list)
     raw_text: str = ""
+    content: str = ""
 
 
 # ╔══════════════════════════════════════════════════════════════╗

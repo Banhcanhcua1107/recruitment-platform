@@ -1,4 +1,4 @@
-﻿"""
+"""
 ocr_service.py - RapidOCR (PP-OCRv4 via ONNX Runtime) text detection pipeline.
 
 Supports: PNG, JPG, WEBP, PDF, DOCX
@@ -177,14 +177,42 @@ def guess_content_type(filename: str) -> str:
     return content_type or "application/octet-stream"
 
 
-def _prepare_image_for_ocr(image: Image.Image) -> Image.Image:
+# Maximum dimension (width or height) before downscaling for OCR performance
+_MAX_IMAGE_DIMENSION = 4000
+
+
+def _prepare_image_for_ocr(image: Image.Image, apply_noise_reduction: bool = True) -> Image.Image:
+    """Full preprocessing pipeline for OCR:
+    1. EXIF correction
+    2. Convert to RGB
+    3. Resize if dimension exceeds _MAX_IMAGE_DIMENSION (keeps aspect ratio)
+    4. Light noise reduction via MedianFilter (skipped for small images)
+    """
+    # Step 1: EXIF correction
     image = ImageOps.exif_transpose(image)
+
+    # Step 2: Convert to RGB
     if image.mode == "RGBA":
         background = Image.new("RGB", image.size, "white")
         background.paste(image, mask=image.getchannel("A"))
-        return background
-    if image.mode != "RGB":
-        return image.convert("RGB")
+        image = background
+    elif image.mode != "RGB":
+        image = image.convert("RGB")
+
+    # Step 3: Resize if too large (preserves aspect ratio, uses LANCZOS for quality)
+    w, h = image.size
+    max_dim = max(w, h)
+    if max_dim > _MAX_IMAGE_DIMENSION:
+        scale = _MAX_IMAGE_DIMENSION / max_dim
+        new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+        logger.debug("Resizing image from %dx%d to %dx%d for OCR", w, h, new_w, new_h)
+        image = image.resize((new_w, new_h), Image.LANCZOS)
+
+    # Step 4: Light noise reduction (MedianFilter size=3, only on images large enough)
+    if apply_noise_reduction and min(image.size) >= 300:
+        from PIL import ImageFilter
+        image = image.filter(ImageFilter.MedianFilter(size=3))
+
     return image
 # ── File normalisation ────────────────────────────────────────────
 
