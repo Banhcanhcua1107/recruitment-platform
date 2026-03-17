@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { calculateCandidateProfileCompletion } from "@/lib/candidate-profile-shared";
 import type { Application, CV, DashboardData, DashboardStats, Job } from "@/types/dashboard";
 
 function normalizeStatus(status: string | null | undefined): Application["status"] {
@@ -68,7 +69,11 @@ export function useCandidateDashboard() {
           recommendedJobsResponse,
           notificationsResponse,
         ] = await Promise.all([
-          supabase.from("candidate_profiles").select("*").eq("user_id", authUser.id).single(),
+          supabase
+            .from("candidate_profiles")
+            .select("full_name, avatar_url, headline, email, phone, location, introduction, skills, work_experiences, educations, work_experience, education, cv_file_path, cv_url")
+            .eq("user_id", authUser.id)
+            .maybeSingle(),
           supabase
             .from("applications")
             .select(`
@@ -142,14 +147,25 @@ export function useCandidateDashboard() {
           profileViews: viewsResponse.count || 0,
         };
 
-        const profile = profileResponse.data || {
-          id: authUser.id,
-          full_name: authUser.user_metadata?.full_name || authUser.email,
-          email: authUser.email,
-          avatar_url: authUser.user_metadata?.avatar_url,
-        };
-
-        const completionPercentage = profileResponse.data ? 70 : 30;
+        const profile = profileResponse.data;
+        const completionPercentage = calculateCandidateProfileCompletion({
+          fullName: String(profile?.full_name || authUser.user_metadata?.full_name || authUser.email || ""),
+          avatarUrl: String(profile?.avatar_url || authUser.user_metadata?.avatar_url || ""),
+          headline: String(profile?.headline || ""),
+          email: String(profile?.email || authUser.email || ""),
+          phone: String(profile?.phone || ""),
+          location: String(profile?.location || ""),
+          introduction: String(profile?.introduction || ""),
+          skills: Array.isArray(profile?.skills) ? profile.skills.map((item) => String(item)) : [],
+          workExperiences: Array.isArray(profile?.work_experiences)
+            ? profile.work_experiences
+            : [],
+          educations: Array.isArray(profile?.educations) ? profile.educations : [],
+          workExperience: String(profile?.work_experience || ""),
+          education: String(profile?.education || ""),
+          cvUrl: String(profile?.cv_url || ""),
+          cvFilePath: String(profile?.cv_file_path || ""),
+        });
 
         const recommendedJobs: Job[] = (recommendedJobsResponse.data || []).map((job) => ({
           id: String(job.id),
@@ -171,7 +187,16 @@ export function useCandidateDashboard() {
         }));
 
         setData({
-          user: { ...profile, completion_percentage: completionPercentage },
+          user: {
+            id: authUser.id,
+            full_name: String(profile?.full_name || authUser.user_metadata?.full_name || authUser.email || ""),
+            email: String(profile?.email || authUser.email || ""),
+            phone: profile?.phone ? String(profile.phone) : undefined,
+            avatar_url: profile?.avatar_url
+              ? String(profile.avatar_url)
+              : authUser.user_metadata?.avatar_url,
+            completion_percentage: completionPercentage,
+          },
           stats,
           notificationCount: notificationsResponse.count || 0,
           recentApplications,

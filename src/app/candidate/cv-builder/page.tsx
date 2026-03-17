@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -18,7 +18,7 @@ import { CreateCard } from "./components/cv/CreateCard";
 import { UploadCard } from "./components/cv/UploadCard";
 import type { CVSection } from "./types";
 
-export default function CVDashboardPage() {
+function CVDashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<ResumeRow[]>([]);
@@ -259,5 +259,17 @@ export default function CVDashboardPage() {
         onConfirm={handleOCRConfirm}
       />
     </div>
+  );
+}
+
+function CVDashboardPageFallback() {
+  return <div className="min-h-screen bg-slate-50" />;
+}
+
+export default function CVDashboardPage() {
+  return (
+    <Suspense fallback={<CVDashboardPageFallback />}>
+      <CVDashboardPageContent />
+    </Suspense>
   );
 }

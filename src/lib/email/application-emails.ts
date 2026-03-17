@@ -6,13 +6,14 @@ import { sendEmail } from "@/lib/email/mail-service";
 
 interface ApplicationSubmittedEmailInput {
   hrEmail: string;
-  candidateEmail: string;
+  candidateEmail: string | null;
   candidateName: string;
   candidatePhone?: string | null;
   jobTitle: string;
   companyName: string;
-  jobLocation?: string | null;
-  coverLetter?: string | null;
+  jobId: string;
+  introduction: string;
+  appliedAt: string;
   cvFilePath: string;
 }
 
@@ -49,8 +50,40 @@ function escapeHtml(value: string) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function formatTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function buildEmailShell(title: string, subtitle: string, body: string) {
+  return `
+    <div style="margin:0;padding:32px;background:#f4f7fb;font-family:Arial,sans-serif;color:#0f172a;">
+      <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dbe4f0;border-radius:20px;overflow:hidden;">
+        <div style="padding:28px 32px;background:linear-gradient(135deg,#0f172a,#1d4ed8);color:#ffffff;">
+          <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.8;">TalentFlow</p>
+          <h1 style="margin:0;font-size:28px;line-height:1.2;">${title}</h1>
+          <p style="margin:10px 0 0;font-size:15px;line-height:1.6;opacity:0.92;">${subtitle}</p>
+        </div>
+        <div style="padding:32px;">
+          ${body}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment> {
@@ -58,7 +91,7 @@ async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment>
   const { data, error } = await admin.storage.from("cv_uploads").download(filePath);
 
   if (error || !data) {
-    throw new Error(error?.message || "Không thể tải CV từ Supabase Storage để đính kèm email.");
+    throw new Error(error?.message || "Unable to download the CV attachment from storage.");
   }
 
   const buffer = Buffer.from(await data.arrayBuffer());
@@ -70,119 +103,131 @@ async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment>
   };
 }
 
-export async function sendApplicationSubmittedEmails(
-  input: ApplicationSubmittedEmailInput
-) {
-  const safeCandidateName = input.candidateName || input.candidateEmail;
+export async function sendApplicationSubmittedEmails(input: ApplicationSubmittedEmailInput) {
   const attachment = await getCvAttachmentFromStorage(input.cvFilePath);
-  const safeCoverLetter = input.coverLetter?.trim() || "";
-  const safePhone = (input.candidatePhone || "Chưa cung cấp").trim();
-  const safeLocation = (input.jobLocation || "Chưa cập nhật").trim();
-  const hasCandidateMessage = safeCoverLetter.length > 0;
+  const safeCandidateName = input.candidateName || "Candidate";
+  const safeCandidateEmail = input.candidateEmail?.trim() || "";
+  const safeCandidatePhone = input.candidatePhone?.trim() || "";
+  const safeAppliedAt = formatTimestamp(input.appliedAt);
+  const safeIntroduction = input.introduction.trim();
 
-  await Promise.all([
-    sendEmail({
-      to: input.hrEmail,
-      subject: `New Job Application - ${input.jobTitle} - ${safeCandidateName}`,
-      text: [
-        "Dear HR Team,",
-        "",
-        "A new candidate has submitted an application.",
-        "",
-        "Candidate Information",
-        `- Name: ${safeCandidateName}`,
-        `- Email: ${input.candidateEmail}`,
-        `- Phone: ${safePhone}`,
-        "",
-        "Job Information",
-        `- Job Title: ${input.jobTitle}`,
-        `- Company Name: ${input.companyName}`,
-        `- Job Location: ${safeLocation}`,
-        "",
-        "Candidate Message",
-        hasCandidateMessage ? safeCoverLetter : "- Not provided",
-        "",
-        "The candidate CV is attached to this email.",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      html: `
-        <p>Dear HR Team,</p>
-        <p>A new candidate has submitted an application.</p>
-        <p><strong>Candidate Information</strong></p>
-        <ul>
-          <li><strong>Name:</strong> ${escapeHtml(safeCandidateName)}</li>
-          <li><strong>Email:</strong> ${escapeHtml(input.candidateEmail)}</li>
-          <li><strong>Phone:</strong> ${escapeHtml(safePhone)}</li>
-        </ul>
-        <p><strong>Job Information</strong></p>
-        <ul>
-          <li><strong>Job title:</strong> ${escapeHtml(input.jobTitle)}</li>
-          <li><strong>Company name:</strong> ${escapeHtml(input.companyName)}</li>
-          <li><strong>Job location:</strong> ${escapeHtml(safeLocation)}</li>
-        </ul>
-        <p><strong>Candidate message</strong></p>
-        <p>${hasCandidateMessage ? escapeHtml(safeCoverLetter).replace(/\n/g, "<br/>") : "Not provided"}</p>
-        <p>The candidate CV is attached to this email.</p>
-      `,
-      attachments: [attachment],
-    }),
-    sendEmail({
-      to: input.candidateEmail,
-      subject: `Application Submitted Successfully - ${input.jobTitle}`,
-      text: [
-        `Dear ${safeCandidateName},`,
-        "",
-        "Your application has been submitted successfully.",
-        "",
-        `Job title: ${input.jobTitle}`,
-        `Company name: ${input.companyName}`,
-        "",
-        "The employer will review your CV and application details.",
-        "Please wait for further contact from the recruitment team.",
-        "",
-        "Best regards,",
-        input.companyName,
-        "",
-        `Track your application: ${getBaseUrl()}/candidate/applications`,
-      ].join("\n"),
-      html: `
-        <p>Dear ${escapeHtml(safeCandidateName)},</p>
-        <p>Your application has been submitted successfully.</p>
-        <p>
-          <strong>Job title:</strong> ${escapeHtml(input.jobTitle)}<br/>
-          <strong>Company name:</strong> ${escapeHtml(input.companyName)}
-        </p>
-        <p>The employer will review your CV and application details.</p>
-        <p>Please wait for further contact from the recruitment team.</p>
-        <p>Best regards,<br/>${escapeHtml(input.companyName)}</p>
-        <p><a href="${getBaseUrl()}/candidate/applications">Track your application</a></p>
-      `,
-    }),
-  ]);
+  const recruiterHtml = buildEmailShell(
+    "New Candidate Application",
+    `${escapeHtml(safeCandidateName)} has applied for ${escapeHtml(input.jobTitle)}.`,
+    `
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Job Title</td><td style="padding:8px 0;color:#334155;">${escapeHtml(input.jobTitle)}</td></tr>
+        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Company Name</td><td style="padding:8px 0;color:#334155;">${escapeHtml(input.companyName)}</td></tr>
+        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Job ID</td><td style="padding:8px 0;color:#334155;">${escapeHtml(input.jobId)}</td></tr>
+        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Applied At</td><td style="padding:8px 0;color:#334155;">${escapeHtml(safeAppliedAt)}</td></tr>
+      </table>
+      <div style="border:1px solid #dbe4f0;border-radius:16px;padding:20px;margin-bottom:24px;background:#f8fbff;">
+        <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Candidate Information</p>
+        <p style="margin:0 0 8px;"><strong>Full Name:</strong> ${escapeHtml(safeCandidateName)}</p>
+        ${safeCandidateEmail ? `<p style="margin:0 0 8px;"><strong>Email:</strong> ${escapeHtml(safeCandidateEmail)}</p>` : ""}
+        ${safeCandidatePhone ? `<p style="margin:0 0 8px;"><strong>Phone:</strong> ${escapeHtml(safeCandidatePhone)}</p>` : ""}
+        <p style="margin:0;"><strong>Introduction:</strong><br/>${escapeHtml(safeIntroduction).replace(/\n/g, "<br/>")}</p>
+      </div>
+      <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">The candidate CV is attached to this email for your review.</p>
+    `
+  );
+
+  const recruiterText = [
+    `[New Application] ${safeCandidateName} applied for ${input.jobTitle}`,
+    "",
+    "Job info:",
+    `- jobTitle: ${input.jobTitle}`,
+    `- companyName: ${input.companyName}`,
+    `- jobId: ${input.jobId}`,
+    `- appliedAt: ${safeAppliedAt}`,
+    "",
+    "Candidate info:",
+    `- fullName: ${safeCandidateName}`,
+    safeCandidateEmail ? `- email: ${safeCandidateEmail}` : null,
+    safeCandidatePhone ? `- phone: ${safeCandidatePhone}` : null,
+    `- introduction: ${safeIntroduction}`,
+    "",
+    "The candidate CV is attached to this email.",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  await sendEmail({
+    to: input.hrEmail,
+    subject: `[New Application] ${safeCandidateName} applied for ${input.jobTitle}`,
+    text: recruiterText,
+    html: recruiterHtml,
+    attachments: [attachment],
+  });
+
+  if (!safeCandidateEmail) {
+    return { candidateEmailSent: false };
+  }
+
+  const candidateHtml = buildEmailShell(
+    "Application Submitted Successfully",
+    `Your application for ${escapeHtml(input.jobTitle)} at ${escapeHtml(input.companyName)} has been received.`,
+    `
+      <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">Hello ${escapeHtml(safeCandidateName)},</p>
+      <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">Thank you for applying through TalentFlow. Your information has been successfully sent to the recruiter.</p>
+      <div style="border:1px solid #dbe4f0;border-radius:16px;padding:20px;margin-bottom:20px;background:#f8fbff;">
+        <p style="margin:0 0 8px;"><strong>Job Title:</strong> ${escapeHtml(input.jobTitle)}</p>
+        <p style="margin:0 0 8px;"><strong>Company Name:</strong> ${escapeHtml(input.companyName)}</p>
+        <p style="margin:0;"><strong>Applied At:</strong> ${escapeHtml(safeAppliedAt)}</p>
+      </div>
+      <p style="margin:0 0 14px;font-size:15px;line-height:1.8;color:#334155;">Please wait for recruiter response</p>
+      <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b;">You can review your submitted applications anytime from your candidate dashboard.</p>
+      <p style="margin:20px 0 0;"><a href="${getBaseUrl()}/candidate/applications" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:700;">View My Applications</a></p>
+    `
+  );
+
+  const candidateText = [
+    `[Application Submitted] You applied for ${input.jobTitle}`,
+    "",
+    `Hello ${safeCandidateName},`,
+    "",
+    "Your application has been submitted successfully.",
+    `jobTitle: ${input.jobTitle}`,
+    `companyName: ${input.companyName}`,
+    `appliedAt: ${safeAppliedAt}`,
+    "Please wait for recruiter response",
+    "",
+    `Track your applications: ${getBaseUrl()}/candidate/applications`,
+  ].join("\n");
+
+  await sendEmail({
+    to: safeCandidateEmail,
+    subject: `[Application Submitted] You applied for ${input.jobTitle}`,
+    text: candidateText,
+    html: candidateHtml,
+  });
+
+  return { candidateEmailSent: true };
 }
 
-export async function sendApplicationStatusEmail(
-  input: ApplicationStatusEmailInput
-) {
+export async function sendApplicationStatusEmail(input: ApplicationStatusEmailInput) {
   const safeCandidateName = input.candidateName || input.candidateEmail;
 
   await sendEmail({
     to: input.candidateEmail,
-    subject: `Cập nhật đơn ứng tuyển: ${input.statusLabel}`,
+    subject: `Cap nhat don ung tuyen: ${input.statusLabel}`,
     text: [
-      `Chào ${safeCandidateName},`,
+      `Chao ${safeCandidateName},`,
       "",
-      `Đơn ứng tuyển cho vị trí ${input.jobTitle} tại ${input.companyName} đã được cập nhật sang trạng thái: ${input.statusLabel}.`,
+      `Don ung tuyen cho vi tri ${input.jobTitle} tai ${input.companyName} da duoc cap nhat sang trang thai: ${input.statusLabel}.`,
       input.message,
       "",
-      `Theo dõi chi tiết tại: ${getBaseUrl()}/candidate/applications`,
+      `Theo doi chi tiet tai: ${getBaseUrl()}/candidate/applications`,
     ].join("\n"),
-    html: `
-      <p>Chào ${safeCandidateName},</p>
-      <p>Đơn ứng tuyển cho vị trí <strong>${input.jobTitle}</strong> tại <strong>${input.companyName}</strong> đã được cập nhật sang trạng thái <strong>${input.statusLabel}</strong>.</p>
-      <p>${input.message}</p>
-      <p><a href="${getBaseUrl()}/candidate/applications">Theo dõi chi tiết đơn ứng tuyển</a></p>
-    `,
+    html: buildEmailShell(
+      "Application Status Updated",
+      `${escapeHtml(input.jobTitle)} at ${escapeHtml(input.companyName)}`,
+      `
+        <p style="margin:0 0 14px;">Hello ${escapeHtml(safeCandidateName)},</p>
+        <p style="margin:0 0 14px;">Your application status is now <strong>${escapeHtml(input.statusLabel)}</strong>.</p>
+        <p style="margin:0 0 18px;color:#475569;">${escapeHtml(input.message)}</p>
+        <p style="margin:0;"><a href="${getBaseUrl()}/candidate/applications" style="color:#1d4ed8;font-weight:700;">Open candidate dashboard</a></p>
+      `
+    ),
   });
 }

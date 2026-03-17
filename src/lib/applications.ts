@@ -1,9 +1,13 @@
 import "server-only";
 
+import crypto from "node:crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { sendApplicationStatusEmail, sendApplicationSubmittedEmails } from "@/lib/email/application-emails";
+import {
+  sendApplicationStatusEmail,
+  sendApplicationSubmittedEmails,
+} from "@/lib/email/application-emails";
 import { createSystemNotification } from "@/lib/notifications";
 import { renderResumePdfBuffer } from "@/lib/resume-pdf";
 import type {
@@ -20,18 +24,37 @@ export interface CandidateCvOption {
   path: string;
   label: string;
   createdAt: string;
-  source: "uploaded" | "builder";
+  source: "profile" | "uploaded" | "builder";
   resumeId?: string;
 }
 
 export const APPLICATION_STATUS_LABELS: Record<RecruitmentPipelineStatus, string> = {
-  new: "Mới",
-  applied: "Đã nộp",
-  reviewing: "Đang xem xét",
-  interview: "Phỏng vấn",
-  offer: "Đề nghị",
-  hired: "Đã tuyển",
-  rejected: "Từ chối",
+  new: "Moi",
+  applied: "Da nop",
+  reviewing: "Dang xem xet",
+  interview: "Phong van",
+  offer: "De nghi",
+  hired: "Da tuyen",
+  rejected: "Tu choi",
+};
+
+type CandidateDefaults = {
+  fullName: string;
+  email: string;
+  phone: string | null;
+  introduction: string;
+  profileCvPath: string | null;
+  profileCvUrl: string | null;
+};
+
+type JobLookup = {
+  id: string;
+  title: string;
+  company_name: string | null;
+  location: string | null;
+  employer_id: string | null;
+  status: string | null;
+  hr_email?: string | null;
 };
 
 function normalizeApplicationStatus(
@@ -84,6 +107,23 @@ function sanitizeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-");
 }
 
+function safeTrim(value: unknown) {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (value == null) {
+    return "";
+  }
+
+  return String(value).trim();
+}
+
+function normalizeOptionalString(value: unknown) {
+  const next = safeTrim(value);
+  return next || null;
+}
+
 function isApplicationSchemaError(error: unknown, markers: string[]) {
   const message =
     error instanceof Error
@@ -109,28 +149,99 @@ async function getAuthenticatedUser() {
   return { supabase, user };
 }
 
-async function ensureCandidateDirectory(
+async function getCandidateDefaults(
   supabase: SupabaseClient,
   user: User
-) {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, email, phone, role")
-    .eq("id", user.id)
-    .maybeSingle();
+): Promise<CandidateDefaults> {
+  const [
+    { data: profile, error: profileError },
+    { data: candidateProfile, error: candidateProfileError },
+    { data: candidateRow, error: candidateError },
+  ] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, email, role")
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("candidate_profiles")
+      .select("full_name, email, phone, introduction, cv_file_path, cv_url")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("candidates")
+      .select("full_name, email, phone, resume_url")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
 
-  if (profile?.role && profile.role !== "candidate") {
-    throw new Error("Chỉ ứng viên mới có thể nộp đơn.");
+  if (profileError) {
+    throw new Error(profileError.message);
   }
 
-  const payload = {
-    id: user.id,
-    full_name:
-      String(profile?.full_name || user.user_metadata?.full_name || user.email || "Ứng viên").trim(),
-    email: String(profile?.email || user.email || "").trim(),
-    phone: profile?.phone ? String(profile.phone) : null,
-  };
+  if (
+    candidateProfileError &&
+    !isApplicationSchemaError(candidateProfileError, [
+      'relation "candidate_profiles" does not exist',
+      "could not find the table 'public.candidate_profiles' in the schema cache",
+      'column "full_name" does not exist',
+      'column "phone" does not exist',
+      'column "introduction" does not exist',
+      'column "cv_file_path" does not exist',
+      'column "cv_url" does not exist',
+    ])
+  ) {
+    throw new Error(candidateProfileError.message);
+  }
 
+  if (
+    candidateError &&
+    !isApplicationSchemaError(candidateError, [
+      'relation "candidates" does not exist',
+      "could not find the table 'public.candidates' in the schema cache",
+    ])
+  ) {
+    throw new Error(candidateError.message);
+  }
+
+  if (profile?.role && profile.role !== "candidate") {
+    throw new Error("Only candidates can submit applications.");
+  }
+
+  return {
+    fullName:
+      safeTrim(candidateProfile?.full_name) ||
+      safeTrim(candidateRow?.full_name) ||
+      safeTrim(profile?.full_name) ||
+      safeTrim(user.user_metadata?.full_name) ||
+      safeTrim(user.email) ||
+      "Candidate",
+    email:
+      safeTrim(candidateProfile?.email) ||
+      safeTrim(candidateRow?.email) ||
+      safeTrim(profile?.email) ||
+      safeTrim(user.email),
+    phone:
+      normalizeOptionalString(candidateProfile?.phone) ??
+      normalizeOptionalString(candidateRow?.phone),
+    introduction: safeTrim(candidateProfile?.introduction),
+    profileCvPath: normalizeOptionalString(candidateProfile?.cv_file_path),
+    profileCvUrl:
+      normalizeOptionalString(candidateProfile?.cv_url) ??
+      normalizeOptionalString(candidateRow?.resume_url),
+  };
+}
+
+async function upsertCandidateDirectoryRecord(
+  supabase: SupabaseClient,
+  payload: {
+    id: string;
+    full_name: string;
+    email: string;
+    phone: string | null;
+    resume_url: string | null;
+  }
+) {
   const { error } = await supabase.from("candidates").upsert(payload);
   if (
     error &&
@@ -141,8 +252,6 @@ async function ensureCandidateDirectory(
   ) {
     throw new Error(error.message);
   }
-
-  return payload;
 }
 
 async function logApplicationEvent(
@@ -170,11 +279,7 @@ async function logApplicationEvent(
   }
 }
 
-async function logActivitySafe(
-  supabase: SupabaseClient,
-  userId: string,
-  action: string
-) {
+async function logActivitySafe(userId: string, action: string) {
   const admin = createAdminClient();
   const { error } = await admin.from("activity_logs").insert({
     action,
@@ -213,18 +318,18 @@ function getEventNameForStatus(status: RecruitmentPipelineStatus) {
 function getCandidateStatusMessage(status: RecruitmentPipelineStatus) {
   switch (status) {
     case "reviewing":
-      return "Hồ sơ của bạn đang được bộ phận tuyển dụng xem xét.";
+      return "Ho so cua ban dang duoc bo phan tuyen dung xem xet.";
     case "interview":
-      return "Bạn đã được chuyển sang vòng phỏng vấn. Nhà tuyển dụng sẽ liên hệ lịch cụ thể.";
+      return "Ban da duoc chuyen sang vong phong van. Nha tuyen dung se lien he lich cu the.";
     case "offer":
-      return "Nhà tuyển dụng đã chuyển đơn của bạn sang giai đoạn đề nghị.";
+      return "Nha tuyen dung da chuyen don cua ban sang giai doan de nghi.";
     case "hired":
-      return "Chúc mừng bạn. Nhà tuyển dụng đã xác nhận kết quả tuyển dụng.";
+      return "Chuc mung ban. Nha tuyen dung da xac nhan ket qua tuyen dung.";
     case "rejected":
-      return "Cảm ơn bạn đã ứng tuyển. Hiện tại nhà tuyển dụng chưa thể tiếp tục với hồ sơ này.";
+      return "Cam on ban da ung tuyen. Hien tai nha tuyen dung chua the tiep tuc voi ho so nay.";
     case "applied":
     default:
-      return "Đơn ứng tuyển của bạn đã được ghi nhận.";
+      return "Don ung tuyen cua ban da duoc ghi nhan.";
   }
 }
 
@@ -232,61 +337,94 @@ function buildInternalCvUrl(applicationId: string) {
   return `/api/applications/${applicationId}/cv`;
 }
 
-export async function applyToJob(input: {
-  jobId: string;
-  coverLetter?: string | null;
-  cvFile?: File | null;
-  existingCvPath?: string | null;
-  builderResumeId?: string | null;
-}) {
-  const { supabase, user } = await getAuthenticatedUser();
-  const candidate = await ensureCandidateDirectory(supabase, user);
-
+async function getJobForApplication(
+  supabase: SupabaseClient,
+  jobId: string
+): Promise<JobLookup> {
   const { data: jobWithHrEmail, error: jobWithHrEmailError } = await supabase
     .from("jobs")
     .select("id, title, company_name, location, employer_id, status, hr_email")
-    .eq("id", input.jobId)
+    .eq("id", jobId)
     .maybeSingle();
 
   const shouldFallbackToLegacyJobSelect =
-    !!jobWithHrEmailError &&
+    Boolean(jobWithHrEmailError) &&
     isApplicationSchemaError(jobWithHrEmailError, ["hr_email", "column", "schema cache"]);
 
   const { data: legacyJob, error: legacyJobError } = shouldFallbackToLegacyJobSelect
     ? await supabase
         .from("jobs")
         .select("id, title, company_name, location, employer_id, status")
-        .eq("id", input.jobId)
+        .eq("id", jobId)
         .maybeSingle()
     : { data: null, error: null };
 
   const jobError = shouldFallbackToLegacyJobSelect ? legacyJobError : jobWithHrEmailError;
-  const job = (shouldFallbackToLegacyJobSelect ? legacyJob : jobWithHrEmail) as
-    | {
-        id: string;
-        title: string;
-        company_name: string | null;
-        location: string | null;
-        employer_id: string | null;
-        status: string | null;
-        hr_email?: string | null;
-      }
-    | null;
+  const job = (shouldFallbackToLegacyJobSelect ? legacyJob : jobWithHrEmail) as JobLookup | null;
 
   if (jobError || !job) {
-    throw new Error(jobError?.message ?? "Không tìm thấy tin tuyển dụng.");
+    throw new Error(jobError?.message ?? "Khong tim thay tin tuyen dung.");
   }
 
   if (job.status && job.status !== "open") {
-    throw new Error("Tin tuyển dụng này hiện không nhận hồ sơ.");
+    throw new Error("Tin tuyen dung nay hien khong nhan ho so.");
   }
 
+  return job;
+}
+
+async function cleanupFailedApplication(
+  supabase: SupabaseClient,
+  applicationId: string,
+  filePath: string,
+  createdStorageFile: boolean
+) {
+  await supabase.from("applications").delete().eq("id", applicationId);
+
+  if (createdStorageFile && filePath) {
+    const admin = createAdminClient();
+    await admin.storage.from(APPLICATION_BUCKET).remove([filePath]);
+  }
+}
+
+export async function applyToJob(input: {
+  jobId: string;
+  fullName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  introduction?: string | null;
+  cvFile?: File | null;
+  existingCvPath?: string | null;
+  builderResumeId?: string | null;
+}) {
+  const { supabase, user } = await getAuthenticatedUser();
+  const candidateDefaults = await getCandidateDefaults(supabase, user);
+
+  const candidateName = safeTrim(input.fullName || candidateDefaults.fullName);
+  const candidateEmail = safeTrim(input.email || candidateDefaults.email);
+  const candidatePhone =
+    normalizeOptionalString(input.phone) ?? normalizeOptionalString(candidateDefaults.phone);
+  const introduction = safeTrim(input.introduction || candidateDefaults.introduction);
+
+  if (!candidateName) {
+    throw new Error("Full name is required.");
+  }
+
+  if (!candidateEmail && !candidatePhone) {
+    throw new Error("Please enter at least email or phone number");
+  }
+
+  if (!introduction) {
+    throw new Error("Introduction is required");
+  }
+
+  const job = await getJobForApplication(supabase, input.jobId);
   const { data: employer, error: employerError } = job.employer_id
-    ? await supabase
-        .from("employers")
-        .select("id, company_name, email")
-        .eq("id", job.employer_id)
-        .maybeSingle()
+      ? await supabase
+          .from("employers")
+          .select("id, company_name, email")
+          .eq("id", job.employer_id)
+          .maybeSingle()
     : { data: null, error: null };
 
   if (employerError) {
@@ -295,33 +433,56 @@ export async function applyToJob(input: {
 
   const applicationId = crypto.randomUUID();
   const admin = createAdminClient();
-  let safeFilename = "resume.pdf";
   let filePath = "";
   let fileBuffer: Buffer | null = null;
   let fileContentType = "application/pdf";
+  let createdStorageFile = false;
 
-  if (input.existingCvPath?.trim()) {
-    const existingCvPath = input.existingCvPath.trim();
-    const { data: existingCv, error: existingCvError } = await supabase
-      .from("applications")
-      .select("cv_file_path")
-      .eq("candidate_id", user.id)
-      .eq("cv_file_path", existingCvPath)
-      .not("cv_file_path", "is", null)
-      .limit(1)
-      .maybeSingle();
+  if (safeTrim(input.existingCvPath)) {
+    const existingCvPath = safeTrim(input.existingCvPath);
+    const [{ data: existingApplicationCv, error: existingApplicationCvError }, { data: existingProfileCv, error: existingProfileCvError }] =
+      await Promise.all([
+        supabase
+          .from("applications")
+          .select("cv_file_path")
+          .eq("candidate_id", user.id)
+          .eq("cv_file_path", existingCvPath)
+          .not("cv_file_path", "is", null)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("candidate_profiles")
+          .select("cv_file_path")
+          .eq("user_id", user.id)
+          .eq("cv_file_path", existingCvPath)
+          .maybeSingle(),
+      ]);
 
-    if (existingCvError) {
-      throw new Error(existingCvError.message);
+    if (existingApplicationCvError) {
+      throw new Error(existingApplicationCvError.message);
     }
 
-    if (!existingCv?.cv_file_path) {
-      throw new Error("CV đã chọn không hợp lệ hoặc bạn không có quyền sử dụng.");
+    if (
+      existingProfileCvError &&
+      !isApplicationSchemaError(existingProfileCvError, [
+        'relation "candidate_profiles" does not exist',
+        "could not find the table 'public.candidate_profiles' in the schema cache",
+        'column "cv_file_path" does not exist',
+      ])
+    ) {
+      throw new Error(existingProfileCvError.message);
     }
 
-    filePath = existingCv.cv_file_path;
-    safeFilename = sanitizeFilename(filePath.split("/").pop() || "resume.pdf");
-    const extension = safeFilename.includes(".") ? safeFilename.split(".").pop()?.toLowerCase() : "pdf";
+    filePath = safeTrim(
+      existingApplicationCv?.cv_file_path || existingProfileCv?.cv_file_path
+    );
+
+    if (!filePath) {
+      throw new Error("Please upload or select a CV");
+    }
+
+    const fileName = sanitizeFilename(filePath.split("/").pop() || "resume.pdf");
+    const extension = fileName.split(".").pop()?.toLowerCase();
     fileContentType =
       extension === "doc"
         ? "application/msword"
@@ -334,12 +495,12 @@ export async function applyToJob(input: {
       .download(filePath);
 
     if (existingFileError || !existingFile) {
-      throw new Error(existingFileError?.message ?? "Không thể đọc CV đã lưu.");
+      throw new Error(existingFileError?.message ?? "Khong the doc CV da luu.");
     }
 
     fileBuffer = Buffer.from(await existingFile.arrayBuffer());
-  } else if (input.builderResumeId?.trim()) {
-    const builderResumeId = input.builderResumeId.trim();
+  } else if (safeTrim(input.builderResumeId)) {
+    const builderResumeId = safeTrim(input.builderResumeId);
     const { data: resumeRow, error: resumeError } = await supabase
       .from("resumes")
       .select("id, title, resume_data")
@@ -352,10 +513,9 @@ export async function applyToJob(input: {
     }
 
     if (!resumeRow) {
-      throw new Error("Không tìm thấy CV Builder đã chọn.");
+      throw new Error("Khong tim thay CV Builder da chon.");
     }
 
-    safeFilename = sanitizeFilename(`${resumeRow.title || "cv-builder"}.pdf`);
     filePath = `${user.id}/${job.id}/${applicationId}-builder-${resumeRow.id}.pdf`;
     fileBuffer = await renderResumePdfBuffer({
       title: String(resumeRow.title || "CV Builder"),
@@ -371,16 +531,13 @@ export async function applyToJob(input: {
       });
 
     if (uploadError) {
-      if (uploadError.message.toLowerCase().includes("bucket not found")) {
-        throw new Error(
-          "Bucket cv_uploads chưa tồn tại. Hãy chạy migration 20260312_ats_application_system.sql trên Supabase."
-        );
-      }
       throw new Error(uploadError.message);
     }
+
+    createdStorageFile = true;
   } else if (input.cvFile) {
-    safeFilename = sanitizeFilename(input.cvFile.name || "resume.pdf");
-    const extension = safeFilename.includes(".") ? safeFilename.split(".").pop() : "pdf";
+    const fileName = sanitizeFilename(input.cvFile.name || "resume.pdf");
+    const extension = fileName.includes(".") ? fileName.split(".").pop() : "pdf";
     filePath = `${user.id}/${job.id}/${applicationId}.${extension}`;
     fileBuffer = Buffer.from(await input.cvFile.arrayBuffer());
     fileContentType = input.cvFile.type || "application/pdf";
@@ -393,61 +550,93 @@ export async function applyToJob(input: {
       });
 
     if (uploadError) {
-      if (uploadError.message.toLowerCase().includes("bucket not found")) {
-        throw new Error(
-          "Bucket cv_uploads chưa tồn tại. Hãy chạy migration 20260312_ats_application_system.sql trên Supabase."
-        );
-      }
       throw new Error(uploadError.message);
     }
+
+    createdStorageFile = true;
   } else {
-    throw new Error("Vui lòng tải lên CV mới hoặc chọn CV đã upload trước đó.");
+    throw new Error("Please upload or select a CV");
   }
 
   const internalCvUrl = buildInternalCvUrl(applicationId);
-
+  const appliedAt = new Date().toISOString();
   const { error: insertError } = await supabase.from("applications").insert({
     id: applicationId,
     job_id: job.id,
     candidate_id: user.id,
+    full_name: candidateName,
+    email: candidateEmail || null,
+    phone: candidatePhone,
+    introduction,
+    applied_at: appliedAt,
     status: "applied",
-    cover_letter: input.coverLetter?.trim() || null,
+    cover_letter: introduction,
     cv_file_path: filePath,
     cv_file_url: internalCvUrl,
   });
 
   if (insertError) {
-    if (input.cvFile && filePath) {
+    if (createdStorageFile && filePath) {
       await admin.storage.from(APPLICATION_BUCKET).remove([filePath]);
     }
     throw new Error(insertError.message);
   }
 
-  await supabase
-    .from("candidates")
-    .update({ resume_url: internalCvUrl })
-    .eq("id", user.id);
+  const recruiterEmail = safeTrim(job.hr_email) || safeTrim(employer?.email);
+  if (!recruiterEmail) {
+    await cleanupFailedApplication(supabase, applicationId, filePath, createdStorageFile);
+    throw new Error("Recruiter email is required before applications can be submitted.");
+  }
+
+  let candidateEmailSent = false;
+
+  try {
+    const companyName = safeTrim(employer?.company_name || job.company_name || "Recruiter");
+    const emailResult = await sendApplicationSubmittedEmails({
+      hrEmail: recruiterEmail,
+      candidateEmail: candidateEmail || null,
+      candidateName,
+      candidatePhone,
+      jobTitle: safeTrim(job.title),
+      companyName,
+      jobId: safeTrim(job.id),
+      introduction,
+      appliedAt,
+      cvFilePath: filePath,
+    });
+    candidateEmailSent = emailResult.candidateEmailSent;
+  } catch (error) {
+    await cleanupFailedApplication(supabase, applicationId, filePath, createdStorageFile);
+    throw new Error(
+      error instanceof Error ? error.message : "Failed to send application emails."
+    );
+  }
+
+  await upsertCandidateDirectoryRecord(supabase, {
+    id: user.id,
+    full_name: candidateName,
+    email: candidateEmail || safeTrim(user.email) || "candidate@example.com",
+    phone: candidatePhone,
+    resume_url: internalCvUrl,
+  });
 
   await logApplicationEvent(supabase, applicationId, "candidate_applied", user.id, {
     jobId: job.id,
-    candidateEmail: candidate.email,
+    candidateEmail: candidateEmail || null,
   });
 
   if (job.employer_id) {
     await logActivitySafe(
-      supabase,
       job.employer_id,
-      `Ứng viên ${candidate.full_name} vừa ứng tuyển vị trí ${job.title}`
+      `Ung vien ${candidateName} vua ung tuyen vi tri ${job.title}`
     );
-  }
 
-  if (job.employer_id) {
     await createSystemNotification({
       recipientId: job.employer_id,
       actorId: user.id,
       type: "application_applied",
-      title: "Có ứng viên mới ứng tuyển",
-      description: `${candidate.full_name} vừa nộp hồ sơ cho vị trí ${job.title}.`,
+      title: "Co ung vien moi ung tuyen",
+      description: `${candidateName} vua nop ho so cho vi tri ${job.title}.`,
       href: "/hr/candidates",
       metadata: {
         applicationId,
@@ -461,8 +650,8 @@ export async function applyToJob(input: {
     recipientId: user.id,
     actorId: job.employer_id ? String(job.employer_id) : null,
     type: "application_submitted",
-    title: "Đã ghi nhận đơn ứng tuyển",
-    description: `Hồ sơ của bạn cho vị trí ${job.title} đã được gửi thành công.`,
+    title: "Da ghi nhan don ung tuyen",
+    description: `Ho so cua ban cho vi tri ${job.title} da duoc gui thanh cong.`,
     href: `/candidate/applications/${applicationId}`,
     metadata: {
       applicationId,
@@ -470,42 +659,13 @@ export async function applyToJob(input: {
     },
   });
 
-  let emailSent = false;
-  let emailError: string | null = null;
-
-  const hrEmailFromPosting = String(job.hr_email || "").trim();
-  const hrEmail = hrEmailFromPosting || employer?.email || "";
-
-  if (!candidate.email) {
-    emailError = "Không có email ứng viên để gửi xác nhận nộp đơn.";
-  } else if (!hrEmail) {
-    emailError = "Tin tuyển dụng chưa có email HR để nhận thông báo ứng tuyển.";
-  } else {
-    try {
-      const companyName = String(employer?.company_name || job.company_name || "Nhà tuyển dụng");
-      await sendApplicationSubmittedEmails({
-        hrEmail,
-        candidateEmail: candidate.email,
-        candidateName: candidate.full_name,
-        candidatePhone: candidate.phone,
-        jobTitle: String(job.title),
-        companyName,
-        jobLocation: String(job.location || ""),
-        coverLetter: input.coverLetter,
-        cvFilePath: filePath,
-      });
-      emailSent = true;
-    } catch (error) {
-      emailError = error instanceof Error ? error.message : "Gửi email thông báo thất bại.";
-    }
-  }
-
   return {
     applicationId,
     status: "applied" as RecruitmentPipelineStatus,
     cvUrl: internalCvUrl,
-    emailSent,
-    emailError,
+    emailSent: candidateEmailSent,
+    candidateEmailSent,
+    emailError: null,
   };
 }
 
@@ -518,7 +678,7 @@ export async function getDownloadUrlForApplication(applicationId: string) {
     .maybeSingle();
 
   if (error || !application) {
-    throw new Error(error?.message ?? "Không tìm thấy đơn ứng tuyển.");
+    throw new Error(error?.message ?? "Khong tim thay don ung tuyen.");
   }
 
   const job = Array.isArray(application.jobs) ? application.jobs[0] : application.jobs;
@@ -526,14 +686,14 @@ export async function getDownloadUrlForApplication(applicationId: string) {
   const isEmployerOwner = job?.employer_id === user.id;
 
   if (!isCandidateOwner && !isEmployerOwner) {
-    throw new Error("Bạn không có quyền truy cập CV này.");
+    throw new Error("Ban khong co quyen truy cap CV nay.");
   }
 
   if (!application.cv_file_path) {
     if (application.cv_file_url) {
       return application.cv_file_url;
     }
-    throw new Error("CV chưa được tải lên.");
+    throw new Error("CV chua duoc tai len.");
   }
 
   const admin = createAdminClient();
@@ -542,7 +702,7 @@ export async function getDownloadUrlForApplication(applicationId: string) {
     .createSignedUrl(application.cv_file_path, 60);
 
   if (signedUrlError || !data?.signedUrl) {
-    throw new Error(signedUrlError?.message ?? "Không thể tạo liên kết tải CV.");
+    throw new Error(signedUrlError?.message ?? "Khong the tao lien ket tai CV.");
   }
 
   return data.signedUrl;
@@ -550,23 +710,62 @@ export async function getDownloadUrlForApplication(applicationId: string) {
 
 export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
   const { supabase, user } = await getAuthenticatedUser();
+  const items: CandidateCvOption[] = [];
+  const seen = new Set<string>();
 
-  const { data, error } = await supabase
-    .from("applications")
-    .select("cv_file_path, created_at, jobs ( title, company_name )")
-    .eq("candidate_id", user.id)
-    .not("cv_file_path", "is", null)
-    .order("created_at", { ascending: false });
+  const [{ data: profileCv, error: profileCvError }, { data: applicationCvs, error: applicationCvError }, { data: resumes, error: resumesError }] =
+    await Promise.all([
+      supabase
+        .from("candidate_profiles")
+        .select("cv_file_path, updated_at")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("applications")
+        .select("cv_file_path, created_at, jobs ( title, company_name )")
+        .eq("candidate_id", user.id)
+        .not("cv_file_path", "is", null)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("resumes")
+        .select("id, title, updated_at")
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false }),
+    ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (
+    profileCvError &&
+    !isApplicationSchemaError(profileCvError, [
+      'relation "candidate_profiles" does not exist',
+      "could not find the table 'public.candidate_profiles' in the schema cache",
+      'column "cv_file_path" does not exist',
+    ])
+  ) {
+    throw new Error(profileCvError.message);
   }
 
-  const seen = new Set<string>();
-  const items: CandidateCvOption[] = [];
+  if (applicationCvError) {
+    throw new Error(applicationCvError.message);
+  }
 
-  for (const row of data ?? []) {
-    const path = String(row.cv_file_path || "").trim();
+  if (resumesError) {
+    throw new Error(resumesError.message);
+  }
+
+  const profilePath = safeTrim(profileCv?.cv_file_path);
+  if (profilePath && !seen.has(profilePath)) {
+    seen.add(profilePath);
+    const fileName = profilePath.split("/").pop() || "profile-cv.pdf";
+    items.push({
+      path: profilePath,
+      label: `Profile CV (${fileName})`,
+      createdAt: String(profileCv?.updated_at || new Date().toISOString()),
+      source: "profile",
+    });
+  }
+
+  for (const row of applicationCvs ?? []) {
+    const path = safeTrim(row.cv_file_path);
     if (!path || seen.has(path)) {
       continue;
     }
@@ -574,40 +773,30 @@ export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
     seen.add(path);
     const job = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
     const fileName = path.split("/").pop() || "resume.pdf";
-    const jobTitle = job?.title ? String(job.title) : "CV đã upload";
-    const companyName = job?.company_name ? String(job.company_name) : "";
+    const jobTitle = safeTrim(job?.title) || "CV da upload";
+    const companyName = safeTrim(job?.company_name);
 
     items.push({
       path,
       label: companyName
         ? `${jobTitle} - ${companyName} (${fileName})`
         : `${jobTitle} (${fileName})`,
-      createdAt: String(row.created_at || ""),
+      createdAt: String(row.created_at || new Date().toISOString()),
       source: "uploaded",
     });
-  }
-
-  const { data: resumes, error: resumesError } = await supabase
-    .from("resumes")
-    .select("id, title, updated_at")
-    .eq("user_id", user.id)
-    .order("updated_at", { ascending: false });
-
-  if (resumesError) {
-    throw new Error(resumesError.message);
   }
 
   for (const resume of resumes ?? []) {
     items.push({
       path: "",
       label: `${String(resume.title || "CV Builder")} (CV Builder)`,
-      createdAt: String(resume.updated_at || ""),
+      createdAt: String(resume.updated_at || new Date().toISOString()),
       source: "builder",
       resumeId: String(resume.id),
     });
   }
 
-  return items;
+  return items.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
 export async function updateApplicationStatusForEmployer(
@@ -622,17 +811,17 @@ export async function updateApplicationStatusForEmployer(
     .maybeSingle();
 
   if (profile?.role && profile.role !== "hr") {
-    throw new Error("Chỉ nhà tuyển dụng mới được cập nhật trạng thái.");
+    throw new Error("Chi nha tuyen dung moi duoc cap nhat trang thai.");
   }
 
   const { data: application, error: applicationError } = await supabase
     .from("applications")
-    .select("id, candidate_id, job_id")
+    .select("id, candidate_id, job_id, full_name, email")
     .eq("id", applicationId)
     .maybeSingle();
 
   if (applicationError || !application) {
-    throw new Error(applicationError?.message ?? "Không tìm thấy đơn ứng tuyển.");
+    throw new Error(applicationError?.message ?? "Khong tim thay don ung tuyen.");
   }
 
   const { data: job, error: jobError } = await supabase
@@ -643,7 +832,7 @@ export async function updateApplicationStatusForEmployer(
     .maybeSingle();
 
   if (jobError || !job) {
-    throw new Error(jobError?.message ?? "Bạn không có quyền với đơn ứng tuyển này.");
+    throw new Error(jobError?.message ?? "Ban khong co quyen voi don ung tuyen nay.");
   }
 
   const { data: candidate, error: candidateError } = await supabase
@@ -665,26 +854,23 @@ export async function updateApplicationStatusForEmployer(
     throw new Error(updateError.message);
   }
 
-  await logApplicationEvent(
-    supabase,
-    applicationId,
-    getEventNameForStatus(status),
-    user.id,
-    { status }
-  );
+  await logApplicationEvent(supabase, applicationId, getEventNameForStatus(status), user.id, {
+    status,
+  });
 
   await logActivitySafe(
-    supabase,
     user.id,
-    `Đã cập nhật trạng thái ứng tuyển của ${candidate?.full_name || candidate?.email || application.candidate_id} sang ${APPLICATION_STATUS_LABELS[status]}`
+    `Da cap nhat trang thai ung tuyen cua ${
+      safeTrim(application.full_name || candidate?.full_name || candidate?.email || application.candidate_id)
+    } sang ${APPLICATION_STATUS_LABELS[status]}`
   );
 
   await createSystemNotification({
     recipientId: application.candidate_id,
     actorId: user.id,
     type: "application_status_updated",
-    title: `Đơn ứng tuyển được cập nhật: ${APPLICATION_STATUS_LABELS[status]}`,
-    description: `Nhà tuyển dụng đã cập nhật trạng thái hồ sơ vị trí ${job.title}.`,
+    title: `Don ung tuyen duoc cap nhat: ${APPLICATION_STATUS_LABELS[status]}`,
+    description: `Nha tuyen dung da cap nhat trang thai ho so vi tri ${job.title}.`,
     href: `/candidate/applications/${applicationId}`,
     metadata: {
       applicationId,
@@ -693,12 +879,14 @@ export async function updateApplicationStatusForEmployer(
     },
   });
 
-  if (candidate?.email) {
+  const candidateEmail = safeTrim(application.email || candidate?.email);
+  if (candidateEmail) {
     await sendApplicationStatusEmail({
-      candidateEmail: candidate.email,
-      candidateName: candidate.full_name || candidate.email,
-      jobTitle: String(job.title),
-      companyName: String(job.company_name || "Nhà tuyển dụng"),
+      candidateEmail,
+      candidateName:
+        safeTrim(application.full_name || candidate?.full_name || candidateEmail) || candidateEmail,
+      jobTitle: safeTrim(job.title),
+      companyName: safeTrim(job.company_name || "Recruiter"),
       statusLabel: APPLICATION_STATUS_LABELS[status],
       message: getCandidateStatusMessage(status),
     });
@@ -737,38 +925,25 @@ export async function getEmployerCandidates(input: {
     return { items: [], total: 0, page, limit, totalPages: 1 };
   }
 
-  let candidateIdsFilter: string[] | null = null;
-
-  if (input.q) {
-    const { data: candidateMatches, error: candidateMatchError } = await supabase
-      .from("candidates")
-      .select("id")
-      .or(`full_name.ilike.%${input.q}%,email.ilike.%${input.q}%,phone.ilike.%${input.q}%`);
-
-    if (candidateMatchError) {
-      throw new Error(candidateMatchError.message);
-    }
-
-    candidateIdsFilter = (candidateMatches ?? []).map((row) => String(row.id));
-    if (candidateIdsFilter.length === 0) {
-      return { items: [], total: 0, page, limit, totalPages: 1 };
-    }
-  }
-
   let appsQuery = supabase
     .from("applications")
-    .select("id, candidate_id, job_id, status, created_at, cv_file_url, cv_file_path, cover_letter", {
-      count: "exact",
-    })
+    .select(
+      "id, candidate_id, job_id, status, created_at, applied_at, cv_file_url, cv_file_path, cover_letter, introduction, full_name, email, phone",
+      { count: "exact" }
+    )
     .in("job_id", jobIds)
+    .order("applied_at", { ascending: false })
     .order("created_at", { ascending: false });
 
   if (input.status && input.status !== "all") {
     appsQuery = appsQuery.in("status", getStatusAliases(input.status));
   }
 
-  if (candidateIdsFilter) {
-    appsQuery = appsQuery.in("candidate_id", candidateIdsFilter);
+  if (input.q) {
+    const q = input.q.replaceAll(",", " ").trim();
+    appsQuery = appsQuery.or(
+      `full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`
+    );
   }
 
   const from = (page - 1) * limit;
@@ -791,9 +966,7 @@ export async function getEmployerCandidates(input: {
     throw new Error(candidatesError.message);
   }
 
-  const candidatesById = new Map(
-    (candidateRows ?? []).map((row) => [String(row.id), row])
-  );
+  const candidatesById = new Map((candidateRows ?? []).map((row) => [String(row.id), row]));
 
   return {
     items: (appRows ?? []).map((row) => {
@@ -801,18 +974,23 @@ export async function getEmployerCandidates(input: {
       return {
         applicationId: String(row.id),
         candidateId: String(row.candidate_id),
-        fullName: String(candidate?.full_name || candidate?.email || "Ứng viên"),
-        email: String(candidate?.email || ""),
-        phone: candidate?.phone ?? null,
+        fullName:
+          safeTrim(row.full_name) ||
+          safeTrim(candidate?.full_name) ||
+          safeTrim(candidate?.email) ||
+          "Candidate",
+        email: safeTrim(row.email) || safeTrim(candidate?.email),
+        phone: normalizeOptionalString(row.phone) ?? normalizeOptionalString(candidate?.phone),
         resumeUrl:
           row.cv_file_path || row.cv_file_url
             ? buildInternalCvUrl(String(row.id))
-            : (candidate?.resume_url ?? null),
-        coverLetter: row.cover_letter ?? null,
-        appliedPosition: jobsById.get(String(row.job_id)) ?? "Chưa rõ vị trí",
+            : normalizeOptionalString(candidate?.resume_url),
+        coverLetter:
+          normalizeOptionalString(row.introduction) ?? normalizeOptionalString(row.cover_letter),
+        appliedPosition: jobsById.get(String(row.job_id)) ?? "Chua ro vi tri",
         status: normalizeApplicationStatus(row.status),
         rawStatus: (row.status ?? "applied") as AnyApplicationStatus,
-        appliedAt: String(row.created_at),
+        appliedAt: String(row.applied_at || row.created_at),
       };
     }),
     total: count ?? 0,
@@ -882,6 +1060,11 @@ export async function getCandidateApplicationDetail(applicationId: string) {
       status,
       created_at,
       updated_at,
+      applied_at,
+      full_name,
+      email,
+      phone,
+      introduction,
       cover_letter,
       cv_file_path,
       cv_file_url,
@@ -902,7 +1085,7 @@ export async function getCandidateApplicationDetail(applicationId: string) {
     .maybeSingle();
 
   if (error || !application) {
-    throw new Error(error?.message ?? "Không tìm thấy đơn ứng tuyển.");
+    throw new Error(error?.message ?? "Khong tim thay don ung tuyen.");
   }
 
   const { data: events, error: eventsError } = await supabase
@@ -926,23 +1109,32 @@ export async function getCandidateApplicationDetail(applicationId: string) {
     id: String(application.id),
     status: normalizeApplicationStatus(application.status),
     rawStatus: String(application.status ?? "applied"),
-    createdAt: String(application.created_at),
+    createdAt: String(application.applied_at || application.created_at),
     updatedAt: String(application.updated_at ?? application.created_at),
-    coverLetter: application.cover_letter ?? null,
+    appliedAt: String(application.applied_at || application.created_at),
+    fullName: safeTrim(application.full_name),
+    email: normalizeOptionalString(application.email),
+    phone: normalizeOptionalString(application.phone),
+    introduction:
+      normalizeOptionalString(application.introduction) ??
+      normalizeOptionalString(application.cover_letter),
+    coverLetter:
+      normalizeOptionalString(application.introduction) ??
+      normalizeOptionalString(application.cover_letter),
     cvUrl:
       application.cv_file_path || application.cv_file_url
         ? buildInternalCvUrl(String(application.id))
         : null,
     job: {
-      id: String(job.id),
-      title: String(job.title),
-      companyName: String(job.company_name || "Nhà tuyển dụng"),
-      logoUrl: job.logo_url ? String(job.logo_url) : null,
-      salary: job.salary ? String(job.salary) : null,
-      location: job.location ? String(job.location) : null,
-      employmentType: job.employment_type ? String(job.employment_type) : null,
-      level: job.level ? String(job.level) : null,
-      fullAddress: job.full_address ? String(job.full_address) : null,
+      id: String(job?.id || ""),
+      title: safeTrim(job?.title),
+      companyName: safeTrim(job?.company_name || "Recruiter"),
+      logoUrl: normalizeOptionalString(job?.logo_url),
+      salary: normalizeOptionalString(job?.salary),
+      location: normalizeOptionalString(job?.location),
+      employmentType: normalizeOptionalString(job?.employment_type),
+      level: normalizeOptionalString(job?.level),
+      fullAddress: normalizeOptionalString(job?.full_address),
     },
     events: (events ?? []).map((event) => ({
       id: String(event.id),

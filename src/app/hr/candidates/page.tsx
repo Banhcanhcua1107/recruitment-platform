@@ -1,4 +1,5 @@
 import { CandidateTable } from "@/components/recruitment/CandidateTable";
+import { PublicCandidateSearch } from "@/components/recruitment/PublicCandidateSearch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -101,6 +102,8 @@ export default async function HRCandidatesPage({
           status: status === "all" ? undefined : status,
         }}
       />
+
+      <PublicCandidateSearch />
     </div>
   );
 }
