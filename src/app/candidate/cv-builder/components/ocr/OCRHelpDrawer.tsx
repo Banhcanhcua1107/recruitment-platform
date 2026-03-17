@@ -46,9 +46,12 @@ export function OCRHelpDrawer({
             >
               <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
                 <div>
-                  <h2 className="text-base font-semibold text-slate-900">Trợ giúp OCR</h2>
+                  <h2 className="text-base font-semibold text-slate-900">
+                    Trợ giúp OCR
+                  </h2>
                   <p className="text-xs text-slate-500">
-                    Quy trình, lưu ý và tài liệu repo cho tính năng OCR trong CV Builder
+                    Quy trình, lưu ý và tài liệu trong repo cho tính năng OCR
+                    trong CV Builder
                   </p>
                 </div>
                 <button

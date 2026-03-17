@@ -9,20 +9,23 @@ export function UploadCard({ onClick }: UploadCardProps) {
     <button
       type="button"
       onClick={onClick}
-      className="group flex flex-col items-center justify-center h-[340px] rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 hover:bg-white hover:border-blue-400 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer text-left w-full"
+      className="group flex h-[340px] w-full cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/30 text-left transition-all duration-300 hover:-translate-y-1 hover:border-blue-400 hover:bg-white hover:shadow-xl"
     >
-      <div className="size-16 rounded-full bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-all mb-4 group-hover:scale-110 duration-300">
-        <Upload size={28} className="text-blue-400 group-hover:text-blue-600 transition-colors" />
+      <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-blue-50 transition-all duration-300 group-hover:scale-110 group-hover:bg-blue-100">
+        <Upload
+          size={28}
+          className="text-blue-400 transition-colors group-hover:text-blue-600"
+        />
       </div>
-      <h3 className="text-[17px] font-bold text-slate-800">Upload CV có sẵn</h3>
-      <p className="text-slate-500 text-sm mt-1 text-center font-medium max-w-[200px]">
+      <h3 className="text-[17px] font-bold text-slate-800">Tải CV có sẵn</h3>
+      <p className="mt-1 max-w-[200px] text-center text-sm font-medium text-slate-500">
         AI quét và nhập dữ liệu tự động
       </p>
 
-      <div className="flex items-center gap-1.5 mt-5 px-3.5 py-1.5 rounded-full bg-blue-100/60 border border-blue-200/60 shadow-sm transition-colors group-hover:bg-blue-100 group-hover:border-blue-300">
+      <div className="mt-5 flex items-center gap-1.5 rounded-full border border-blue-200/60 bg-blue-100/60 px-3.5 py-1.5 shadow-sm transition-colors group-hover:border-blue-300 group-hover:bg-blue-100">
         <ScanLine size={13} className="text-blue-600" />
-        <span className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">
-          PDF • JPG • PNG
+        <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700">
+          PDF • JPG • PNG • DOCX
         </span>
       </div>
     </button>

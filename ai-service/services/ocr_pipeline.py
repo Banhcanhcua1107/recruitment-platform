@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import concurrent.futures
+import hashlib
 import io
 import logging
 import os
@@ -21,7 +23,6 @@ from pdf2image import convert_from_bytes
 from PIL import Image, ImageOps
 
 from services.cv_layout_parser import parse_structured_cv_from_ocr
-from services.cv_parser import extract_text_from_docx, parse_cv
 from services.ocr_service import OCRBlock, OCRPageResult, extract_full_text
 
 logger = logging.getLogger("ocr_pipeline")
@@ -82,6 +83,12 @@ PADDLE_TIMEOUT_SECONDS = float(os.getenv("PADDLE_OCR_TIMEOUT_SECONDS", "60"))
 PDF_RENDER_DPI = int(os.getenv("PADDLE_OCR_PDF_DPI", "200"))
 PADDLE_MAX_RETRIES = int(os.getenv("PADDLE_OCR_MAX_RETRIES", "3"))
 PADDLE_PAGE_BATCH_SIZE = max(1, int(os.getenv("PADDLE_OCR_PAGE_BATCH_SIZE", "2")))
+PADDLE_MAX_PARALLEL_PAGES = max(1, int(os.getenv("PADDLE_OCR_MAX_PARALLEL_PAGES", "3")))
+OCR_MAX_IMAGE_EDGE = max(1200, int(os.getenv("PADDLE_OCR_MAX_IMAGE_EDGE", "1800")))
+SOFFICE_TIMEOUT_SECONDS = max(15, int(os.getenv("SOFFICE_TIMEOUT_SECONDS", "35")))
+DOCX_PDF_CACHE_TTL_SECONDS = max(60, int(os.getenv("DOCX_PDF_CACHE_TTL_SECONDS", "900")))
+DOCX_PDF_CACHE_MAX_ITEMS = max(4, int(os.getenv("DOCX_PDF_CACHE_MAX_ITEMS", "16")))
+_DOCX_PDF_CACHE: dict[str, tuple[float, bytes]] = {}
 
 
 class OCRPipelineError(RuntimeError):
@@ -106,18 +113,20 @@ def _prepare_image(image: Image.Image) -> Image.Image:
     if image.mode == "RGBA":
         background = Image.new("RGB", image.size, "white")
         background.paste(image, mask=image.getchannel("A"))
-        return background
-    if image.mode != "RGB":
-        return image.convert("RGB")
+        image = background
+    elif image.mode != "RGB":
+        image = image.convert("RGB")
+
+    longest_edge = max(image.size)
+    if longest_edge > OCR_MAX_IMAGE_EDGE:
+        scale = OCR_MAX_IMAGE_EDGE / float(longest_edge)
+        resized = (
+            max(1, int(round(image.size[0] * scale))),
+            max(1, int(round(image.size[1] * scale))),
+        )
+        image = image.resize(resized, Image.Resampling.LANCZOS)
+
     return image
-
-
-DOCX_FALLBACK_PAGE_WIDTH = 1200
-DOCX_FALLBACK_PAGE_HEIGHT = 1700
-DOCX_FALLBACK_LINES_PER_PAGE = 44
-DOCX_FALLBACK_TOP_MARGIN = 5.0
-DOCX_FALLBACK_SIDE_MARGIN = 6.0
-DOCX_FALLBACK_LINE_HEIGHT = 1.75
 
 
 def _resolve_soffice_command() -> list[str]:
@@ -126,14 +135,16 @@ def _resolve_soffice_command() -> list[str]:
     if configured_path:
         return [configured_path]
 
-    for candidate in ("soffice", "libreoffice"):
+    for candidate in ("soffice", "soffice.com", "soffice.exe", "libreoffice"):
         resolved = shutil.which(candidate)
         if resolved:
             return [resolved]
 
     # Common Windows installation paths for LibreOffice.
     windows_candidates = [
+        r"C:\Program Files\LibreOffice\program\soffice.com",
         r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.com",
         r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
     ]
     for candidate in windows_candidates:
@@ -146,28 +157,101 @@ def _resolve_soffice_command() -> list[str]:
     )
 
 
+def _cleanup_docx_pdf_cache(now: float | None = None) -> None:
+    current = now or time.time()
+    expired = [
+        key
+        for key, (expires_at, _) in _DOCX_PDF_CACHE.items()
+        if expires_at <= current
+    ]
+    for key in expired:
+        _DOCX_PDF_CACHE.pop(key, None)
+
+    if len(_DOCX_PDF_CACHE) <= DOCX_PDF_CACHE_MAX_ITEMS:
+        return
+
+    for key, _ in sorted(_DOCX_PDF_CACHE.items(), key=lambda item: item[1][0])[
+        : max(0, len(_DOCX_PDF_CACHE) - DOCX_PDF_CACHE_MAX_ITEMS)
+    ]:
+        _DOCX_PDF_CACHE.pop(key, None)
+
+
+def _get_cached_docx_pdf_bytes(docx_bytes: bytes) -> bytes | None:
+    _cleanup_docx_pdf_cache()
+    cache_key = hashlib.sha256(docx_bytes).hexdigest()
+    cached = _DOCX_PDF_CACHE.get(cache_key)
+    if not cached:
+        return None
+
+    expires_at, pdf_bytes = cached
+    if expires_at <= time.time():
+        _DOCX_PDF_CACHE.pop(cache_key, None)
+        return None
+    return pdf_bytes
+
+
+def _store_cached_docx_pdf_bytes(docx_bytes: bytes, pdf_bytes: bytes) -> None:
+    _cleanup_docx_pdf_cache()
+    cache_key = hashlib.sha256(docx_bytes).hexdigest()
+    _DOCX_PDF_CACHE[cache_key] = (
+        time.time() + DOCX_PDF_CACHE_TTL_SECONDS,
+        pdf_bytes,
+    )
+
+
 def _docx_to_pdf_bytes(docx_bytes: bytes) -> bytes:
     """Convert DOCX to PDF bytes using LibreOffice headless."""
+    cached = _get_cached_docx_pdf_bytes(docx_bytes)
+    if cached is not None:
+        logger.info("DOCX -> PDF cache hit")
+        return cached
+
     soffice_cmd = _resolve_soffice_command()
     with tempfile.TemporaryDirectory() as tmp:
         docx_path = Path(tmp) / "input.docx"
+        out_dir = Path(tmp) / "out"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        user_profile_dir = Path(tmp) / "lo-profile"
+        user_profile_dir.mkdir(parents=True, exist_ok=True)
         docx_path.write_bytes(docx_bytes)
+        command = soffice_cmd + [
+            f"-env:UserInstallation={user_profile_dir.resolve().as_uri()}",
+            "--headless",
+            "--invisible",
+            "--nologo",
+            "--nodefault",
+            "--nolockcheck",
+            "--norestore",
+            "--convert-to",
+            "pdf:writer_pdf_Export",
+            "--outdir",
+            str(out_dir),
+            str(docx_path),
+        ]
+
         try:
+            started_at = time.perf_counter()
             result = subprocess.run(
-                soffice_cmd + ["--headless", "--convert-to", "pdf", "--outdir", tmp, str(docx_path)],
+                command,
                 check=True,
                 capture_output=True,
-                timeout=60,
+                timeout=SOFFICE_TIMEOUT_SECONDS,
             )
         except subprocess.TimeoutExpired as exc:
-            raise OCRPipelineError("DOCX conversion timed out after 60s.") from exc
+            raise OCRPipelineError(
+                f"DOCX conversion timed out after {SOFFICE_TIMEOUT_SECONDS}s. "
+                "Check LibreOffice headless execution or increase SOFFICE_TIMEOUT_SECONDS."
+            ) from exc
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or b"").decode("utf-8", errors="replace").strip()
             stdout = (exc.stdout or b"").decode("utf-8", errors="replace").strip()
             detail = stderr or stdout or str(exc)
             raise OCRPipelineError(f"LibreOffice DOCX conversion failed: {detail}") from exc
 
-        pdf_candidates = list(Path(tmp).glob("*.pdf"))
+        elapsed = time.perf_counter() - started_at
+        logger.info("LibreOffice DOCX -> PDF finished in %.2fs", elapsed)
+
+        pdf_candidates = list(out_dir.glob("*.pdf"))
         if not pdf_candidates:
             stdout = (result.stdout or b"").decode("utf-8", errors="replace").strip()
             stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
@@ -175,109 +259,12 @@ def _docx_to_pdf_bytes(docx_bytes: bytes) -> bytes:
             raise OCRPipelineError(f"LibreOffice did not generate PDF output: {detail}")
 
         pdf_path = pdf_candidates[0]
-        return pdf_path.read_bytes()
+        pdf_bytes = pdf_path.read_bytes()
+        if not pdf_bytes:
+            raise OCRPipelineError("LibreOffice generated an empty PDF output.")
 
-
-def _extract_docx_lines(docx_bytes: bytes) -> list[str]:
-    try:
-        from docx import Document
-    except ImportError as exc:
-        raise OCRPipelineError("python-docx is required to parse DOCX fallback content.") from exc
-
-    try:
-        document = Document(io.BytesIO(docx_bytes))
-    except Exception as exc:
-        raise OCRPipelineError(f"Unable to read DOCX content: {exc}") from exc
-
-    lines: list[str] = []
-    for paragraph in document.paragraphs:
-        text = _normalize_block_text(paragraph.text)
-        if text:
-            lines.append(text)
-
-    for table in document.tables:
-        for row in table.rows:
-            row_cells: list[str] = []
-            for cell in row.cells:
-                cell_text = _normalize_block_text(cell.text)
-                if cell_text:
-                    row_cells.append(cell_text)
-            if row_cells:
-                lines.append(" | ".join(row_cells))
-
-    if not lines:
-        raise OCRPipelineError("DOCX file does not contain readable text.")
-
-    return lines
-
-
-def _build_docx_fallback_outputs(
-    docx_bytes: bytes,
-    *,
-    min_confidence: float = 0.0,
-) -> tuple[list[OCRPageResult], list[str], list[dict[str, Any]]]:
-    lines = _extract_docx_lines(docx_bytes)
-    pages: list[OCRPageResult] = []
-    markdown_pages: list[str] = []
-    layout_blocks: list[dict[str, Any]] = []
-
-    for offset in range(0, len(lines), DOCX_FALLBACK_LINES_PER_PAGE):
-        page_number = (offset // DOCX_FALLBACK_LINES_PER_PAGE) + 1
-        chunk = lines[offset: offset + DOCX_FALLBACK_LINES_PER_PAGE]
-        markdown_pages.append("\n\n".join(chunk))
-
-        blocks: list[OCRBlock] = []
-        for line_index, text in enumerate(chunk):
-            confidence = 1.0
-            if confidence < min_confidence:
-                continue
-
-            rect_x = DOCX_FALLBACK_SIDE_MARGIN
-            rect_w = 100.0 - (DOCX_FALLBACK_SIDE_MARGIN * 2.0)
-            rect_y = DOCX_FALLBACK_TOP_MARGIN + (line_index * DOCX_FALLBACK_LINE_HEIGHT)
-            rect_h = DOCX_FALLBACK_LINE_HEIGHT * 0.7
-
-            max_y = 100.0 - rect_h
-            if rect_y > max_y:
-                rect_y = max_y
-
-            x1 = int(round((rect_x / 100.0) * DOCX_FALLBACK_PAGE_WIDTH))
-            y1 = int(round((rect_y / 100.0) * DOCX_FALLBACK_PAGE_HEIGHT))
-            x2 = int(round(((rect_x + rect_w) / 100.0) * DOCX_FALLBACK_PAGE_WIDTH))
-            y2 = int(round(((rect_y + rect_h) / 100.0) * DOCX_FALLBACK_PAGE_HEIGHT))
-            bbox = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-
-            block = OCRBlock(
-                text=text,
-                bbox=bbox,
-                confidence=confidence,
-                page=page_number,
-                rect_x=round(rect_x, 3),
-                rect_y=round(rect_y, 3),
-                rect_w=round(rect_w, 3),
-                rect_h=round(rect_h, 3),
-            )
-            blocks.append(block)
-            layout_blocks.append(
-                {
-                    "page": page_number,
-                    "type": "text",
-                    "text": text,
-                    "bbox": [x1, y1, x2, y2],
-                    "confidence": confidence,
-                }
-            )
-
-        pages.append(
-            OCRPageResult(
-                page=page_number,
-                image_width=DOCX_FALLBACK_PAGE_WIDTH,
-                image_height=DOCX_FALLBACK_PAGE_HEIGHT,
-                blocks=blocks,
-            )
-        )
-
-    return pages, markdown_pages, layout_blocks
+        _store_cached_docx_pdf_bytes(docx_bytes, pdf_bytes)
+        return pdf_bytes
 
 
 def _detect_file_type(content_type: str | None, filename: str | None, file_bytes: bytes) -> str:
@@ -718,6 +705,33 @@ def _parse_ppocr_page(page_payload: dict[str, Any], page_number: int, image: Ima
     return OCRPageResult(page=page_number, image_width=image_width, image_height=image_height, blocks=ocr_blocks)
 
 
+def _ocr_single_page(
+    prepared_page: PreparedPage,
+    min_confidence: float,
+) -> tuple[int, OCRPageResult | None, dict[str, Any] | None, str | None]:
+    payload = {
+        "file": _encode_payload(prepared_page.file_bytes),
+        "fileType": prepared_page.file_type,
+        "useDocOrientationClassify": False,
+        "useDocUnwarping": False,
+        "useTextlineOrientation": False,
+    }
+    try:
+        response_body = _post_paddle_request(PP_OCR_V5_URL, payload)
+        result = response_body.get("result") or {}
+        page_payloads = result.get("ocrResults") or [result]
+        page_payload = page_payloads[0] if page_payloads else {}
+        parsed_page = _parse_ppocr_page(
+            page_payload,
+            prepared_page.page,
+            prepared_page.image,
+            min_confidence,
+        )
+        return prepared_page.page, parsed_page, page_payload, None
+    except Exception as exc:
+        return prepared_page.page, None, None, f"OCR failed on page {prepared_page.page}: {exc}"
+
+
 def _normalize_bbox(value: Any) -> list[float] | None:
     if isinstance(value, dict):
         if {"x", "y", "width", "height"}.issubset(value.keys()):
@@ -773,33 +787,62 @@ def _collect_layout_items(node: Any, page_number: int, output: list[dict[str, An
             _collect_layout_items(item, page_number, output)
 
 
+def _layout_single_page(
+    prepared_page: PreparedPage,
+) -> tuple[int, dict[str, Any] | None, str, list[dict[str, Any]] | None, str | None]:
+    payload = {
+        "file": _encode_payload(prepared_page.file_bytes),
+        "fileType": prepared_page.file_type,
+        "useDocOrientationClassify": False,
+        "useDocUnwarping": False,
+        "useTextlineOrientation": False,
+        "useChartRecognition": False,
+    }
+    try:
+        response_body = _post_paddle_request(PP_STRUCTURE_V3_URL, payload)
+        result = response_body.get("result") or {}
+        page_payloads = result.get("layoutParsingResults") or [result]
+        page_payload = page_payloads[0] if page_payloads else {}
+        markdown_text = ((page_payload.get("markdown") or {}).get("text") or "").strip()
+        page_layout_blocks: list[dict[str, Any]] = []
+        _collect_layout_items(page_payload, prepared_page.page, page_layout_blocks)
+        return prepared_page.page, page_payload, markdown_text, page_layout_blocks, None
+    except Exception as exc:
+        return (
+            prepared_page.page,
+            None,
+            "",
+            None,
+            f"Layout parsing failed on page {prepared_page.page}: {exc}",
+        )
+
+
 def _run_ppocrv5_on_pages(prepared_pages: list[PreparedPage], min_confidence: float) -> dict[str, Any]:
     start = time.perf_counter()
     pages: list[OCRPageResult] = []
     raw_results: list[dict[str, Any]] = []
     warnings: list[str] = []
 
-    for batch_start in range(0, len(prepared_pages), PADDLE_PAGE_BATCH_SIZE):
-        batch = prepared_pages[batch_start: batch_start + PADDLE_PAGE_BATCH_SIZE]
-        for prepared_page in batch:
-            payload = {
-                "file": _encode_payload(prepared_page.file_bytes),
-                "fileType": prepared_page.file_type,
-                "useDocOrientationClassify": False,
-                "useDocUnwarping": False,
-                "useTextlineOrientation": False,
-            }
-            try:
-                response_body = _post_paddle_request(PP_OCR_V5_URL, payload)
-                result = response_body.get("result") or {}
-                page_payloads = result.get("ocrResults") or [result]
-                page_payload = page_payloads[0] if page_payloads else {}
-                pages.append(_parse_ppocr_page(page_payload, prepared_page.page, prepared_page.image, min_confidence))
-                raw_results.append(page_payload)
-            except Exception as exc:
-                warning = f"OCR failed on page {prepared_page.page}: {exc}"
-                warnings.append(warning)
-                logger.warning(warning)
+    max_workers = min(PADDLE_MAX_PARALLEL_PAGES, len(prepared_pages))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(_ocr_single_page, prepared_page, min_confidence)
+            for prepared_page in prepared_pages
+        ]
+        results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+    for _page_number, parsed_page, page_payload, warning in sorted(
+        results,
+        key=lambda item: item[0],
+    ):
+        if warning:
+            warnings.append(warning)
+            logger.warning(warning)
+            continue
+        if parsed_page is not None:
+            pages.append(parsed_page)
+        if page_payload is not None:
+            raw_results.append(page_payload)
 
     if not pages:
         raise OCRPipelineError("OCR failed on all document pages.")
@@ -822,42 +865,35 @@ def _run_ppstructure_on_pages(prepared_pages: list[PreparedPage]) -> dict[str, A
     layout_blocks: list[dict[str, Any]] = []
     warnings: list[str] = []
 
-    for batch_start in range(0, len(prepared_pages), PADDLE_PAGE_BATCH_SIZE):
-        batch = prepared_pages[batch_start: batch_start + PADDLE_PAGE_BATCH_SIZE]
-        for prepared_page in batch:
-            payload = {
-                "file": _encode_payload(prepared_page.file_bytes),
-                "fileType": prepared_page.file_type,
-                "useDocOrientationClassify": False,
-                "useDocUnwarping": False,
-                "useTextlineOrientation": False,
-                "useChartRecognition": False,
+    max_workers = min(PADDLE_MAX_PARALLEL_PAGES, len(prepared_pages))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(_layout_single_page, prepared_page)
+            for prepared_page in prepared_pages
+        ]
+        results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+    for page_number, page_payload, markdown_text, page_layout_blocks, warning in sorted(
+        results,
+        key=lambda item: item[0],
+    ):
+        if warning:
+            warnings.append(warning)
+            logger.warning(warning)
+            continue
+
+        markdown_pages.append(markdown_text)
+        for block in page_layout_blocks or []:
+            layout_blocks.append(block)
+
+        structure_pages.append(
+            {
+                "page": page_number,
+                "markdown": markdown_text,
+                "layout_blocks": page_layout_blocks or [],
+                "raw_result": page_payload or {},
             }
-            try:
-                response_body = _post_paddle_request(PP_STRUCTURE_V3_URL, payload)
-                result = response_body.get("result") or {}
-                page_payloads = result.get("layoutParsingResults") or [result]
-                page_payload = page_payloads[0] if page_payloads else {}
-                markdown_text = ((page_payload.get("markdown") or {}).get("text") or "").strip()
-                markdown_pages.append(markdown_text)
-
-                page_layout_blocks: list[dict[str, Any]] = []
-                _collect_layout_items(page_payload, prepared_page.page, page_layout_blocks)
-                for block in page_layout_blocks:
-                    layout_blocks.append(block)
-
-                structure_pages.append(
-                    {
-                        "page": prepared_page.page,
-                        "markdown": markdown_text,
-                        "layout_blocks": page_layout_blocks,
-                        "raw_result": page_payload,
-                    }
-                )
-            except Exception as exc:
-                warning = f"Layout parsing failed on page {prepared_page.page}: {exc}"
-                warnings.append(warning)
-                logger.warning(warning)
+        )
 
     elapsed = time.perf_counter() - start
     logger.info("PP-StructureV3 completed in %.2fs for %d/%d page(s)", elapsed, len(structure_pages), len(prepared_pages))
@@ -881,20 +917,12 @@ def run_ppocrv5(
     file_kind = _detect_file_type(content_type, filename, file_bytes)
 
     if file_kind == "docx":
-        try:
-            prepared_pages = _prepare_document_pages(file_bytes, content_type=content_type, filename=filename)
-            return _run_ppocrv5_on_pages(prepared_pages, min_confidence=min_confidence)
-        except OCRPipelineError as exc:
-            logger.warning("DOCX conversion failed for OCR; using text fallback: %s", exc)
-            start = time.perf_counter()
-            pages, _, _ = _build_docx_fallback_outputs(file_bytes, min_confidence=min_confidence)
-            return {
-                "pages": pages,
-                "raw_results": [],
-                "elapsed_seconds": time.perf_counter() - start,
-                "warnings": ["DOCX converted using text fallback."],
-                "total_pages": len(pages),
-            }
+        prepared_pages = _prepare_document_pages(
+            file_bytes,
+            content_type=content_type,
+            filename=filename,
+        )
+        return _run_ppocrv5_on_pages(prepared_pages, min_confidence=min_confidence)
 
     prepared_pages = _prepare_document_pages(file_bytes, content_type=content_type, filename=filename)
     return _run_ppocrv5_on_pages(prepared_pages, min_confidence=min_confidence)
@@ -909,30 +937,12 @@ def run_ppstructure(
     file_kind = _detect_file_type(content_type, filename, file_bytes)
 
     if file_kind == "docx":
-        try:
-            prepared_pages = _prepare_document_pages(file_bytes, content_type=content_type, filename=filename)
-            return _run_ppstructure_on_pages(prepared_pages)
-        except OCRPipelineError as exc:
-            logger.warning("DOCX conversion failed for layout; using text fallback: %s", exc)
-            start = time.perf_counter()
-            pages, markdown_pages, layout_blocks = _build_docx_fallback_outputs(file_bytes)
-            serialized_pages = [
-                {
-                    "page": page.page,
-                    "markdown": markdown_pages[index] if index < len(markdown_pages) else "",
-                    "layout_blocks": [block for block in layout_blocks if int(block.get("page", 0)) == page.page],
-                    "raw_result": {"source": "docx_text_fallback"},
-                }
-                for index, page in enumerate(pages)
-            ]
-            return {
-                "pages": serialized_pages,
-                "layout_blocks": layout_blocks,
-                "markdown_pages": markdown_pages,
-                "elapsed_seconds": time.perf_counter() - start,
-                "warnings": ["DOCX layout generated using text fallback."],
-                "total_pages": len(pages),
-            }
+        prepared_pages = _prepare_document_pages(
+            file_bytes,
+            content_type=content_type,
+            filename=filename,
+        )
+        return _run_ppstructure_on_pages(prepared_pages)
 
     prepared_pages = _prepare_document_pages(file_bytes, content_type=content_type, filename=filename)
     return _run_ppstructure_on_pages(prepared_pages)
@@ -1053,6 +1063,17 @@ def _classify_document_type(raw_text: str) -> dict[str, Any]:
         re.search(r"\b(company|cong\s*ty|corp\.?|inc\.?|ltd\.?|llc\.?|jsc\.?|co\.?\s*,?\s*ltd\.?|công\s*ty)\b", lowered, re.I)
     )
 
+    section_keywords = {
+        "contact": bool(re.search(r"\b(thong\s*tin\s*(lien\s*he|ca\s*nhan)|contact|email|phone|dien\s*thoai|so\s*dien\s*thoai)\b", lowered, re.I)),
+        "objective": bool(re.search(r"\b(muc\s*tieu|career\s*objective|objective|ve\s*ban\s*than|gioi\s*thieu|summary)\b", lowered, re.I)),
+        "skills": has_skills,
+        "education": has_education,
+        "experience": has_experience,
+        "projects": bool(re.search(r"\b(du\s*an|projects?|do\s*an|san\s*pham)\b", lowered, re.I)),
+        "certifications": bool(re.search(r"\b(chung\s*chi|certif|giay\s*chung\s*nhan)\b", lowered, re.I)),
+        "interests": bool(re.search(r"\b(so\s*thich|interests?|hobbies)\b", lowered, re.I)),
+    }
+
     score = 0.0
     signals: list[str] = []
 
@@ -1080,12 +1101,22 @@ def _classify_document_type(raw_text: str) -> dict[str, Any]:
     if has_company_markers:
         score += 0.75
         signals.append("company_markers")
+    section_hit_count = sum(1 for hit in section_keywords.values() if hit)
+    if section_hit_count >= 2:
+        score += min(2.0, section_hit_count * 0.35)
+        signals.append(f"section_hits:{section_hit_count}")
 
     heading_count = int(has_skills) + int(has_education) + int(has_experience)
-    likely_cv = (
-        ((has_email or has_phone) and heading_count >= 1 and score >= 3.5)
-        or (heading_count >= 2 and score >= 4.5)
+    has_cv_profile = section_keywords["contact"] and (
+        section_keywords["objective"] or section_keywords["skills"] or section_keywords["education"]
     )
+    likely_cv = (
+        ((has_email or has_phone) and heading_count >= 1 and score >= 3.0)
+        or (heading_count >= 2 and score >= 4.0)
+        or (has_cv_profile and score >= 2.8)
+        or section_hit_count >= 4
+    )
+    cv_candidate = likely_cv or (section_hit_count >= 3 and (has_email or has_phone or has_job_titles))
 
     confidence = min(1.0, score / 7.5)
     return {
@@ -1093,6 +1124,8 @@ def _classify_document_type(raw_text: str) -> dict[str, Any]:
         "confidence": round(confidence, 3),
         "signals": signals,
         "score": round(score, 3),
+        "section_hit_count": section_hit_count,
+        "cv_candidate": cv_candidate,
     }
 
 
@@ -1109,46 +1142,54 @@ def _section_keyword_present(raw_text: str, section_type: str) -> bool:
     return bool(re.search(pattern, text, re.I))
 
 
+def _has_meaningful_cv_payload(parsed: dict[str, Any]) -> bool:
+    data = parsed.get("data") or {}
+    contact = data.get("contact") or {}
+    profile = data.get("profile") or {}
+    builder_sections = parsed.get("builder_sections") or []
+
+    strong_signals = 0
+    if str(data.get("full_name") or profile.get("full_name") or "").strip():
+        strong_signals += 1
+    if str(contact.get("email") or "").strip() or str(contact.get("phone") or "").strip():
+        strong_signals += 1
+    if len(data.get("skills") or []) >= 2:
+        strong_signals += 1
+    if len(data.get("education") or []) >= 1:
+        strong_signals += 1
+    if len(data.get("experience") or []) >= 1:
+        strong_signals += 1
+    if len(data.get("projects") or []) >= 1:
+        strong_signals += 1
+    if str(data.get("summary") or profile.get("summary") or profile.get("career_objective") or "").strip():
+        strong_signals += 1
+
+    cv_builder_types = {
+        "summary",
+        "personal_info",
+        "skill_list",
+        "education_list",
+        "experience_list",
+        "project_list",
+        "certificate_list",
+        "rich_outline",
+    }
+    builder_signal = any(str(section.get("type") or "") in cv_builder_types for section in builder_sections)
+    return strong_signals >= 2 or builder_signal
+
+
 def _filter_sections_by_keywords(parsed: dict[str, Any], raw_text: str) -> dict[str, Any]:
-    filtered = {
+    # Preserve content-first behavior: once OCR/layout parsing has already
+    # extracted sections, do not aggressively drop them based on keyword
+    # heuristics alone. This reduces cases where legitimate CV content is
+    # erased and replaced by generic output.
+    return {
         "data": dict(parsed.get("data", {})),
         "detected_sections": list(parsed.get("detected_sections", [])),
         "builder_sections": list(parsed.get("builder_sections", [])),
         "layout": parsed.get("layout", {}),
         "raw_text": parsed.get("raw_text", raw_text),
     }
-
-    # Only keep section assignments when clear section keywords exist.
-    for section_type, data_key in (
-        ("education", "education"),
-        ("work_experience", "experience"),
-        ("skills", "skills"),
-    ):
-        if _section_keyword_present(raw_text, section_type):
-            continue
-
-        if data_key in filtered["data"]:
-            filtered["data"][data_key] = []
-
-        filtered["detected_sections"] = [
-            section
-            for section in filtered["detected_sections"]
-            if str(section.get("type") or "") != section_type
-        ]
-
-        blocked_builder_types = {
-            "education": {"education_list"},
-            "work_experience": {"experience_list"},
-            "skills": {"skill_list"},
-        }.get(section_type, set())
-
-        filtered["builder_sections"] = [
-            section
-            for section in filtered["builder_sections"]
-            if str(section.get("type") or "") not in blocked_builder_types
-        ]
-
-    return filtered
 
 
 def _build_non_cv_payload(
@@ -1159,7 +1200,7 @@ def _build_non_cv_payload(
     layout_blocks: list[dict[str, Any]],
 ) -> dict[str, Any]:
     lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-    preview_lines = lines[:120]
+    preview_lines = lines
 
     data_payload = {
         "full_name": None,
@@ -1189,7 +1230,7 @@ def _build_non_cv_payload(
     detected_sections = [
         {
             "type": "document_content",
-            "title": "Document Content",
+            "title": "Nội dung tài liệu",
             "content": raw_text,
             "items": [{"text": line} for line in preview_lines],
             "line_ids": [],
@@ -1201,7 +1242,7 @@ def _build_non_cv_payload(
         {
             "id": "generic-document-outline",
             "type": "rich_outline",
-            "title": "Document Content",
+            "title": "Nội dung tài liệu",
             "containerId": "main-column",
             "order": 0,
             "data": {
@@ -1209,7 +1250,8 @@ def _build_non_cv_payload(
                     {
                         "id": f"line-{index}",
                         "text": line,
-                        "level": 0,
+                        "kind": "paragraph",
+                        "children": [],
                     }
                     for index, line in enumerate(preview_lines)
                 ]
@@ -1249,110 +1291,72 @@ def process_cv(
     start = time.perf_counter()
     file_kind = _detect_file_type(content_type, filename, file_bytes)
     pipeline_warnings: list[str] = []
+    extraction_method = "paddle_ppocrv5_ppstructurev3"
+    ocr_provider = "PP-OCRv5 + PP-StructureV3"
 
-    if file_kind == "docx":
-        raw_text = extract_text_from_docx(file_bytes)
-        classification = _classify_document_type(raw_text)
-        total_elapsed = time.perf_counter() - start
-
-        if classification["document_type"] == "cv":
-            parsed_docx = parse_cv(
-                file_bytes,
-                content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                filename=filename or "document.docx",
-            )
-            pipeline_warnings.extend([str(item) for item in parsed_docx.get("warnings", [])])
-            data_payload = parsed_docx.get("data", {})
-
-            return {
-                "success": True,
-                "document_type": "cv",
-                "document_confidence": classification["confidence"],
-                "document_signals": classification["signals"],
-                "extraction_method": "docx_direct_parse",
-                "ocr_provider": "docx_direct_text",
-                "page_results": [],
-                "page_count": int(parsed_docx.get("page_count") or (1 if raw_text.strip() else 0)),
-                "total_blocks": 0,
-                "blocks": [],
-                "data": data_payload,
-                "detected_sections": [],
-                "builder_sections": [],
-                "layout": {
-                    "mode": "docx_direct_parse",
-                    "pages": [],
-                },
-                "raw_text": raw_text,
-                "content": raw_text,
-                "markdown_pages": [],
-                "layout_blocks": [],
-                "warnings": pipeline_warnings,
-                "timings": {
-                    "ocr_seconds": 0.0,
-                    "layout_seconds": 0.0,
-                    "total_seconds": round(total_elapsed, 3),
-                },
-            }
-
-        parsed_non_cv = _build_non_cv_payload(
-            raw_text=raw_text,
-            page_results=[],
-            structured_blocks=[],
-            layout_blocks=[],
+    try:
+        prepared_pages = _prepare_document_pages(
+            file_bytes,
+            content_type=content_type,
+            filename=filename,
         )
-        return {
-            "success": True,
-            "document_type": "non_cv_document",
-            "document_confidence": classification["confidence"],
-            "document_signals": classification["signals"],
-            "extraction_method": "docx_direct_text_non_cv",
-            "ocr_provider": "docx_direct_text",
-            "page_results": [],
-            "page_count": 1 if raw_text.strip() else 0,
-            "total_blocks": 0,
-            "blocks": [],
-            "data": parsed_non_cv["data"],
-            "detected_sections": parsed_non_cv["detected_sections"],
-            "builder_sections": parsed_non_cv["builder_sections"],
-            "layout": parsed_non_cv["layout"],
-            "raw_text": raw_text,
-            "content": raw_text,
-            "markdown_pages": [],
-            "layout_blocks": [],
-            "warnings": pipeline_warnings,
-            "timings": {
-                "ocr_seconds": 0.0,
-                "layout_seconds": 0.0,
-                "total_seconds": round(total_elapsed, 3),
-            },
-        }
-    else:
-        prepared_pages = _prepare_document_pages(file_bytes, content_type=content_type, filename=filename)
-        ocr_result = _run_ppocrv5_on_pages(prepared_pages, min_confidence=min_confidence)
-        structure_result = _run_ppstructure_on_pages(prepared_pages)
-        pipeline_warnings.extend(ocr_result.get("warnings", []))
-        pipeline_warnings.extend(structure_result.get("warnings", []))
-        extraction_method = "paddle_ppocrv5_ppstructurev3"
-        ocr_provider = "PP-OCRv5 + PP-StructureV3"
+        if file_kind == "docx":
+            extraction_method = "docx_to_pdf_ppocrv5_ppstructurev3"
+            ocr_provider = "PP-OCRv5 + PP-StructureV3 (DOCX->PDF)"
+    except OCRPipelineError as exc:
+        if file_kind == "docx":
+            raise OCRPipelineError(
+                f"Không thể chuyển Word sang PDF để preview và OCR: {exc}"
+            ) from exc
+        raise
+
+    ocr_result = _run_ppocrv5_on_pages(prepared_pages, min_confidence=min_confidence)
+    structure_result = _run_ppstructure_on_pages(prepared_pages)
+    pipeline_warnings.extend(ocr_result.get("warnings", []))
+    pipeline_warnings.extend(structure_result.get("warnings", []))
 
     page_results: list[OCRPageResult] = ocr_result["pages"]
     raw_text = extract_full_text(page_results)
     classification = _classify_document_type(raw_text)
+    def _to_xyxy(points: list[list[int]]) -> list[int]:
+        if not points:
+            return [0, 0, 0, 0]
+        xs = [int(round(point[0])) for point in points if len(point) >= 2]
+        ys = [int(round(point[1])) for point in points if len(point) >= 2]
+        if not xs or not ys:
+            return [0, 0, 0, 0]
+        return [min(xs), min(ys), max(xs), max(ys)]
 
-    if classification["document_type"] == "cv":
+    should_try_cv_parse = classification["document_type"] == "cv" or bool(classification.get("cv_candidate"))
+
+    if should_try_cv_parse:
         parsed = parse_structured_cv_from_ocr(page_results)
         parsed = _filter_sections_by_keywords(parsed, raw_text)
-        structured_blocks = _build_structured_blocks(page_results, parsed, structure_result["layout_blocks"])
+        if _has_meaningful_cv_payload(parsed):
+            structured_blocks = _build_structured_blocks(page_results, parsed, structure_result["layout_blocks"])
+            classification["document_type"] = "cv"
+        else:
+            pipeline_warnings.append("Tài liệu có tín hiệu giống CV nhưng parse structure chưa đủ mạnh; giữ fallback full extracted content.")
+            classification["document_type"] = "non_cv_document"
+            structured_blocks = [
+                {
+                    "type": "text",
+                    "text": block.text,
+                    "bbox": _to_xyxy(block.bbox),
+                    "page": block.page,
+                    "layout_type": "text",
+                }
+                for page in page_results
+                for block in page.blocks
+                if str(block.text or "").strip()
+            ]
+            parsed = _build_non_cv_payload(
+                raw_text=raw_text,
+                page_results=page_results,
+                structured_blocks=structured_blocks,
+                layout_blocks=structure_result["layout_blocks"],
+            )
     else:
-        def _to_xyxy(points: list[list[int]]) -> list[int]:
-            if not points:
-                return [0, 0, 0, 0]
-            xs = [int(round(point[0])) for point in points if len(point) >= 2]
-            ys = [int(round(point[1])) for point in points if len(point) >= 2]
-            if not xs or not ys:
-                return [0, 0, 0, 0]
-            return [min(xs), min(ys), max(xs), max(ys)]
-
         structured_blocks = [
             {
                 "type": "text",

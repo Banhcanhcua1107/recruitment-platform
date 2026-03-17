@@ -500,7 +500,9 @@ def _keyword_fallback_sections(lines: list[OCRLine]) -> list[CVSection]:
 
         normalized = _strip_accents(text).lower()
         heading_meta: tuple[str, str] | None = None
-        if SKILL_HEADING_RE.search(normalized):
+        if re.search(r"\b(thong\s*tin\s*(lien\s*he|ca\s*nhan)|contact)\b", normalized, re.I):
+            heading_meta = ("contact", "Thông tin liên hệ")
+        elif SKILL_HEADING_RE.search(normalized):
             heading_meta = ("skills", "Kỹ năng")
         elif EDUCATION_HEADING_RE.search(normalized):
             heading_meta = ("education", "Học vấn")
@@ -508,6 +510,14 @@ def _keyword_fallback_sections(lines: list[OCRLine]) -> list[CVSection]:
             heading_meta = ("projects", "Dự án")
         elif SUMMARY_HEADING_RE.search(normalized):
             heading_meta = ("career_objective", "Mục tiêu nghề nghiệp")
+        elif re.search(r"\b(kinh\s*nghiem|experience|work\s*experience|cong\s*tac)\b", normalized, re.I):
+            heading_meta = ("work_experience", "Kinh nghiệm làm việc")
+        elif re.search(r"\b(chung\s*chi|certificate|certification|certif)\b", normalized, re.I):
+            heading_meta = ("certifications", "Chứng chỉ")
+        elif re.search(r"\b(hoat\s*dong|activities|ngoai\s*khoa)\b", normalized, re.I):
+            heading_meta = ("activities", "Hoạt động")
+        elif re.search(r"\b(so\s*thich|interests?|hobbies)\b", normalized, re.I):
+            heading_meta = ("interests", "Sở thích")
 
         if heading_meta is not None:
             current_section = ensure_section(heading_meta[0], heading_meta[1])
@@ -552,12 +562,44 @@ def detect_cv_sections(page_results: list[OCRPageResult]) -> list[CVSection]:
     ordered_sections: list[CVSection] = []
     if preamble.lines:
         ordered_sections.append(preamble)
-    ordered_sections.extend(section for section in sections if section.lines or section.type in {"skills", "education", "work_experience", "projects", "career_objective"})
+    ordered_sections.extend(
+        section
+        for section in sections
+        if section.lines
+        or section.type
+        in {
+            "contact",
+            "skills",
+            "education",
+            "work_experience",
+            "projects",
+            "career_objective",
+            "certifications",
+            "activities",
+            "interests",
+        }
+    )
 
     existing_types = {section.type for section in ordered_sections}
     for fallback_section in _keyword_fallback_sections(lines):
         if fallback_section.type not in existing_types:
             ordered_sections.append(fallback_section)
+            existing_types.add(fallback_section.type)
+            continue
+
+        existing_section = next(
+            (section for section in ordered_sections if section.type == fallback_section.type),
+            None,
+        )
+        if existing_section is None:
+            continue
+
+        existing_line_ids = {line.id for line in existing_section.lines}
+        for line in fallback_section.lines:
+            if line.id not in existing_line_ids:
+                existing_section.lines.append(line)
+                existing_line_ids.add(line.id)
+        existing_section.lines.sort(key=lambda line: (line.page, line.y, line.x))
 
     return ordered_sections
 
@@ -627,7 +669,8 @@ def _split_entries_by_dates(lines: list[OCRLine]) -> list[list[OCRLine]]:
 
     for line in lines:
         has_date = bool(_extract_date_range(line.text)[0])
-        if has_date and current:
+        current_has_date = any(_extract_date_range(existing.text)[0] for existing in current)
+        if has_date and current and (current_has_date or len(current) >= 3):
             entries.append(current)
             current = [line]
         else:

@@ -176,13 +176,13 @@ export function OCRUploadZone({
 
       <p className="mt-3 text-center text-[11px] leading-5 text-slate-400">
         Hỗ trợ PDF, ảnh và DOCX. OCR giữ lại block text cùng vị trí để dựng lại
-        layout CV trong bước preview.
+        bố cục CV trong bước preview.
       </p>
 
       <input
         ref={inputRef}
         type="file"
-        aria-label="Chọn file CV để upload"
+        aria-label="Chọn file CV để tải lên"
         accept=".pdf,.jpg,.jpeg,.png,.webp,.docx"
         onChange={handleInputChange}
         className="hidden"

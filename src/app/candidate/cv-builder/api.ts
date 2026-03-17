@@ -58,6 +58,20 @@ export interface ResumeBlock {
   data: Record<string, unknown>;
 }
 
+export function mapSectionsToResumeBlocks(
+  sections: Array<{
+    type: string;
+    isVisible: boolean;
+    data: unknown;
+  }>
+): ResumeBlock[] {
+  return sections.map((section) => ({
+    block_id: section.type,
+    is_visible: section.isVisible,
+    data: (section.data ?? {}) as Record<string, unknown>,
+  }));
+}
+
 // ─── Templates ────────────────────────────────────────────────────────────────
 
 /** Lấy tất cả templates hệ thống */
@@ -274,4 +288,43 @@ export async function deleteResume(id: string): Promise<void> {
 /** Đổi tên resume */
 export async function renameResume(id: string, title: string): Promise<void> {
   await saveResume(id, { title });
+}
+
+export async function createResumeFromSections(
+  sections: Array<{
+    type: string;
+    isVisible: boolean;
+    data: unknown;
+  }>,
+  options?: {
+    title?: string;
+    templateId?: string | null;
+  }
+): Promise<ResumeRow | null> {
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Bạn cần đăng nhập để lưu CV");
+
+  const templateId = options?.templateId ?? "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+  let currentStyling: Record<string, unknown> = {};
+
+  if (templateId) {
+    const template = await getTemplateById(templateId);
+    currentStyling = template?.default_styling ?? {};
+  }
+
+  const { data, error } = await supabase
+    .from("resumes")
+    .insert({
+      user_id: user.id,
+      template_id: templateId || undefined,
+      title: options?.title || "CV từ OCR",
+      resume_data: mapSectionsToResumeBlocks(sections),
+      current_styling: currentStyling,
+    })
+    .select("*, template:templates(name, structure_schema, default_styling, thumbnail_url)")
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
 }

@@ -1,13 +1,14 @@
-﻿"use client";
+"use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { X, ScanLine } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { FileText, ScanLine, X } from "lucide-react";
 import { OCRUploadZone } from "./OCRUploadZone";
 import { OCRPipelineGuide } from "./OCRPipelineGuide";
 import { OCRHelpDrawer } from "./OCRHelpDrawer";
-import { ScanningOverlay } from "./ScanningOverlay";
-import { OriginalLayoutWorkspace } from "./OriginalLayoutWorkspace";
+import { OCRAnalysisPanel, type AnalysisSectionState } from "./OCRAnalysisPanel";
+import { OCRFinalResultView } from "./OCRFinalResultView";
+import { OriginalFilePreview } from "./OriginalFilePreview";
 import {
   type OCRDraftData,
   type RawOCRBlock,
@@ -18,16 +19,15 @@ import {
 } from "./ocr-types";
 import type { CVSection } from "../../types";
 
-// ── Props ────────────────────────────────────────────
 interface OCRPreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (sections: CVSection[]) => void;
+  onConfirm: (sections: CVSection[]) => void | Promise<void>;
 }
 
-type ModalStep = "upload" | "scanning" | "preview";
-
-// ── PaddleOCR block shape returned by /ocr/upload ───────────
+type ModalStep = "upload" | "workspace";
+type PreviewKind = "image" | "pdf" | "docx" | "unknown";
+type AnalysisStage = "pending" | "processing" | "done";
 
 interface PaddleBlock {
   text: string;
@@ -36,6 +36,15 @@ interface PaddleBlock {
   page: number;
   column?: "left" | "right" | "full_width";
   rect: { x: number; y: number; width: number; height: number };
+}
+
+interface DetectedSectionPayload {
+  type: string;
+  title: string;
+  content: string;
+  items: Array<Record<string, unknown>>;
+  line_ids: string[];
+  block_indices: number[];
 }
 
 interface OCRUploadResponse {
@@ -51,8 +60,6 @@ interface OCRUploadResponse {
   elapsed_seconds: number;
   warnings: string[];
 }
-
-// ── API call: POST /upload-cv ───────────────────────────
 
 interface UploadCVResponse extends OCRUploadResponse {
   document_type?: "cv" | "non_cv_document";
@@ -98,91 +105,58 @@ interface UploadCVResponse extends OCRUploadResponse {
     languages: string[];
     raw_text: string;
   };
-  detected_sections: Array<{
-    type: string;
-    title: string;
-    content: string;
-    items: Array<Record<string, unknown>>;
-    line_ids: string[];
-    block_indices: number[];
-  }>;
+  detected_sections: DetectedSectionPayload[];
   builder_sections: CVSection[];
-  layout?: {
-    profile?: {
-      document_mode?: string;
-      pages?: Array<{
-        page: number;
-        mode?: string;
-        layout_mode?: string;
-        split_x: number | null;
-      }>;
-    };
-    pages?: Array<{
-      page: number;
-      mode?: string;
-      layout_mode?: string;
-      split_x: number | null;
-    }>;
-    columns?: {
-      left?: Array<Record<string, unknown>>;
-      right?: Array<Record<string, unknown>>;
-      full_width?: Array<Record<string, unknown>>;
-    };
-  };
   raw_text: string;
 }
 
-interface LayoutDebugInfo {
-  documentMode?: string;
-  pageModes: Array<{
-    page: number;
-    mode: string;
-    splitX: number | null;
-  }>;
+interface PreviewUploadResponse {
+  success: boolean;
+  file_type: "image" | "pdf" | "docx";
+  preview_id: string;
+  preview_url: string;
 }
 
-type AnalysisStage = "pending" | "processing" | "done";
-
-interface AnalysisSectionState {
+interface AnalysisSectionStateShape {
   key: "personal" | "skills" | "education" | "experience";
   label: string;
   detail: string;
   state: AnalysisStage;
 }
 
-const DEFAULT_ANALYSIS_SECTIONS: AnalysisSectionState[] = [
+const DEFAULT_ANALYSIS_SECTIONS: AnalysisSectionStateShape[] = [
   {
     key: "personal",
-    label: "Personal Information",
-    detail: "Name, contact and profile header",
+    label: "Thông tin cá nhân",
+    detail: "Tên, liên hệ và phần tiêu đề hồ sơ",
     state: "pending",
   },
   {
     key: "skills",
-    label: "Skills",
-    detail: "Core skills and technologies",
+    label: "Kỹ năng",
+    detail: "Kỹ năng chính và công nghệ liên quan",
     state: "pending",
   },
   {
     key: "education",
-    label: "Education",
-    detail: "Schools, degrees and timelines",
+    label: "Học vấn",
+    detail: "Trường học, bằng cấp và mốc thời gian",
     state: "pending",
   },
   {
     key: "experience",
-    label: "Experience",
-    detail: "Work history and achievements",
+    label: "Kinh nghiệm",
+    detail: "Quá trình làm việc và thành tựu",
     state: "pending",
   },
 ];
 
 function setSectionState(
-  sections: AnalysisSectionState[],
-  key: AnalysisSectionState["key"],
+  sections: AnalysisSectionStateShape[],
+  key: AnalysisSectionStateShape["key"],
   state: AnalysisStage,
-  detail?: string
-): AnalysisSectionState[] {
+  detail?: string,
+): AnalysisSectionStateShape[] {
   return sections.map((section) =>
     section.key === key
       ? {
@@ -190,22 +164,25 @@ function setSectionState(
           state,
           detail: detail ?? section.detail,
         }
-      : section
+      : section,
   );
 }
 
 async function estimateFilePages(file: File): Promise<number> {
   const lowerName = file.name.toLowerCase();
 
-  if (file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/.test(lowerName)) {
+  if (
+    file.type.startsWith("image/") ||
+    /\.(png|jpe?g|webp|bmp|tiff?)$/.test(lowerName)
+  ) {
     return 1;
   }
 
-  if (/\.docx$/.test(lowerName) || file.type.includes("wordprocessingml.document")) {
-    // DOCX has no trivial page count in-browser; use a stable estimate for progress UI.
-    const text = await file.text().catch(() => "");
-    const paragraphGuess = Math.max(1, Math.floor(text.length / 1500));
-    return Math.min(12, paragraphGuess);
+  if (
+    /\.docx$/.test(lowerName) ||
+    file.type.includes("wordprocessingml.document")
+  ) {
+    return 1;
   }
 
   if (file.type.includes("pdf") || /\.pdf$/.test(lowerName)) {
@@ -224,7 +201,7 @@ async function callUploadCV(file: File): Promise<UploadCVResponse> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`/api/ai/upload-cv`, {
+  const res = await fetch("/api/ai/upload-cv", {
     method: "POST",
     body: formData,
   });
@@ -237,15 +214,47 @@ async function callUploadCV(file: File): Promise<UploadCVResponse> {
   return res.json();
 }
 
-/**
- * Convert PaddleOCR response blocks to the RawOCRBlock format
- * used by OriginalLayoutWorkspace.
- *
- * `rect` values from the backend are already 0–100 normalised.
- */
+async function callPreparePreview(file: File): Promise<PreviewUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("/api/ai/prepare-preview", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Unknown error" }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+function inferPreviewKind(file: File): PreviewKind {
+  const lowerName = file.name.toLowerCase();
+  if (
+    file.type.startsWith("image/") ||
+    /\.(png|jpe?g|webp|bmp|tiff?)$/.test(lowerName)
+  ) {
+    return "image";
+  }
+  if (file.type.includes("pdf") || /\.pdf$/.test(lowerName)) {
+    return "pdf";
+  }
+  if (
+    /\.docx$/.test(lowerName) ||
+    file.type.includes("wordprocessingml.document")
+  ) {
+    return "docx";
+  }
+  return "unknown";
+}
+
 function paddleBlocksToRaw(response: UploadCVResponse): RawOCRBlock[] {
   const blocks: RawOCRBlock[] = [];
   const sectionLabelByBlockIndex = new Map<number, string>();
+
   for (const section of response.detected_sections || []) {
     const firstBlockIndex = section.block_indices?.[0];
     if (typeof firstBlockIndex === "number" && section.title) {
@@ -255,30 +264,55 @@ function paddleBlocksToRaw(response: UploadCVResponse): RawOCRBlock[] {
 
   let globalBlockIndex = 0;
   for (const page of response.pages) {
-    for (const b of page.blocks) {
+    for (const block of page.blocks) {
       blocks.push({
-        id: `${b.page}-${b.bbox[0][0]}-${b.bbox[0][1]}-${b.bbox[2][0]}-${b.bbox[2][1]}`,
-        text: b.text,
-        page: b.page,
+        id: `${block.page}-${block.bbox[0][0]}-${block.bbox[0][1]}-${block.bbox[2][0]}-${block.bbox[2][1]}`,
+        text: block.text,
+        page: block.page,
         label: sectionLabelByBlockIndex.get(globalBlockIndex),
-        confidence: b.confidence,
-        column: b.column,
+        confidence: block.confidence,
+        column: block.column,
         rect: {
-          x: b.rect.x,
-          y: b.rect.y,
-          width: b.rect.width,
-          height: b.rect.height,
+          x: block.rect.x,
+          y: block.rect.y,
+          width: block.rect.width,
+          height: block.rect.height,
         },
       });
       globalBlockIndex += 1;
     }
   }
+
   return removeDuplicateBlocks(blocks);
 }
 
-// ----------------------------------------------------------------
-// OCR Preview Modal — Orchestrator
-// ----------------------------------------------------------------
+function buildFallbackSectionsFromContent(content: string): CVSection[] {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+
+  const nodes = trimmed
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => ({
+      id: `raw-${index}`,
+      text: line,
+      kind: "paragraph" as const,
+      children: [],
+    }));
+
+  return [
+    {
+      id: "ocr-fallback-content",
+      type: "rich_outline",
+      title: "Nội dung trích xuất",
+      isVisible: true,
+      containerId: "main-column",
+      data: { nodes },
+    },
+  ];
+}
+
 export function OCRPreviewModal({
   isOpen,
   onClose,
@@ -286,45 +320,61 @@ export function OCRPreviewModal({
 }: OCRPreviewModalProps) {
   const [step, setStep] = useState<ModalStep>("upload");
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewKind, setPreviewKind] = useState<PreviewKind>("unknown");
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [ocrLoading, setOcrLoading] = useState(false);
+  const [isSavingResult, setIsSavingResult] = useState(false);
   const [rawBlocks, setRawBlocks] = useState<RawOCRBlock[]>([]);
   const [draftData, setDraftData] = useState<OCRDraftData | null>(null);
   const [backendSections, setBackendSections] = useState<CVSection[] | null>(null);
-  const [layoutDebug, setLayoutDebug] = useState<LayoutDebugInfo | null>(null);
+  const [detectedSections, setDetectedSections] = useState<DetectedSectionPayload[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [previewMimeType, setPreviewMimeType] = useState<string | null>(null);
   const [estimatedPages, setEstimatedPages] = useState(1);
   const [scanningPage, setScanningPage] = useState(1);
   const [analysisComplete, setAnalysisComplete] = useState(false);
-  const [analysisSections, setAnalysisSections] = useState<AnalysisSectionState[]>(DEFAULT_ANALYSIS_SECTIONS);
-  const [documentType, setDocumentType] = useState<"cv" | "non_cv_document">("cv");
+  const [analysisSections, setAnalysisSections] =
+    useState<AnalysisSectionStateShape[]>(DEFAULT_ANALYSIS_SECTIONS);
+  const [documentType, setDocumentType] =
+    useState<"cv" | "non_cv_document">("cv");
   const [documentContent, setDocumentContent] = useState("");
   const requestIdRef = useRef(0);
+  const localObjectUrlRef = useRef<string | null>(null);
 
-  const showUploadStep = !file;
-  const showScanningStep = Boolean(file) && step === "scanning";
-  const showPreviewStep = step === "preview" && rawBlocks.length > 0 && Boolean(file);
-
-  // ── Reset ──────────────────────────────────────────────
   const resetState = useCallback(() => {
     requestIdRef.current += 1;
+    if (localObjectUrlRef.current) {
+      URL.revokeObjectURL(localObjectUrlRef.current);
+      localObjectUrlRef.current = null;
+    }
     setStep("upload");
     setFile(null);
+    setPreviewUrl(null);
+    setPreviewKind("unknown");
+    setPreviewError(null);
     setIsUploading(false);
     setOcrLoading(false);
+    setIsSavingResult(false);
     setRawBlocks([]);
     setDraftData(null);
     setBackendSections(null);
-    setLayoutDebug(null);
+    setDetectedSections([]);
     setError(null);
-    setPreviewMimeType(null);
     setEstimatedPages(1);
     setScanningPage(1);
     setAnalysisComplete(false);
     setAnalysisSections(DEFAULT_ANALYSIS_SECTIONS);
     setDocumentType("cv");
     setDocumentContent("");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (localObjectUrlRef.current) {
+        URL.revokeObjectURL(localObjectUrlRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -343,27 +393,63 @@ export function OCRPreviewModal({
   useEffect(() => {
     if (!ocrLoading) return;
 
-    let timeoutId = 0;
-    setAnalysisSections((current) => setSectionState(current, "personal", "processing", "Detecting profile and contacts..."));
+    setAnalysisSections((current) =>
+      setSectionState(
+        current,
+        "personal",
+        "processing",
+        "Đang nhận diện hồ sơ và thông tin liên hệ...",
+      ),
+    );
 
-    timeoutId = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
       setAnalysisSections((current) => {
-        const afterPersonal = setSectionState(current, "personal", "done", "Personal information detected");
-        return setSectionState(afterPersonal, "skills", "processing", "Extracting skill keywords...");
+        const afterPersonal = setSectionState(
+          current,
+          "personal",
+          "done",
+          "Đã nhận diện thông tin cá nhân",
+        );
+        return setSectionState(
+          afterPersonal,
+          "skills",
+          "processing",
+          "Đang trích xuất kỹ năng và từ khóa...",
+        );
       });
     }, 1500);
 
     const timeoutId2 = window.setTimeout(() => {
       setAnalysisSections((current) => {
-        const afterSkills = setSectionState(current, "skills", "done", "Skills clustered");
-        return setSectionState(afterSkills, "education", "processing", "Parsing education timeline...");
+        const afterSkills = setSectionState(
+          current,
+          "skills",
+          "done",
+          "Đã gom nhóm kỹ năng",
+        );
+        return setSectionState(
+          afterSkills,
+          "education",
+          "processing",
+          "Đang phân tích học vấn và mốc thời gian...",
+        );
       });
     }, 2900);
 
     const timeoutId3 = window.setTimeout(() => {
       setAnalysisSections((current) => {
-        const afterEducation = setSectionState(current, "education", "done", "Education section parsed");
-        return setSectionState(afterEducation, "experience", "processing", "Normalizing work experiences...");
+        const afterEducation = setSectionState(
+          current,
+          "education",
+          "done",
+          "Đã phân tích phần học vấn",
+        );
+        return setSectionState(
+          afterEducation,
+          "experience",
+          "processing",
+          "Đang chuẩn hóa kinh nghiệm làm việc...",
+        );
       });
     }, 4300);
 
@@ -379,35 +465,56 @@ export function OCRPreviewModal({
     onClose();
   }, [onClose, resetState]);
 
-  // ── File selected → run OCR ─────────────────────────────
   const handleFileSelected = useCallback(async (nextFile: File) => {
     const requestId = ++requestIdRef.current;
+    const inferredPreviewKind = inferPreviewKind(nextFile);
+
+    if (localObjectUrlRef.current) {
+      URL.revokeObjectURL(localObjectUrlRef.current);
+      localObjectUrlRef.current = null;
+    }
+
     setFile(nextFile);
+    setStep("workspace");
+    setPreviewKind(inferredPreviewKind);
+    setPreviewError(null);
+    setError(null);
     setIsUploading(true);
     setOcrLoading(true);
-    setStep("scanning");
-    setError(null);
     setRawBlocks([]);
     setDraftData(null);
     setBackendSections(null);
-    setLayoutDebug(null);
-    setPreviewMimeType(null);
+    setDetectedSections([]);
     setAnalysisSections(DEFAULT_ANALYSIS_SECTIONS);
     setAnalysisComplete(false);
     setScanningPage(1);
     setDocumentType("cv");
     setDocumentContent("");
 
-    const lowerName = nextFile.name.toLowerCase();
-    const isDocxFile = nextFile.type.includes("wordprocessingml.document") || lowerName.endsWith(".docx");
-
-    if (isDocxFile) {
-      setPreviewMimeType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    } else if ((nextFile.type || "").startsWith("image/")) {
-      setPreviewMimeType(nextFile.type || "image/png");
+    if (inferredPreviewKind === "image" || inferredPreviewKind === "pdf") {
+      const objectUrl = URL.createObjectURL(nextFile);
+      localObjectUrlRef.current = objectUrl;
+      setPreviewUrl(objectUrl);
     } else {
-      setPreviewMimeType("application/pdf");
+      setPreviewUrl(null);
     }
+
+    void (async () => {
+      try {
+        const prepared = await callPreparePreview(nextFile);
+        if (requestIdRef.current !== requestId) return;
+        setPreviewKind(prepared.file_type === "image" ? "image" : "pdf");
+        setPreviewUrl(`/api/ai/preview/${prepared.preview_id}`);
+      } catch (previewErr) {
+        if (requestIdRef.current !== requestId) return;
+        console.warn("Preview preparation failed:", previewErr);
+        setPreviewError(
+          inferredPreviewKind === "docx"
+            ? "Không thể chuyển Word sang PDF trên backend. Hãy kiểm tra LibreOffice (`soffice --headless`) hoặc biến `SOFFICE_PATH`."
+            : "Không thể dựng preview tối ưu từ backend, đang dùng preview cục bộ.",
+        );
+      }
+    })();
 
     try {
       const pageEstimate = await estimateFilePages(nextFile);
@@ -419,60 +526,98 @@ export function OCRPreviewModal({
 
     try {
       const uploadResponse = await callUploadCV(nextFile);
-
       if (requestIdRef.current !== requestId) return;
 
-      const hasExtractedContent = Boolean((uploadResponse.content || uploadResponse.raw_text || "").trim());
-      if (!uploadResponse.success || (!hasExtractedContent && uploadResponse.total_blocks === 0)) {
+      const hasExtractedContent = Boolean(
+        (uploadResponse.content || uploadResponse.raw_text || "").trim(),
+      );
+
+      if (
+        !uploadResponse.success ||
+        (!hasExtractedContent && uploadResponse.total_blocks === 0)
+      ) {
         throw new Error(
           uploadResponse.total_blocks === 0
             ? "Không phát hiện văn bản nào trong tài liệu."
-            : "Không thể phân tích tài liệu"
+            : "Không thể phân tích tài liệu.",
         );
       }
 
-      const blocks = uploadResponse.total_blocks > 0 ? paddleBlocksToRaw(uploadResponse) : [];
+      const blocks =
+        uploadResponse.total_blocks > 0 ? paddleBlocksToRaw(uploadResponse) : [];
       const parsedDraft = transformParsedCVToDraft(uploadResponse.data);
-      const resolvedDocumentType = uploadResponse.document_type === "non_cv_document" ? "non_cv_document" : "cv";
+      const hasCvLikeSections = (uploadResponse.detected_sections || []).some(
+        (section) =>
+          [
+            "career_objective",
+            "work_experience",
+            "projects",
+            "skills",
+            "education",
+            "contact",
+            "certifications",
+            "activities",
+            "interests",
+          ].includes(section.type),
+      );
+      const hasCvLikeBuilderSections = (
+        uploadResponse.builder_sections || []
+      ).some((section) =>
+        [
+          "summary",
+          "personal_info",
+          "skill_list",
+          "education_list",
+          "experience_list",
+          "project_list",
+          "certificate_list",
+          "rich_outline",
+        ].includes(String(section.type || "")),
+      );
+
+      const resolvedDocumentType =
+        uploadResponse.document_type === "non_cv_document" &&
+        (hasCvLikeSections || hasCvLikeBuilderSections)
+          ? "cv"
+          : uploadResponse.document_type === "non_cv_document"
+            ? "non_cv_document"
+            : "cv";
+
       setDocumentType(resolvedDocumentType);
       setDocumentContent(uploadResponse.content || uploadResponse.raw_text || "");
       setRawBlocks(blocks);
       setBackendSections(uploadResponse.builder_sections || null);
+      setDetectedSections(uploadResponse.detected_sections || []);
+
       const resolvedPageCount = Math.max(1, uploadResponse.page_count || 1);
       setEstimatedPages(resolvedPageCount);
       setScanningPage(resolvedPageCount);
-      setLayoutDebug({
-        documentMode: uploadResponse.layout?.profile?.document_mode,
-        pageModes: (uploadResponse.layout?.profile?.pages || uploadResponse.layout?.pages || []).map((page) => ({
-          page: page.page,
-          mode: page.mode || page.layout_mode || "unknown",
-          splitX: page.split_x,
-        })),
-      });
+
       if (resolvedDocumentType === "non_cv_document") {
         setAnalysisSections([
           {
             key: "personal",
-            label: "Document Type",
-            detail: "Detected as non-CV document",
+            label: "Loại tài liệu",
+            detail:
+              "Đã xác định đây là tài liệu tổng quát, không chỉ riêng CV.",
             state: "done",
           },
           {
             key: "skills",
-            label: "OCR Extraction",
-            detail: "Extracted full document text",
+            label: "OCR extraction",
+            detail: "Đã trích xuất toàn bộ nội dung văn bản.",
             state: "done",
           },
           {
             key: "education",
-            label: "CV Parsing",
-            detail: "Skipped to avoid incorrect CV mapping",
+            label: "CV parsing",
+            detail: "Giữ nội dung đầy đủ thay vì ép map sai sang schema CV.",
             state: "done",
           },
           {
             key: "experience",
-            label: "Structured Output",
-            detail: "Showing generic document content",
+            label: "Final content",
+            detail: "Đã dựng nội dung cuối cùng để bạn rà soát và lưu.",
             state: "done",
           },
         ]);
@@ -480,45 +625,55 @@ export function OCRPreviewModal({
         setAnalysisSections((current) =>
           current.map((section) => {
             if (section.key === "personal") {
-              const hasContact = Boolean(uploadResponse.data.contact.email || uploadResponse.data.contact.phone);
-              return { ...section, state: "done", detail: hasContact ? "Contact information parsed" : "Profile extracted" };
+              const hasContact = Boolean(
+                uploadResponse.data.contact.email ||
+                  uploadResponse.data.contact.phone,
+              );
+              return {
+                ...section,
+                state: "done",
+                detail: hasContact
+                  ? "Đã trích xuất thông tin liên hệ."
+                  : "Đã nhận diện phần tiêu đề hồ sơ.",
+              };
             }
             if (section.key === "skills") {
-              const count = uploadResponse.data.skills?.length || 0;
-              return { ...section, state: "done", detail: `${count} skill${count === 1 ? "" : "s"} extracted` };
+              return {
+                ...section,
+                state: "done",
+                detail: `Đã trích xuất ${uploadResponse.data.skills?.length || 0} kỹ năng.`,
+              };
             }
             if (section.key === "education") {
-              const count = uploadResponse.data.education?.length || 0;
-              return { ...section, state: "done", detail: `${count} education entr${count === 1 ? "y" : "ies"}` };
+              return {
+                ...section,
+                state: "done",
+                detail: `Đã trích xuất ${uploadResponse.data.education?.length || 0} mục học vấn.`,
+              };
             }
-            const count = uploadResponse.data.experience?.length || 0;
-            return { ...section, state: "done", detail: `${count} experience entr${count === 1 ? "y" : "ies"}` };
-          })
+            return {
+              ...section,
+              state: "done",
+              detail: `Đã trích xuất ${uploadResponse.data.experience?.length || 0} mục kinh nghiệm.`,
+            };
+          }),
         );
       }
-      setAnalysisComplete(true);
+
       setDraftData(hasMeaningfulDraftData(parsedDraft) ? parsedDraft : null);
+      setAnalysisComplete(true);
       setIsUploading(false);
       setOcrLoading(false);
-      if (resolvedDocumentType === "cv" && blocks.length > 0) {
-        window.setTimeout(() => {
-          if (requestIdRef.current !== requestId) return;
-          setStep("preview");
-        }, 500);
-      } else {
-        setStep("scanning");
-      }
     } catch (err) {
       if (requestIdRef.current !== requestId) return;
-      const rawMessage = err instanceof Error ? err.message : "Lỗi không xác định";
-      const message =
-        /failed to fetch|cors|network|err_failed/i.test(rawMessage)
-          ? "Không thể kết nối tới AI service ở http://localhost:8000. Hãy kiểm tra backend đã chạy và đã reload route /upload-cv."
-          : rawMessage;
+      const rawMessage =
+        err instanceof Error ? err.message : "Lỗi không xác định";
+      const message = /failed to fetch|cors|network|err_failed/i.test(rawMessage)
+        ? "Không thể kết nối tới AI service ở http://localhost:8000. Hãy kiểm tra backend đã chạy và đã reload route /upload-cv."
+        : rawMessage;
       setIsUploading(false);
       setOcrLoading(false);
       setError(message);
-      setStep("scanning");
     }
   }, []);
 
@@ -531,168 +686,178 @@ export function OCRPreviewModal({
     resetState();
   }, [resetState]);
 
-  // ── Confirm edited blocks → parent ────────────────────────
-  const handleConfirm = useCallback(
-    (editedBlocks: RawOCRBlock[]) => {
-      const sections: CVSection[] =
-        backendSections && backendSections.length > 0
-          ? backendSections
-          : transformRawBlocksToSections(editedBlocks, draftData);
-
-      onConfirm(sections);
-      resetState();
-    },
-    [backendSections, draftData, onConfirm, resetState]
+  const resolvedSections = useMemo(
+    () =>
+      backendSections && backendSections.length > 0
+        ? backendSections
+        : rawBlocks.length > 0
+          ? transformRawBlocksToSections(rawBlocks, draftData)
+          : buildFallbackSectionsFromContent(documentContent),
+    [backendSections, documentContent, draftData, rawBlocks],
   );
 
-  const handleCancelDraft = useCallback(() => resetState(), [resetState]);
+  const handleSave = useCallback(async () => {
+    if (!resolvedSections.length || isSavingResult) return;
+    try {
+      setIsSavingResult(true);
+      await onConfirm(resolvedSections);
+      resetState();
+      onClose();
+    } finally {
+      setIsSavingResult(false);
+    }
+  }, [isSavingResult, onClose, onConfirm, resetState, resolvedSections]);
+
+  const showWorkspace = step === "workspace" && file;
+  const showFinalResult =
+    showWorkspace && !ocrLoading && !error && analysisComplete;
 
   if (!isOpen) return null;
 
   return (
     <AnimatePresence>
-      {isOpen && (
+      <motion.div
+        key="ocr-modal"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center"
+      >
         <motion.div
-          key="ocr-modal"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center"
+          className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+          onClick={!ocrLoading && !isSavingResult ? handleClose : undefined}
+        />
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.94, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.94, y: 20 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className="relative z-10 flex w-[94vw] max-w-[1700px] flex-col overflow-hidden rounded-3xl border border-slate-200/40 bg-white/95 shadow-2xl shadow-slate-900/20 backdrop-blur-xl"
+          style={{ height: "90vh" }}
         >
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={!ocrLoading ? handleClose : undefined}
-          />
+          {!ocrLoading && !isSavingResult && (
+            <>
+              <div className="absolute left-4 top-4 z-20">
+                <OCRHelpDrawer buttonLabel="Trợ giúp" />
+              </div>
+              <motion.button
+                aria-label="Đóng OCR modal"
+                onClick={handleClose}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white/80 text-slate-500 shadow-sm transition-all hover:bg-slate-100"
+              >
+                <X size={16} />
+              </motion.button>
+            </>
+          )}
 
-          {/* Modal Container */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className={`relative z-10 mx-4 ${
-              showScanningStep
-                ? "w-[95vw] max-w-400 h-[90vh] max-h-[90vh] overflow-hidden"
-                : "w-full max-w-3xl max-h-[90vh] overflow-y-auto"
-            }`}
-          >
-            {/* Close button */}
-            {!ocrLoading && (
-              <>
-                <div className="absolute top-4 left-4 z-20">
-                  <OCRHelpDrawer buttonLabel="Trợ giúp" />
+          {step === "upload" ? (
+            <div className="max-h-[90vh] overflow-y-auto p-8">
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 text-center"
+              >
+                <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50">
+                  <ScanLine size={24} className="text-blue-600" />
                 </div>
-                <motion.button
-                  aria-label="Close OCR modal"
-                  onClick={handleClose}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="absolute top-4 right-4 z-20 flex items-center justify-center w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200 shadow-sm hover:bg-slate-100 text-slate-500 transition-all"
-                >
-                  <X size={16} />
-                </motion.button>
-              </>
-            )}
+                <h2 className="text-lg font-bold text-slate-800">
+                  Tải CV lên để quét bằng AI
+                </h2>
+                <p className="mt-1 text-sm text-slate-400">
+                  Hệ thống sẽ hiển thị CV gốc ở bên trái, còn bên phải lần lượt
+                  chạy OCR, parsing và dựng kết quả cuối cùng để bạn lưu vào web.
+                </p>
+              </motion.div>
 
-            {/* Content Card */}
-            <div
-              className={`bg-white/95 backdrop-blur-xl rounded-3xl border border-slate-200/40 shadow-2xl shadow-slate-900/20 ${
-                showScanningStep ? "h-full overflow-hidden p-5" : "p-8"
-              }`}
-            >
+              <OCRUploadZone
+                onFileSelected={handleFileSelected}
+                disabled={isUploading || ocrLoading}
+              />
+              <OCRPipelineGuide />
 
-              {/* Title (upload step only) */}
-              {showUploadStep && (
+              {error ? (
                 <motion.div
-                  initial={{ opacity: 0, y: -10 }}
+                  initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="text-center mb-8"
+                  className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center"
                 >
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 border border-blue-100 mb-3">
-                    <ScanLine size={24} className="text-blue-600" />
-                  </div>
-                  <h2 className="text-lg font-bold text-slate-800">
-                    Upload CV để quét bằng AI
-                  </h2>
-                  <p className="text-sm text-slate-400 mt-1">
-                    Pipeline OCR theo hướng PP-OCR sẽ phát hiện vùng chữ, nhận dạng nội dung và dựng CV draft để bạn hiệu chỉnh
+                  <p className="text-xs font-medium text-red-600">{error}</p>
+                  <p className="mt-1 text-[10px] text-red-400">
+                    Vui lòng thử lại hoặc sử dụng file khác.
                   </p>
                 </motion.div>
-              )}
-
-              {/* Step content */}
-              <AnimatePresence mode="wait">
-                {showUploadStep ? (
-                  <motion.div
-                    key="upload"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                  >
-                    <OCRUploadZone onFileSelected={handleFileSelected} disabled={isUploading || ocrLoading} />
-                    <OCRPipelineGuide />
-
-                    {error && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-center"
-                      >
-                        <p className="text-xs text-red-600 font-medium">{error}</p>
-                        <p className="text-[10px] text-red-400 mt-1">
-                          Vui lòng thử lại hoặc sử dụng file khác
-                        </p>
-                      </motion.div>
-                    )}
-                  </motion.div>
-                ) : showScanningStep && file ? (
-                  <motion.div
-                    key="scanning"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    className="h-full"
-                  >
-                    <ScanningOverlay
-                      fileName={file.name}
-                      fileType={file.type}
-                      file={file}
-                      previewMimeType={previewMimeType}
-                      isLoading={ocrLoading}
-                      currentPage={scanningPage}
-                      totalPages={estimatedPages}
-                      analysisComplete={analysisComplete}
-                      documentType={documentType}
-                      documentContent={documentContent}
-                      sectionStates={analysisSections}
-                      error={error}
-                      onRetry={error ? handleRetry : undefined}
-                      onUploadNew={error ? handleUploadNew : undefined}
-                    />
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
+              ) : null}
             </div>
-          </motion.div>
-        </motion.div>
-      )}
+          ) : showWorkspace ? (
+            <div className="grid h-full min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[48%_52%]">
+              <div className="relative min-h-0 overflow-hidden border-b border-slate-200 bg-slate-100 lg:border-b-0 lg:border-r">
+                <div className="absolute inset-x-4 top-4 z-10 flex items-center justify-between rounded-xl border border-slate-200 bg-white/90 px-4 py-2 shadow-sm backdrop-blur-md">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-5 w-5 items-center justify-center rounded bg-slate-900">
+                      <FileText size={11} className="text-white" />
+                    </div>
+                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-slate-600">
+                      CV gốc
+                    </h3>
+                  </div>
+                  <span className="max-w-[220px] truncate text-[11px] font-medium text-slate-500">
+                    {file.name}
+                  </span>
+                </div>
 
-      {/* The workspace opens full-screen once OCR is complete */}
-      {isOpen && showPreviewStep && file && (
-        <OriginalLayoutWorkspace
-          key="ocr-workspace"
-          file={file}
-          initialBlocks={rawBlocks}
-          parsedDraft={draftData}
-          layoutDebug={layoutDebug}
-          onConfirm={handleConfirm}
-          onCancel={handleCancelDraft}
-        />
-      )}
+                <div className="h-full min-h-0 pt-16">
+                  <OriginalFilePreview
+                    file={file}
+                    previewUrl={previewUrl}
+                    previewKind={previewKind}
+                    previewError={previewError}
+                  />
+                </div>
+
+                {previewError ? (
+                  <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700 shadow-sm">
+                    {previewError}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
+                {showFinalResult ? (
+                  <OCRFinalResultView
+                    fileName={file.name}
+                    sections={resolvedSections}
+                    detectedSections={detectedSections}
+                    documentType={documentType}
+                    documentContent={documentContent}
+                    onSave={handleSave}
+                    onSkip={handleClose}
+                    isSaving={isSavingResult}
+                  />
+                ) : (
+                  <OCRAnalysisPanel
+                    currentPage={scanningPage}
+                    totalPages={estimatedPages}
+                    analysisComplete={false}
+                    sectionStates={analysisSections as AnalysisSectionState[]}
+                    isLoading={!error && ocrLoading}
+                    error={error}
+                    documentType={documentType}
+                    documentContent={documentContent}
+                    onRetry={error ? handleRetry : undefined}
+                    onUploadNew={error ? handleUploadNew : undefined}
+                  />
+                )}
+              </div>
+            </div>
+          ) : null}
+        </motion.div>
+      </motion.div>
     </AnimatePresence>
   );
 }

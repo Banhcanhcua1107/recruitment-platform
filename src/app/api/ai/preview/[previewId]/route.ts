@@ -23,13 +23,21 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
     const contentType = response.headers.get("content-type") || "application/octet-stream";
     const body = await response.arrayBuffer();
+    const headers = new Headers({
+      "content-type": contentType,
+      "cache-control": response.headers.get("cache-control") || "no-store",
+    });
+
+    for (const headerName of ["content-disposition", "content-length", "accept-ranges"]) {
+      const value = response.headers.get(headerName);
+      if (value) {
+        headers.set(headerName, value);
+      }
+    }
 
     return new NextResponse(body, {
       status: response.status,
-      headers: {
-        "content-type": contentType,
-        "cache-control": "no-store",
-      },
+      headers,
     });
   } catch (error) {
     console.error("Proxy preview error:", error);

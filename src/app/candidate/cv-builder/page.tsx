@@ -3,8 +3,15 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getMyResumes, deleteResume, renameResume, createResume, ResumeRow } from "./api";
-import { Loader2, Plus, FileText } from "lucide-react";
+import {
+  createResume,
+  createResumeFromSections,
+  deleteResume,
+  getMyResumes,
+  renameResume,
+  type ResumeRow,
+} from "./api";
+import { FileText, FolderOpen, Loader2, Plus, UploadCloud } from "lucide-react";
 import { OCRPreviewModal } from "./components/ocr/OCRPreviewModal";
 import { CVCard } from "./components/cv/CVCard";
 import { CreateCard } from "./components/cv/CreateCard";
@@ -19,6 +26,7 @@ export default function CVDashboardPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [templateRedirectLoading, setTemplateRedirectLoading] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
 
   const loadResumes = async () => {
     try {
@@ -33,12 +41,17 @@ export default function CVDashboardPage() {
   };
 
   useEffect(() => {
-    loadResumes();
+    void loadResumes();
   }, []);
 
   useEffect(() => {
-    const templateId = searchParams.get("template");
+    if (!saveNotice) return;
+    const timeoutId = window.setTimeout(() => setSaveNotice(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveNotice]);
 
+  useEffect(() => {
+    const templateId = searchParams.get("template");
     if (!templateId || templateRedirectLoading) {
       return;
     }
@@ -49,12 +62,11 @@ export default function CVDashboardPage() {
       try {
         setTemplateRedirectLoading(true);
         const resume = await createResume(templateId, "CV của tôi");
-
         if (!cancelled && resume) {
           router.replace(`/candidate/cv-builder/${resume.id}/edit`);
         }
       } catch (err) {
-        console.error("Không thể tạo CV từ template:", err);
+        console.error("Không thể tạo CV từ mẫu:", err);
         if (!cancelled) {
           alert("Không thể tạo CV từ mẫu đã chọn. Vui lòng thử lại.");
           router.replace("/candidate/templates");
@@ -75,10 +87,12 @@ export default function CVDashboardPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Bạn chắc chắn muốn xóa CV này?")) return;
+
     try {
       setDeletingId(id);
       await deleteResume(id);
-      setResumes((prev) => prev.filter((r) => r.id !== id));
+      setResumes((prev) => prev.filter((resume) => resume.id !== id));
+      setSaveNotice("Đã xóa CV khỏi danh sách đã lưu.");
     } catch (err) {
       console.error("Xóa thất bại:", err);
     } finally {
@@ -90,54 +104,64 @@ export default function CVDashboardPage() {
     try {
       await renameResume(id, newTitle);
       setResumes((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, title: newTitle } : r))
+        prev.map((resume) =>
+          resume.id === id ? { ...resume, title: newTitle } : resume,
+        ),
       );
     } catch (err) {
       console.error("Đổi tên thất bại:", err);
     }
   };
 
-  // Handle OCR scan — create a new resume from OCR data and navigate to edit
   const handleOCRConfirm = async (sections: CVSection[]) => {
     try {
-      // Use a default template ID (or null for custom)
-      const defaultTemplateId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
-      const newResume = await createResume(defaultTemplateId, "CV từ Upload");
+      const newResume = await createResumeFromSections(sections, {
+        title: "CV từ OCR",
+      });
+
       if (newResume) {
-        // Navigate to edit page — the sections will be loaded via store
-        // We store OCR sections in sessionStorage so the edit page can pick them up
-        sessionStorage.setItem("ocr_sections", JSON.stringify(sections));
-        router.push(`/candidate/cv-builder/${newResume.id}/edit?ocr=1`);
+        setOcrModalOpen(false);
+        await loadResumes();
+        setSaveNotice("CV vừa quét đã được lưu vào danh sách CV của bạn.");
       }
     } catch (err) {
-      console.error("Tạo CV từ OCR thất bại:", err);
+      console.error("Lưu CV từ OCR thất bại:", err);
+      alert("Không thể lưu CV vừa quét. Vui lòng thử lại.");
     }
-    setOcrModalOpen(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-['Manrope'] pb-20">
-      {templateRedirectLoading && (
+    <div className="min-h-screen bg-slate-50 pb-20 font-['Manrope']">
+      {templateRedirectLoading ? (
         <div className="border-b border-emerald-100 bg-emerald-50/90 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto flex items-center gap-3 px-6 py-3 text-sm font-medium text-emerald-800">
+          <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-3 text-sm font-medium text-emerald-800">
             <Loader2 size={16} className="animate-spin" />
             Đang tạo CV từ mẫu bạn đã chọn...
           </div>
         </div>
-      )}
+      ) : null}
 
-      {/* HEADER */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      {saveNotice ? (
+        <div className="border-b border-blue-100 bg-blue-50/90 backdrop-blur-sm">
+          <div className="mx-auto max-w-7xl px-6 py-3 text-sm font-medium text-blue-800">
+            {saveNotice}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="sticky top-0 z-10 border-b border-slate-200 bg-white">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
           <div>
-            <h1 className="text-2xl font-black text-slate-900 tracking-tight">CV của tôi</h1>
-            <p className="text-slate-500 font-medium text-sm">
-              {loading ? "Đang tải..." : `${resumes.length} CV`}
+            <h1 className="text-2xl font-black tracking-tight text-slate-900">
+              CV của tôi
+            </h1>
+            <p className="text-sm font-medium text-slate-500">
+              {loading ? "Đang tải..." : `${resumes.length} CV đã lưu`}
             </p>
           </div>
           <Link
             href="/candidate/templates"
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all active:scale-95"
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 font-bold text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-700 active:scale-95"
           >
             <Plus size={18} />
             Tạo CV mới
@@ -145,61 +169,90 @@ export default function CVDashboardPage() {
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div className="max-w-7xl mx-auto px-6 py-10">
-        {loading ? (
-          // Skeleton loading
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-2xl border border-slate-200 h-[340px] animate-pulse overflow-hidden flex flex-col">
-                <div className="h-[220px] bg-slate-100/80" />
-                <div className="p-4 space-y-3 flex-1 flex flex-col justify-end">
-                  <div className="h-4 bg-slate-100 rounded w-3/4 mb-1" />
-                  <div className="h-3 bg-slate-100 rounded w-1/2" />
-                  <div className="h-3 bg-slate-100 rounded w-1/3 mt-auto" />
-                </div>
-              </div>
-            ))}
+      <div className="mx-auto max-w-7xl space-y-10 px-6 py-10">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+              <UploadCloud size={22} />
+            </div>
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-slate-900">
+                Tạo hoặc tải CV lên
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                Tạo CV mới từ thư viện mẫu hoặc tải CV có sẵn để AI quét,
+                làm sạch nội dung và lưu vào hệ thống.
+              </p>
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <CreateCard />
             <UploadCard onClick={() => setOcrModalOpen(true)} />
-
-            {resumes.map((resume) => (
-              <CVCard
-                key={resume.id}
-                resume={resume}
-                onDelete={handleDelete}
-                onRename={handleRename}
-                isDeleting={deletingId === resume.id}
-              />
-            ))}
           </div>
-        )}
+        </section>
 
-        {/* EMPTY STATE */}
-        {!loading && resumes.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="size-20 rounded-full bg-emerald-50 flex items-center justify-center mb-6">
-              <FileText size={36} className="text-emerald-400" />
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <FolderOpen size={22} />
             </div>
-            <h2 className="text-xl font-bold text-slate-800 mb-2">Chưa có CV nào</h2>
-            <p className="text-slate-400 text-sm mb-8 max-w-xs">
-              Bắt đầu tạo CV chuyên nghiệp đầu tiên của bạn từ thư viện mẫu có sẵn.
-            </p>
-            <Link
-              href="/candidate/templates"
-              className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors"
-            >
-              <Plus size={18} />
-              Tạo CV đầu tiên
-            </Link>
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-slate-900">
+                Các CV bạn đã lưu
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500">
+                Xem lại, chỉnh sửa và dùng các CV đã lưu khi ứng tuyển nhà
+                tuyển dụng.
+              </p>
+            </div>
           </div>
-        )}
+
+          {loading ? (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map((item) => (
+                <div
+                  key={item}
+                  className="flex h-[340px] animate-pulse flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                >
+                  <div className="h-[220px] bg-slate-100/80" />
+                  <div className="flex flex-1 flex-col justify-end space-y-3 p-4">
+                    <div className="h-4 w-3/4 rounded bg-slate-100" />
+                    <div className="h-3 w-1/2 rounded bg-slate-100" />
+                    <div className="mt-auto h-3 w-1/3 rounded bg-slate-100" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : resumes.length > 0 ? (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {resumes.map((resume) => (
+                <CVCard
+                  key={resume.id}
+                  resume={resume}
+                  onDelete={handleDelete}
+                  onRename={handleRename}
+                  isDeleting={deletingId === resume.id}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-20 text-center">
+              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-sm">
+                <FileText size={36} className="text-slate-300" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-800">
+                Bạn chưa lưu CV nào
+              </h3>
+              <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
+                Hãy tạo CV mới từ mẫu hoặc tải CV có sẵn lên để AI quét, sau đó
+                lưu lại vào hệ thống để dùng khi ứng tuyển.
+              </p>
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* OCR Preview Modal */}
       <OCRPreviewModal
         isOpen={ocrModalOpen}
         onClose={() => setOcrModalOpen(false)}

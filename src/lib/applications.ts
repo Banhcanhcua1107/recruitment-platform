@@ -482,13 +482,14 @@ export async function applyToJob(input: {
     emailError = "Tin tuyển dụng chưa có email HR để nhận thông báo ứng tuyển.";
   } else {
     try {
+      const companyName = String(employer?.company_name || job.company_name || "Nhà tuyển dụng");
       await sendApplicationSubmittedEmails({
         hrEmail,
         candidateEmail: candidate.email,
         candidateName: candidate.full_name,
         candidatePhone: candidate.phone,
         jobTitle: String(job.title),
-        companyName: String(employer.company_name || job.company_name || "Nhà tuyển dụng"),
+        companyName,
         jobLocation: String(job.location || ""),
         coverLetter: input.coverLetter,
         cvFilePath: filePath,

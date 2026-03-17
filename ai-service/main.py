@@ -21,9 +21,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+import unicodedata
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from urllib.parse import quote
 
 from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -84,6 +86,25 @@ def _cleanup_preview_store(now: float | None = None) -> None:
     ]
     for key in expired_keys:
         PREVIEW_STORE.pop(key, None)
+
+
+def _ascii_fallback_filename(filename: str) -> str:
+    normalized = unicodedata.normalize("NFKD", filename or "")
+    ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
+    safe_name = "".join(
+        char if char.isalnum() or char in (" ", ".", "_", "-") else "_"
+        for char in ascii_name
+    ).strip()
+    return safe_name or "preview.pdf"
+
+
+def _build_inline_content_disposition(filename: str) -> str:
+    fallback_name = _ascii_fallback_filename(filename)
+    encoded_name = quote(filename or fallback_name, safe="")
+    return (
+        f'inline; filename="{fallback_name}"; '
+        f"filename*=UTF-8''{encoded_name}"
+    )
 
 
 # ── Lifespan ─────────────────────────────────────────────────
@@ -692,7 +713,7 @@ async def endpoint_get_cv_preview(preview_id: str):
         media_type=asset.media_type,
         headers={
             "Cache-Control": "no-store",
-            "Content-Disposition": f'inline; filename="{asset.filename}"',
+            "Content-Disposition": _build_inline_content_disposition(asset.filename),
         },
     )
 
