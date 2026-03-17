@@ -111,6 +111,7 @@ export function HeroEditorModal({
               <input
                 ref={avatarInputRef}
                 type="file"
+                aria-label="Tải lên ảnh đại diện"
                 accept="image/*"
                 className="hidden"
                 onChange={(event) => {

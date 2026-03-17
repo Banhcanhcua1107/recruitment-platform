@@ -525,6 +525,7 @@ export function CandidateProfileEditor() {
               <input
                 ref={cvInputRef}
                 type="file"
+                aria-label="Tải lên CV hồ sơ cá nhân"
                 accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className="hidden"
                 onChange={(event) => {

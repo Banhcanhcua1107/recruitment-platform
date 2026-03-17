@@ -373,6 +373,7 @@ export function ApplyJobCard({
                             </p>
                           ) : (
                             <select
+                              aria-label="Chọn CV có sẵn"
                               value={selectedBuilderResumeId || selectedCvPath}
                               onChange={(event) => {
                                 const option = cvOptions.find(
@@ -422,6 +423,7 @@ export function ApplyJobCard({
                         <div className="rounded-2xl border border-slate-200 bg-white p-4">
                           <input
                             type="file"
+                            aria-label="Tải lên CV mới"
                             accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                             onChange={(event) => setFile(event.target.files?.[0] ?? null)}
                             className="block w-full rounded-xl border border-slate-200 px-3 py-3 text-sm text-slate-700 file:mr-4 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:font-semibold file:text-primary"
