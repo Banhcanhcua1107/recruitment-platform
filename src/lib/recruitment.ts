@@ -66,6 +66,14 @@ const JOB_OPTIONAL_COLUMN_MARKERS = [
   'column "is_public_visible" does not exist',
 ];
 
+const JOB_BRANDING_COLUMN_MARKERS = [
+  ...JOB_EMPLOYER_COLUMN_MARKERS,
+  'column "logo_url" does not exist',
+  'column "cover_url" does not exist',
+  "column jobs.logo_url does not exist",
+  "column jobs.cover_url does not exist",
+];
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
@@ -221,17 +229,37 @@ const getRecruitmentContext = cache(async function getRecruitmentContext() {
     .eq("id", user.id)
     .maybeSingle();
 
-  const companyName =
+  const fallbackCompanyName =
     profile?.full_name ||
     user.user_metadata?.full_name ||
     user.email?.split("@")[0] ||
     "Nhà tuyển dụng";
   const email = profile?.email || user.email || "";
 
+  const { data: existingEmployer, error: employerReadError } = await supabase
+    .from("employers")
+    .select("company_name, email")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (employerReadError && !isSchemaError(employerReadError, EMPLOYERS_TABLE_MARKERS)) {
+    throw new Error(employerReadError.message);
+  }
+
+  const employerRecord = (existingEmployer as {
+    company_name?: string | null;
+    email?: string | null;
+  } | null) ?? null;
+
+  const companyName =
+    sanitizeVietnameseText(String(employerRecord?.company_name ?? "")).trim() ||
+    fallbackCompanyName;
+  const employerEmail = String(employerRecord?.email ?? "").trim() || email;
+
   const { error: employerUpsertError } = await supabase.from("employers").upsert({
       id: user.id,
       company_name: companyName,
-      email,
+      email: employerEmail,
       password_hash: null,
     });
 
@@ -262,7 +290,7 @@ const getRecruitmentContext = cache(async function getRecruitmentContext() {
 
     const { error: employerFixError } = await supabase
       .from("employers")
-      .update({ company_name: COMPANY_NAME_PLACEHOLDER, email })
+      .update({ company_name: COMPANY_NAME_PLACEHOLDER, email: employerEmail })
       .eq("id", user.id);
 
     if (
@@ -279,7 +307,7 @@ const getRecruitmentContext = cache(async function getRecruitmentContext() {
     employer: {
       id: user.id,
       companyName: safeCompanyName,
-      email,
+      email: employerEmail,
       role: profile?.role ?? null,
     },
   };
@@ -532,11 +560,13 @@ export async function getCompanyProfile(): Promise<RecruitmentCompanyProfile> {
 
 export async function updateCompanyProfile(input: RecruitmentCompanyProfile) {
   const { supabase, employer } = await getRecruitmentContext();
+  const companyName = input.companyName.trim() || COMPANY_NAME_PLACEHOLDER;
+  const companyEmail = input.email.trim() || employer.email;
 
   const { error } = await supabase.from("employers").upsert({
     id: employer.id,
-    company_name: input.companyName.trim() || COMPANY_NAME_PLACEHOLDER,
-    email: input.email.trim() || employer.email,
+    company_name: companyName,
+    email: companyEmail,
     password_hash: null,
     logo_url: input.logoUrl || null,
     cover_url: input.coverUrl || null,
@@ -556,6 +586,19 @@ export async function updateCompanyProfile(input: RecruitmentCompanyProfile) {
     }
 
     throw new Error(error.message);
+  }
+
+  const { error: syncJobsBrandingError } = await supabase
+    .from("jobs")
+    .update({
+      company_name: companyName,
+      logo_url: input.logoUrl || null,
+      cover_url: input.coverUrl || null,
+    })
+    .eq("employer_id", employer.id);
+
+  if (syncJobsBrandingError && !isSchemaError(syncJobsBrandingError, JOB_BRANDING_COLUMN_MARKERS)) {
+    throw new Error(syncJobsBrandingError.message);
   }
 
   await logActivity(supabase, employer.id, `Đã cập nhật hồ sơ công ty: ${input.companyName}`);

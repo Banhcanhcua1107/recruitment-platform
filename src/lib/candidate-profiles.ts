@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import type { User } from "@supabase/supabase-js";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import {
@@ -114,6 +114,28 @@ function getDisplayName(user: User, authProfile?: AuthProfileRow | null) {
 
 function getProfileEmail(user: User, authProfile?: AuthProfileRow | null) {
   return String(authProfile?.email || user.email || "").trim();
+}
+
+async function canRemoveStoredCv(
+  supabase: SupabaseClient,
+  candidateId: string,
+  cvFilePath: string
+) {
+  try {
+    const { count, error } = await supabase
+      .from("applications")
+      .select("id", { count: "exact", head: true })
+      .eq("candidate_id", candidateId)
+      .eq("cv_file_path", cvFilePath);
+
+    if (error) {
+      return false;
+    }
+
+    return (count ?? 0) === 0;
+  } catch {
+    return false;
+  }
 }
 
 function toCandidateProfileRecord(
@@ -428,7 +450,11 @@ export async function uploadCurrentCandidateProfileCv(
     throw new Error(error.message);
   }
 
-  if (currentRow.cv_file_path && currentRow.cv_file_path !== filePath) {
+  if (
+    currentRow.cv_file_path &&
+    currentRow.cv_file_path !== filePath &&
+    await canRemoveStoredCv(supabase, user.id, currentRow.cv_file_path)
+  ) {
     await admin.storage.from(APPLICATION_BUCKET).remove([currentRow.cv_file_path]);
   }
 

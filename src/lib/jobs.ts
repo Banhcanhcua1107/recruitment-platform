@@ -3,6 +3,14 @@ import "server-only";
 import { cache } from "react";
 import type { Job } from "@/types/job";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+
+type EmployerProfile = {
+  id: string;
+  company_name: string | null;
+  logo_url: string | null;
+  cover_url: string | null;
+};
 
 function normalizeString(value: unknown, fallback = ""): string {
   if (typeof value === "string") {
@@ -14,6 +22,20 @@ function normalizeString(value: unknown, fallback = ""): string {
   }
 
   return String(value);
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value === "string") {
+    const next = value.trim();
+    return next || null;
+  }
+
+  if (value == null) {
+    return null;
+  }
+
+  const next = String(value).trim();
+  return next || null;
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -55,6 +77,58 @@ function toJob(row: Record<string, unknown>): Job {
     education_level: normalizeString(row.education_level),
     age_range: normalizeString(row.age_range),
     full_address: normalizeString(row.full_address),
+    employer_id: normalizeOptionalString(row.employer_id),
+  };
+}
+
+async function getEmployerProfilesById(employerIds: string[]) {
+  if (employerIds.length === 0) {
+    return new Map<string, EmployerProfile>();
+  }
+
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("employers")
+      .select("id, company_name, logo_url, cover_url")
+      .in("id", employerIds);
+
+    if (
+      error &&
+      error.message?.toLowerCase().includes('relation "employers" does not exist')
+    ) {
+      return new Map<string, EmployerProfile>();
+    }
+
+    if (error || !data) {
+      return new Map<string, EmployerProfile>();
+    }
+
+    return new Map(
+      data.map((row) => {
+        const profile = row as EmployerProfile;
+        return [profile.id, profile] as const;
+      })
+    );
+  } catch {
+    return new Map<string, EmployerProfile>();
+  }
+}
+
+function applyEmployerBranding(job: Job, employerProfile?: EmployerProfile): Job {
+  if (!employerProfile) {
+    return job;
+  }
+
+  const companyName = normalizeOptionalString(employerProfile.company_name);
+  const logoUrl = normalizeOptionalString(employerProfile.logo_url);
+  const coverUrl = normalizeOptionalString(employerProfile.cover_url);
+
+  return {
+    ...job,
+    company_name: companyName ?? job.company_name,
+    logo_url: logoUrl ?? job.logo_url,
+    cover_url: job.cover_url || coverUrl || "",
   };
 }
 
@@ -62,7 +136,7 @@ const getSupabaseJobs = cache(async function getSupabaseJobs(): Promise<Job[]> {
   try {
     const supabase = await createClient();
 
-    let query = supabase
+    const query = supabase
       .from("jobs")
       .select("*")
       .not("employer_id", "is", null)
@@ -94,7 +168,17 @@ const getSupabaseJobs = cache(async function getSupabaseJobs(): Promise<Job[]> {
       return [];
     }
 
-    return data.map((row) => toJob(row as Record<string, unknown>));
+    const jobs = data.map((row) => toJob(row as Record<string, unknown>));
+    const employerIds = [
+      ...new Set(
+        jobs
+          .map((job) => job.employer_id)
+          .filter((employerId): employerId is string => Boolean(employerId))
+      ),
+    ];
+    const employerProfiles = await getEmployerProfilesById(employerIds);
+
+    return jobs.map((job) => applyEmployerBranding(job, employerProfiles.get(job.employer_id ?? "")));
   } catch {
     return [];
   }

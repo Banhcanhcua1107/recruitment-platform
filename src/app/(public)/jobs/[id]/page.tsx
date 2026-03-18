@@ -3,8 +3,30 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { ApplyJobCard } from "@/components/jobs/ApplyJobCard";
+import { JobDetailHeader } from "@/components/jobs/JobDetailHeader";
 import { companySlug, getJobsByCompanySlug } from "@/lib/companies";
 import { getAllJobs, getJobById } from "@/lib/jobs";
+
+function formatDateLabel(value?: string | null) {
+  if (!value) {
+    return "Đang cập nhật";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+function resolveValue(value?: string | null, fallback = "Đang cập nhật") {
+  return value && value.trim() ? value : fallback;
+}
 
 export async function generateStaticParams() {
   const jobs = await getAllJobs();
@@ -30,7 +52,7 @@ export async function generateMetadata({
     description: job.description?.[0] ?? `Ứng tuyển ${job.title} tại ${job.company_name}`,
     openGraph: {
       title: job.title,
-      description: job.description?.[0] ?? "",
+      description: job.description?.[0] ?? `Cơ hội nghề nghiệp tại ${job.company_name}`,
       images: job.cover_url ? [job.cover_url] : [],
     },
   };
@@ -52,58 +74,38 @@ export default async function JobDetailPage({
   const relatedJobs = (await getJobsByCompanySlug(slug))
     .filter((item) => item.id !== job.id)
     .slice(0, 6);
-  const initial = job.company_name?.charAt(0) ?? "?";
+  const postedDateLabel = formatDateLabel(job.posted_date);
+  const deadlineLabel = formatDateLabel(job.deadline);
+  const sidebarItems = [
+    { label: "Ngày đăng", value: postedDateLabel },
+    { label: "Hạn nộp", value: deadlineLabel },
+    { label: "Kinh nghiệm", value: resolveValue(job.experience_level) },
+    { label: "Học vấn", value: resolveValue(job.education_level) },
+    { label: "Độ tuổi", value: resolveValue(job.age_range) },
+    { label: "Địa chỉ", value: resolveValue(job.full_address, resolveValue(job.location)) },
+  ];
+  const companyInitial = job.company_name?.charAt(0) ?? "?";
   const hasCompanyLogo = Boolean(job.logo_url && !job.logo_url.includes("placeholder"));
+  const companyCover = job.cover_url || "https://placehold.co/1200x720?text=TalentFlow";
 
   return (
-    <main className="min-h-screen bg-[#f6f7f8]">
-      <div className="relative h-64 overflow-hidden bg-slate-200 md:h-80">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={job.cover_url || "https://placehold.co/1600x480?text=TalentFlow"}
-          alt=""
-          className="h-full w-full object-cover"
-        />
-        <div className="absolute inset-0 bg-linear-to-t from-slate-900/80 via-slate-900/20 to-transparent" />
-      </div>
+    <main className="min-h-[100dvh] bg-slate-50">
+      <div className="mx-auto max-w-[1400px] px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pb-24 lg:pt-10">
+        <Link
+          href="/jobs"
+          className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-primary/30 hover:text-primary"
+        >
+          <span className="material-symbols-outlined text-base">arrow_back</span>
+          Danh sách việc làm
+        </Link>
 
-      <div className="relative z-10 mx-auto -mt-24 max-w-6xl px-6 pb-20">
-        <div className="mb-8 rounded-[28px] border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/40 md:p-10">
-          <div className="grid grid-cols-1 gap-8 min-[900px]:grid-cols-[420px_minmax(0,1fr)]">
-            <div className="w-full min-w-0 min-[900px]:w-[420px] min-[900px]:min-w-[420px] min-[900px]:flex-shrink-0">
-              <div className="flex min-w-0 flex-col items-start gap-6 sm:flex-row">
-              <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={job.logo_url || "https://placehold.co/128x128?text=Logo"}
-                  alt={job.company_name}
-                  className="h-full w-full object-contain"
-                />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <h1 className="mb-2 whitespace-normal break-words text-2xl font-black leading-tight text-slate-900 [word-break:keep-all] md:text-3xl lg:text-4xl">
-                  {job.title}
-                </h1>
-                <Link
-                  href={`/companies/${slug}`}
-                  className="text-lg font-bold text-slate-600 transition-colors hover:text-primary md:text-xl"
-                >
-                  {job.company_name}
-                </Link>
-
-                <div className="mt-5 flex flex-wrap gap-2.5">
-                  <Pill icon="location_on" text={job.location || "Chưa cập nhật"} />
-                  <Pill icon="payments" text={job.salary || "Thỏa thuận"} accent />
-                  {job.employment_type ? <Pill icon="work" text={job.employment_type} /> : null}
-                  {job.level ? <Pill icon="badge" text={job.level} /> : null}
-                  {job.deadline ? <Pill icon="event" text={`Hạn nộp: ${job.deadline}`} /> : null}
-                </div>
-              </div>
-            </div>
-            </div>
-
-            <div className="hidden w-full max-w-[600px] min-w-0 justify-self-end min-[900px]:block">
+        <div className="mt-5">
+          <JobDetailHeader
+            job={job}
+            companyHref={`/companies/${slug}`}
+            postedDateLabel={postedDateLabel}
+            deadlineLabel={deadlineLabel}
+            applicationCard={
               <ApplyJobCard
                 jobId={job.id}
                 jobTitle={job.title}
@@ -111,154 +113,156 @@ export default async function JobDetailPage({
                 sourceUrl={job.source_url}
                 compact
               />
-            </div>
-          </div>
+            }
+          />
         </div>
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="space-y-8 lg:col-span-2">
+        <section className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_380px]">
+          <div className="space-y-6">
             {job.description?.length ? (
-              <Section title="Mô tả công việc" icon="description">
-                <ul className="space-y-2 text-slate-700">
-                  {job.description.map((line, index) => (
-                    <li key={index} className="flex gap-2">
-                      <span className="mt-1 shrink-0 text-primary">•</span>
-                      <span>{line}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Section>
+              <PageSection
+                eyebrow="Công việc"
+                title="Mô tả công việc"
+                description="Các đầu việc chính và phạm vi trách nhiệm của vị trí."
+              >
+                <BulletList items={job.description} icon="radio_button_checked" />
+              </PageSection>
             ) : null}
 
             {job.requirements?.length ? (
-              <Section title="Yêu cầu ứng viên" icon="checklist">
-                <ul className="space-y-2 text-slate-700">
-                  {job.requirements.map((line, index) => (
-                    <li key={index} className="flex gap-2">
-                      <span className="mt-1 shrink-0 text-primary">✓</span>
-                      <span>{line}</span>
-                    </li>
-                  ))}
-                </ul>
-              </Section>
+              <PageSection
+                eyebrow="Ứng viên"
+                title="Yêu cầu ứng viên"
+                description="Những kỹ năng, kinh nghiệm và tiêu chí phù hợp với vị trí đang tuyển."
+              >
+                <BulletList items={job.requirements} icon="done_all" />
+              </PageSection>
             ) : null}
 
             {job.benefits?.length ? (
-              <Section title="Quyền lợi" icon="volunteer_activism">
-                <div className="flex flex-wrap gap-2">
-                  {job.benefits.map((item, index) => (
+              <PageSection
+                eyebrow="Quyền lợi"
+                title="Phúc lợi và đãi ngộ"
+                description="Những giá trị bạn sẽ nhận được khi đồng hành cùng doanh nghiệp."
+              >
+                <div className="flex flex-wrap gap-3">
+                  {job.benefits.map((item) => (
                     <span
-                      key={index}
-                      className="rounded-xl bg-emerald-50 px-4 py-2 text-sm font-bold text-emerald-700"
+                      key={item}
+                      className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700"
                     >
                       {item}
                     </span>
                   ))}
                 </div>
-              </Section>
+              </PageSection>
             ) : null}
           </div>
 
           <aside className="space-y-6">
-            <div className="sticky top-6 space-y-6">
-              <div className="min-[900px]:hidden">
-                <ApplyJobCard
-                  jobId={job.id}
-                  jobTitle={job.title}
-                  companyName={job.company_name}
-                  sourceUrl={job.source_url}
+            <PageSection
+              eyebrow="Tổng quan"
+              title="Thông tin tuyển dụng"
+              description="Các dữ liệu nhanh giúp bạn đánh giá mức độ phù hợp của công việc."
+            >
+              <div className="divide-y divide-slate-200/80">
+                {sidebarItems.map((item) => (
+                  <SidebarRow key={item.label} label={item.label} value={item.value} />
+                ))}
+                {job.industry?.length ? (
+                  <SidebarRow label="Ngành nghề" value={job.industry.join(", ")} />
+                ) : null}
+              </div>
+            </PageSection>
+
+            <Link
+              href={`/companies/${slug}`}
+              className="group block overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 hover:border-primary/30"
+            >
+              <div className="relative h-40 overflow-hidden bg-slate-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={companyCover}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
                 />
-              </div>
-
-              <div className="rounded-[24px] border border-slate-100 bg-white p-6 shadow-sm">
-                <h3 className="mb-6 flex items-center gap-2 text-lg font-black text-slate-900">
-                  <span className="material-symbols-outlined text-primary">info</span>
-                  Thông tin chung
-                </h3>
-                <div className="space-y-5">
-                  <InfoRow icon="work" label="Hình thức" value={job.employment_type} />
-                  <InfoRow icon="badge" label="Cấp bậc" value={job.level} />
-                  <InfoRow icon="trending_up" label="Kinh nghiệm" value={job.experience_level} />
-                  <InfoRow icon="school" label="Học vấn" value={job.education_level} />
-                  <InfoRow icon="group" label="Độ tuổi" value={job.age_range} />
-                  <InfoRow icon="pin_drop" label="Địa chỉ" value={job.full_address} />
-                  {job.industry?.length ? (
-                    <InfoRow icon="category" label="Ngành nghề" value={job.industry.join(", ")} />
-                  ) : null}
-                </div>
-              </div>
-
-              <Link
-                href={`/companies/${slug}`}
-                className="group block rounded-[24px] border border-slate-100 bg-white p-6 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
-              >
-                <h3 className="mb-4 flex items-center gap-2 text-lg font-black text-slate-900">
-                  <span className="material-symbols-outlined text-primary">business</span>
-                  Về công ty
-                </h3>
-                <div className="flex items-center gap-4">
-                  <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-100 bg-white">
+                <div className="absolute inset-0 bg-linear-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
+                <div className="absolute inset-x-5 bottom-5 flex items-center gap-3">
+                  <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white/90 p-2">
                     {hasCompanyLogo ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={job.logo_url}
                         alt={job.company_name}
-                        className="h-full w-full object-contain p-1"
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-contain"
                       />
                     ) : (
-                      <span className="text-xl font-black text-primary">{initial}</span>
+                      <span className="text-xl font-black text-primary">{companyInitial}</span>
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-1 font-black text-slate-900 transition-colors group-hover:text-primary">
-                      {job.company_name}
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
+                      Doanh nghiệp
                     </p>
-                    <p className="mt-0.5 line-clamp-1 text-xs font-bold text-slate-400">
-                      {job.location || "Chưa cập nhật"}
-                    </p>
+                    <p className="mt-1 truncate text-lg font-black text-white">{job.company_name}</p>
                   </div>
-                  <span className="material-symbols-outlined shrink-0 text-slate-400 transition-colors group-hover:text-primary">
+                </div>
+              </div>
+
+              <div className="space-y-4 p-5">
+                <p className="text-sm leading-6 text-slate-600">
+                  Khám phá thêm thông tin doanh nghiệp, văn hóa làm việc và các vị trí đang mở
+                  tuyển khác.
+                </p>
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                  Xem trang công ty
+                  <span className="material-symbols-outlined text-[18px] transition-transform group-hover:translate-x-1">
                     arrow_forward
                   </span>
-                </div>
-              </Link>
-            </div>
+                </span>
+              </div>
+            </Link>
           </aside>
-        </div>
+        </section>
 
         {relatedJobs.length ? (
-          <section className="mt-10">
-            <h2 className="mb-6 flex items-center gap-3 text-2xl font-black tracking-tight text-slate-900">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <span className="material-symbols-outlined text-2xl">business</span>
-              </span>
-              Các việc làm khác tại {job.company_name}
-            </h2>
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <section className="mt-12">
+            <div className="mb-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                Cùng doanh nghiệp
+              </p>
+              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                Việc làm khác tại {job.company_name}
+              </h2>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {relatedJobs.map((item) => (
                 <Link
                   key={item.id}
                   href={`/jobs/${item.id}`}
-                  className="group flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-lg"
+                  className="group rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 hover:border-primary/30"
                 >
-                  <h4 className="mb-2 line-clamp-2 text-base font-black leading-snug text-slate-900 transition-colors group-hover:text-primary">
-                    {item.title}
-                  </h4>
-                  <div className="mb-3">
-                    <span className="inline-flex items-center gap-1 rounded-lg border border-primary/10 bg-primary/5 px-2.5 py-1 text-xs font-black text-primary">
-                      {item.salary || "Thỏa thuận"}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h3 className="line-clamp-2 text-lg font-black leading-snug text-slate-950 transition-colors group-hover:text-primary">
+                        {item.title}
+                      </h3>
+                      <p className="mt-2 text-sm font-semibold text-slate-500">{item.company_name}</p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                      {resolveValue(item.salary, "Thỏa thuận")}
                     </span>
                   </div>
-                  <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1.5">
-                    <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
-                      <span className="material-symbols-outlined text-base">location_on</span>
-                      {item.location}
-                    </span>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <InlineMeta icon="location_on" text={resolveValue(item.location)} />
                     {item.deadline ? (
-                      <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
-                        <span className="material-symbols-outlined text-base">schedule</span>
-                        {item.deadline}
-                      </span>
+                      <InlineMeta icon="event" text={formatDateLabel(item.deadline)} />
                     ) : null}
                   </div>
                 </Link>
@@ -266,85 +270,85 @@ export default async function JobDetailPage({
             </div>
           </section>
         ) : null}
-
-        <div className="mt-14 inline-block">
-          <Link
-            href="/jobs"
-            className="inline-flex items-center gap-2 rounded-xl border-2 border-slate-100 bg-white px-6 py-3 font-black text-slate-600 transition-all hover:-translate-x-1 hover:border-primary/30 hover:text-primary hover:shadow-sm"
-          >
-            <span className="material-symbols-outlined text-xl">arrow_back</span>
-            Danh sách việc làm
-          </Link>
-        </div>
       </div>
     </main>
   );
 }
 
-function Pill({
-  icon,
-  text,
-  accent = false,
-}: {
-  icon: string;
-  text: string;
-  accent?: boolean;
-}) {
-  return (
-    <span
-      className={[
-        "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold",
-        accent
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-slate-50 text-slate-700",
-      ].join(" ")}
-    >
-      <span className="material-symbols-outlined text-base">{icon}</span>
-      {text}
-    </span>
-  );
-}
-
-function Section({
+function PageSection({
+  eyebrow,
   title,
-  icon,
+  description,
   children,
 }: {
+  eyebrow: string;
   title: string;
-  icon: string;
+  description: string;
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[24px] border border-slate-100 bg-white p-8 shadow-sm">
-      <h2 className="mb-5 flex items-center gap-2 text-xl font-black text-slate-900">
-        <span className="material-symbols-outlined text-primary">{icon}</span>
-        {title}
-      </h2>
+    <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)] sm:p-7">
+      <div className="mb-6 space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+          {eyebrow}
+        </p>
+        <h2 className="text-2xl font-black tracking-tight text-slate-950">{title}</h2>
+        <p className="max-w-[65ch] text-sm leading-6 text-slate-500">{description}</p>
+      </div>
       {children}
     </section>
   );
 }
 
-function InfoRow({
+function BulletList({
+  items,
   icon,
+}: {
+  items: string[];
+  icon: string;
+}) {
+  return (
+    <ul className="space-y-3">
+      {items.map((item, index) => (
+        <li key={`${item}-${index}`} className="flex items-start gap-3">
+          <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <span className="material-symbols-outlined text-[18px]">{icon}</span>
+          </span>
+          <span className="text-sm leading-7 text-slate-700">{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SidebarRow({
   label,
   value,
 }: {
-  icon: string;
   label: string;
-  value?: string | null;
+  value: string;
 }) {
-  if (!value) {
-    return null;
-  }
-
   return (
-    <div className="flex items-start gap-3">
-      <span className="material-symbols-outlined mt-0.5 text-slate-400">{icon}</span>
-      <div>
-        <p className="text-xs font-black uppercase tracking-widest text-slate-400">{label}</p>
-        <p className="text-sm font-semibold leading-relaxed text-slate-700">{value}</p>
-      </div>
+    <div className="flex items-start justify-between gap-4 py-4 first:pt-0 last:pb-0">
+      <p className="text-sm font-semibold text-slate-500">{label}</p>
+      <p className="max-w-[60%] text-right text-sm font-semibold leading-6 text-slate-800">
+        {value}
+      </p>
     </div>
+  );
+}
+
+function InlineMeta({
+  icon,
+  text,
+}: {
+  icon: string;
+  text: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
+      <span className="material-symbols-outlined text-[16px]">{icon}</span>
+      {text}
+    </span>
   );
 }

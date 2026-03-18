@@ -20,4 +20,5 @@ export interface Job {
   education_level: string;
   age_range: string;
   full_address: string;
+  employer_id?: string | null;
 }

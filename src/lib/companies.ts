@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 import type { Job } from "@/types/job";
 import { getAllJobs } from "@/lib/jobs";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { toSlug } from "@/lib/slug";
 
 export interface Company {
@@ -50,7 +50,7 @@ function normalizeStringArray(value: unknown): string[] {
 
 const getEmployerProfiles = cache(async function getEmployerProfiles() {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("employers")
       .select("id, company_name, logo_url, cover_url, location, industry, company_size, company_description");
@@ -94,9 +94,28 @@ const getCompaniesMap = cache(async function getCompaniesMap(): Promise<Map<stri
 
     if (existing) {
       existing.jobCount += 1;
-      if (!existing.logoUrl && job.logo_url) existing.logoUrl = job.logo_url;
-      if (!existing.coverUrl && job.cover_url) existing.coverUrl = job.cover_url;
-      if (!existing.location && job.location) existing.location = job.location;
+      const employerLogoUrl = normalizeString(employerProfile?.logo_url);
+      const employerCoverUrl = normalizeString(employerProfile?.cover_url);
+      const employerLocation = normalizeString(employerProfile?.location);
+
+      if (employerLogoUrl) {
+        existing.logoUrl = employerLogoUrl;
+      } else if (!existing.logoUrl && job.logo_url) {
+        existing.logoUrl = job.logo_url;
+      }
+
+      if (employerCoverUrl) {
+        existing.coverUrl = employerCoverUrl;
+      } else if (!existing.coverUrl && job.cover_url) {
+        existing.coverUrl = job.cover_url;
+      }
+
+      if (employerLocation) {
+        existing.location = employerLocation;
+      } else if (!existing.location && job.location) {
+        existing.location = job.location;
+      }
+
       for (const industry of job.industry ?? []) {
         if (industry && !existing.industry.includes(industry)) {
           existing.industry.push(industry);
@@ -104,9 +123,6 @@ const getCompaniesMap = cache(async function getCompaniesMap(): Promise<Map<stri
       }
 
       if (employerProfile) {
-        if (!existing.logoUrl) existing.logoUrl = normalizeString(employerProfile.logo_url);
-        if (!existing.coverUrl) existing.coverUrl = normalizeString(employerProfile.cover_url);
-        if (!existing.location) existing.location = normalizeString(employerProfile.location);
         if (!existing.size) existing.size = normalizeString(employerProfile.company_size);
         if (!existing.description) {
           existing.description = normalizeString(employerProfile.company_description);
@@ -122,9 +138,9 @@ const getCompaniesMap = cache(async function getCompaniesMap(): Promise<Map<stri
       map.set(slug, {
         slug,
         name,
-        logoUrl: job.logo_url || normalizeString(employerProfile?.logo_url),
-        coverUrl: job.cover_url || normalizeString(employerProfile?.cover_url),
-        location: job.location || normalizeString(employerProfile?.location),
+        logoUrl: normalizeString(employerProfile?.logo_url) || job.logo_url,
+        coverUrl: normalizeString(employerProfile?.cover_url) || job.cover_url,
+        location: normalizeString(employerProfile?.location) || job.location,
         industry: [
           ...new Set([
             ...(job.industry ?? []).filter(Boolean),
@@ -156,7 +172,7 @@ export async function getJobsByCompanySlug(slug: string): Promise<Job[]> {
   }
 
   const jobs = await getAllJobs();
-  return jobs.filter((job) => toSlug(job.company_name?.trim() ?? "") === slug);
+  return jobs.filter((job) => toSlug(job.company_name?.trim() ?? "") === company.slug);
 }
 
 export function companySlug(name: string): string {

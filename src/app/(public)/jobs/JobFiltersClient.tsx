@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import type { Job } from "@/types/job";
 import { toSlug } from "@/lib/slug";
@@ -772,6 +773,7 @@ function IndustryFilter({ industries, selected, onToggle }: { industries: string
 function JobCard({ job }: { job: Job }) {
   const companySlug = toSlug(job.company_name?.trim() ?? "");
   const initial = job.company_name?.charAt(0) ?? "?";
+  const coverUrl = job.cover_url || "https://placehold.co/960x540?text=TalentFlow";
   const hasLogo =
     job.logo_url &&
     job.logo_url !== "https://via.placeholder.com/150" &&
@@ -783,16 +785,27 @@ function JobCard({ job }: { job: Job }) {
       className="group flex flex-col h-full bg-white rounded-[20px] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:shadow-primary/5 hover:-translate-y-1 hover:border-primary/30 transition-all duration-300"
     >
       <div className="h-40 bg-slate-100 overflow-hidden relative shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={job.cover_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        <Image
+          src={coverUrl}
+          alt={`Ảnh tuyển dụng ${job.company_name}`}
+          fill
+          sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+          className="object-cover transition-transform duration-500 group-hover:scale-105"
+        />
         <div className="absolute inset-0 bg-linear-to-t from-slate-900/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
 
       <div className="flex-1 p-5 flex flex-col relative">
         <div className="absolute -top-10 right-5 size-14 rounded-2xl border-4 border-white bg-white flex items-center justify-center shrink-0 shadow-sm overflow-hidden z-10">
           {hasLogo ? (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={job.logo_url} alt="" className="w-full h-full object-contain p-1" />
+            <Image
+              src={job.logo_url}
+              alt={job.company_name}
+              width={56}
+              height={56}
+              sizes="56px"
+              className="h-full w-full object-contain p-1"
+            />
           ) : (
             <span className="text-xl font-black text-primary">{initial}</span>
           )}

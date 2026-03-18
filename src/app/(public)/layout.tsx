@@ -1,5 +1,5 @@
-import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
+import Navbar from "@/components/shared/Navbar";
 
 export default function PublicLayout({
   children,
@@ -7,12 +7,10 @@ export default function PublicLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar /> {/* Header dùng chung */}
-      <div className="flex-1">
-        {children} {/* Nội dung các trang con sẽ hiện ở đây */}
-      </div>
-      <Footer /> {/* Footer dùng chung */}
+    <div className="flex min-h-[100dvh] flex-col">
+      <Navbar />
+      <div className="flex-1">{children}</div>
+      <Footer />
     </div>
   );
 }

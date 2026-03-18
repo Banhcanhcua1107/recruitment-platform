@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { localizeApplicationMessage } from "@/lib/application-messages";
 import { applyToJob } from "@/lib/applications";
 
 export const runtime = "nodejs";
@@ -24,6 +25,7 @@ function getStatusCode(message: string) {
     normalized.includes("required") ||
     normalized.includes("please enter at least email or phone number") ||
     normalized.includes("please upload or select a cv") ||
+    normalized.includes("selected cv file is no longer available") ||
     normalized.includes("only pdf, doc, or docx files are supported") ||
     normalized.includes("exceeds the 10mb upload limit") ||
     normalized.includes("recruiter email is required")
@@ -47,37 +49,46 @@ export async function POST(request: Request) {
     const cvFile = formData.get("cv_file");
 
     if (!jobId) {
-      return NextResponse.json({ error: "Job ID is required." }, { status: 400 });
+      return NextResponse.json({ error: "Không tìm thấy tin tuyển dụng." }, { status: 400 });
     }
 
     if (!fullName) {
-      return NextResponse.json({ error: "Full name is required." }, { status: 400 });
+      return NextResponse.json({ error: "Vui lòng nhập họ và tên." }, { status: 400 });
     }
 
     if (!email && !phone) {
       return NextResponse.json(
-        { error: "Please enter at least email or phone number" },
+        { error: "Vui lòng nhập email và số điện thoại để nhà tuyển dụng có thể liên hệ." },
         { status: 400 }
       );
     }
 
     if (!introduction) {
-      return NextResponse.json({ error: "Introduction is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Vui lòng giới thiệu ngắn gọn về bản thân." },
+        { status: 400 }
+      );
     }
 
     const hasUploadedFile = cvFile instanceof File && cvFile.size > 0;
     if (!hasUploadedFile && !existingCvPath && !builderResumeId) {
-      return NextResponse.json({ error: "Please upload or select a CV" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Vui lòng chọn CV có sẵn hoặc tải lên CV mới." },
+        { status: 400 }
+      );
     }
 
     if (hasUploadedFile) {
       if (cvFile.size > 10 * 1024 * 1024) {
-        return NextResponse.json({ error: "CV exceeds the 10MB upload limit." }, { status: 400 });
+        return NextResponse.json(
+          { error: "CV vượt quá dung lượng 10MB cho phép." },
+          { status: 400 }
+        );
       }
 
       if (cvFile.type && !ALLOWED_CONTENT_TYPES.has(cvFile.type)) {
         return NextResponse.json(
-          { error: "Only PDF, DOC, or DOCX files are supported." },
+          { error: "Chỉ hỗ trợ tệp PDF, DOC hoặc DOCX." },
           { status: 400 }
         );
       }
@@ -104,7 +115,10 @@ export async function POST(request: Request) {
       emailError: result.emailError,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to submit application.";
-    return NextResponse.json({ error: message }, { status: getStatusCode(message) });
+    const rawMessage = error instanceof Error ? error.message : "Unable to submit application.";
+    return NextResponse.json(
+      { error: localizeApplicationMessage(rawMessage) },
+      { status: getStatusCode(rawMessage) }
+    );
   }
 }

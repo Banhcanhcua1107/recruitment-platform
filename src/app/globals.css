@@ -6,7 +6,17 @@
 }
 
 :root {
-    font-family: "Manrope", sans-serif;
+    font-family: var(--font-sans), sans-serif;
+}
+
+html {
+    font-family: var(--font-sans), sans-serif;
+}
+
+body {
+    color: #0f172a;
+    background: #f8fafc;
+    text-rendering: optimizeLegibility;
 }
 
 

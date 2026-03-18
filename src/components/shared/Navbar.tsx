@@ -1,12 +1,18 @@
 "use client";
 
+import Image from "next/image";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { User } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/client";
 import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
-import NotificationBell from "./NotificationBell";
+
+const NotificationBell = dynamic(() => import("./NotificationBell"), {
+  ssr: false,
+  loading: () => null,
+});
 
 interface Profile {
   full_name: string | null;
@@ -125,11 +131,18 @@ export default function Navbar() {
 
   if (!mounted) {
     return (
-      <header className="sticky top-0 z-50 flex h-20 w-full items-center border-b border-slate-100 bg-white/95 font-['Manrope'] backdrop-blur-md lg:h-24">
+      <header className="sticky top-0 z-50 flex h-20 w-full items-center border-b border-slate-100 bg-white/95 backdrop-blur-md lg:h-24">
         <div className="mx-auto flex w-[92%] max-w-[1536px] items-center justify-between">
           <Link href="/" className="flex shrink-0 items-center gap-4">
             <div className="flex size-10 items-center justify-center">
-              <img src="/logo.png" alt="Logo TalentFlow" className="h-full w-full scale-150 object-contain" />
+              <Image
+                src="/logo.png"
+                alt="Logo TalentFlow"
+                width={40}
+                height={40}
+                priority
+                className="h-full w-full scale-150 object-contain"
+              />
             </div>
             <h2 className="text-2xl font-black tracking-tighter text-slate-900 lg:text-3xl">
               TalentFlow
@@ -146,11 +159,18 @@ export default function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 flex h-20 w-full items-center border-b border-slate-100 bg-white/95 font-['Manrope'] backdrop-blur-md lg:h-24">
+    <header className="sticky top-0 z-50 flex h-20 w-full items-center border-b border-slate-100 bg-white/95 backdrop-blur-md lg:h-24">
       <div className="mx-auto flex w-[92%] max-w-[1536px] items-center justify-between">
         <Link href="/" className="flex shrink-0 items-center gap-4">
           <div className="flex size-10 items-center justify-center">
-            <img src="/logo.png" alt="Logo TalentFlow" className="h-full w-full scale-150 object-contain" />
+            <Image
+              src="/logo.png"
+              alt="Logo TalentFlow"
+              width={40}
+              height={40}
+              priority
+              className="h-full w-full scale-150 object-contain"
+            />
           </div>
           <h2 className="text-2xl font-black tracking-tighter text-slate-900 lg:text-3xl">
             TalentFlow
@@ -174,6 +194,7 @@ export default function Navbar() {
                     onClick={() => setShowProfileDropdown((value) => !value)}
                     className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-white p-1 pr-3 transition-all hover:border-primary/50"
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={profile?.avatar_url || "https://placehold.co/100x100?text=U"}
                       className="size-9 rounded-full border border-slate-100 object-cover"

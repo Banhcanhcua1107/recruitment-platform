@@ -131,6 +131,11 @@ export async function recordCandidateViewedAction(formData: FormData) {
 export async function updateCompanyProfileAction(formData: FormData) {
   const payload = parseCompanyProfileInput(formData);
   await updateCompanyProfile(payload);
+  revalidatePath("/");
+  revalidatePath("/jobs");
+  revalidatePath("/jobs/[id]", "page");
+  revalidatePath("/companies");
+  revalidatePath("/companies/[id]", "page");
   revalidatePath("/hr/dashboard");
   revalidatePath("/hr/jobs");
   revalidatePath("/hr/company");

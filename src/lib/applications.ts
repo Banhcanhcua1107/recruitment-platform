@@ -124,6 +124,23 @@ function normalizeOptionalString(value: unknown) {
   return next || null;
 }
 
+function getApplicationErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error && "message" in error) {
+    return String((error as { message?: unknown }).message ?? "");
+  }
+
+  return String(error ?? "");
+}
+
+function isStorageObjectMissingError(error: unknown) {
+  const message = getApplicationErrorMessage(error).toLowerCase();
+  return message.includes("object not found") || message.includes("not found");
+}
+
 function isApplicationSchemaError(error: unknown, markers: string[]) {
   const message =
     error instanceof Error
@@ -215,7 +232,7 @@ async function getCandidateDefaults(
       safeTrim(profile?.full_name) ||
       safeTrim(user.user_metadata?.full_name) ||
       safeTrim(user.email) ||
-      "Candidate",
+      "Ứng viên",
     email:
       safeTrim(candidateProfile?.email) ||
       safeTrim(candidateRow?.email) ||
@@ -418,9 +435,10 @@ export async function applyToJob(input: {
     throw new Error("Introduction is required");
   }
 
+  const admin = createAdminClient();
   const job = await getJobForApplication(supabase, input.jobId);
   const { data: employer, error: employerError } = job.employer_id
-      ? await supabase
+      ? await admin
           .from("employers")
           .select("id, company_name, email")
           .eq("id", job.employer_id)
@@ -432,7 +450,6 @@ export async function applyToJob(input: {
   }
 
   const applicationId = crypto.randomUUID();
-  const admin = createAdminClient();
   let filePath = "";
   let fileBuffer: Buffer | null = null;
   let fileContentType = "application/pdf";
@@ -494,8 +511,20 @@ export async function applyToJob(input: {
       .from(APPLICATION_BUCKET)
       .download(filePath);
 
-    if (existingFileError || !existingFile) {
-      throw new Error(existingFileError?.message ?? "Khong the doc CV da luu.");
+    if (existingFileError) {
+      if (isStorageObjectMissingError(existingFileError)) {
+        throw new Error(
+          "Selected CV file is no longer available. Please upload a new CV."
+        );
+      }
+
+      throw new Error(getApplicationErrorMessage(existingFileError) || "Khong the doc CV da luu.");
+    }
+
+    if (!existingFile) {
+      throw new Error(
+        "Selected CV file is no longer available. Please upload a new CV."
+      );
     }
 
     fileBuffer = Buffer.from(await existingFile.arrayBuffer());
@@ -589,6 +618,7 @@ export async function applyToJob(input: {
   }
 
   let candidateEmailSent = false;
+  let emailError: string | null = null;
 
   try {
     const companyName = safeTrim(employer?.company_name || job.company_name || "Recruiter");
@@ -603,13 +633,18 @@ export async function applyToJob(input: {
       introduction,
       appliedAt,
       cvFilePath: filePath,
+      cvDownloadUrl: internalCvUrl,
     });
     candidateEmailSent = emailResult.candidateEmailSent;
   } catch (error) {
-    await cleanupFailedApplication(supabase, applicationId, filePath, createdStorageFile);
-    throw new Error(
-      error instanceof Error ? error.message : "Failed to send application emails."
-    );
+    emailError =
+      error instanceof Error ? error.message : "Failed to send application emails.";
+    console.error("Unable to send application emails.", {
+      applicationId,
+      jobId: job.id,
+      filePath,
+      error: emailError,
+    });
   }
 
   await upsertCandidateDirectoryRecord(supabase, {
@@ -665,7 +700,7 @@ export async function applyToJob(input: {
     cvUrl: internalCvUrl,
     emailSent: candidateEmailSent,
     candidateEmailSent,
-    emailError: null,
+    emailError,
   };
 }
 
@@ -758,7 +793,7 @@ export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
     const fileName = profilePath.split("/").pop() || "profile-cv.pdf";
     items.push({
       path: profilePath,
-      label: `Profile CV (${fileName})`,
+      label: `CV trong hồ sơ (${fileName})`,
       createdAt: String(profileCv?.updated_at || new Date().toISOString()),
       source: "profile",
     });
@@ -773,7 +808,7 @@ export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
     seen.add(path);
     const job = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
     const fileName = path.split("/").pop() || "resume.pdf";
-    const jobTitle = safeTrim(job?.title) || "CV da upload";
+    const jobTitle = safeTrim(job?.title) || "CV đã tải lên";
     const companyName = safeTrim(job?.company_name);
 
     items.push({
@@ -789,14 +824,39 @@ export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
   for (const resume of resumes ?? []) {
     items.push({
       path: "",
-      label: `${String(resume.title || "CV Builder")} (CV Builder)`,
+      label: `${String(resume.title || "CV đã tạo")} (CV Builder)`,
       createdAt: String(resume.updated_at || new Date().toISOString()),
       source: "builder",
       resumeId: String(resume.id),
     });
   }
 
-  return items.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const admin = createAdminClient();
+  const availableItems = await Promise.all(
+    items.map(async (item) => {
+      if (!item.path || item.source === "builder") {
+        return item;
+      }
+
+      const { data, error } = await admin.storage
+        .from(APPLICATION_BUCKET)
+        .createSignedUrl(item.path, 60);
+
+      if (data?.signedUrl) {
+        return item;
+      }
+
+      if (isStorageObjectMissingError(error)) {
+        return null;
+      }
+
+      return item;
+    })
+  );
+
+  return availableItems
+    .filter((item): item is CandidateCvOption => Boolean(item))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
 export async function updateApplicationStatusForEmployer(

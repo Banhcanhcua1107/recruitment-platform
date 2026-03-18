@@ -1,5 +1,6 @@
 "use client";
-import React from "react";
+import { memo } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 interface CompanyCardProps {
@@ -12,7 +13,7 @@ interface CompanyCardProps {
   logoUrl?: string | null;
 }
 
-export default function CompanyCard({
+function CompanyCard({
   slug,
   name,
   industry,
@@ -38,8 +39,14 @@ export default function CompanyCard({
       {/* Logo */}
       <div className="relative z-10 size-24 rounded-2xl bg-white border-2 border-slate-100 shadow-md mb-6 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 overflow-hidden shrink-0">
         {hasLogo ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={logoUrl} alt={name} className="w-full h-full object-contain p-2" />
+          <Image
+            src={logoUrl}
+            alt={name}
+            width={96}
+            height={96}
+            sizes="96px"
+            className="h-full w-full object-contain p-2"
+          />
         ) : (
           <span className="text-3xl font-black text-primary">{initial}</span>
         )}
@@ -74,3 +81,5 @@ export default function CompanyCard({
     </Link>
   );
 }
+
+export default memo(CompanyCard);

@@ -15,6 +15,7 @@ interface ApplicationSubmittedEmailInput {
   introduction: string;
   appliedAt: string;
   cvFilePath: string;
+  cvDownloadUrl: string;
 }
 
 interface ApplicationStatusEmailInput {
@@ -86,25 +87,51 @@ function buildEmailShell(title: string, subtitle: string, body: string) {
   `;
 }
 
-async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment> {
-  const admin = createAdminClient();
-  const { data, error } = await admin.storage.from("cv_uploads").download(filePath);
-
-  if (error || !data) {
-    throw new Error(error?.message || "Unable to download the CV attachment from storage.");
+function toAbsoluteUrl(pathOrUrl: string) {
+  const trimmed = pathOrUrl.trim();
+  if (!trimmed) {
+    return getBaseUrl();
   }
 
-  const buffer = Buffer.from(await data.arrayBuffer());
-  const filename = filePath.split("/").pop() || "resume.pdf";
-  return {
-    filename,
-    content: buffer,
-    contentType: getContentTypeFromPath(filePath),
-  };
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return `${getBaseUrl()}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+}
+
+async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment | null> {
+  const admin = createAdminClient();
+  try {
+    const { data, error } = await admin.storage.from("cv_uploads").download(filePath);
+
+    if (error || !data) {
+      console.warn("Unable to download CV attachment from storage.", {
+        filePath,
+        error: error?.message || null,
+      });
+      return null;
+    }
+
+    const buffer = Buffer.from(await data.arrayBuffer());
+    const filename = filePath.split("/").pop() || "resume.pdf";
+    return {
+      filename,
+      content: buffer,
+      contentType: getContentTypeFromPath(filePath),
+    };
+  } catch (error) {
+    console.warn("Unexpected error while downloading CV attachment.", {
+      filePath,
+      error: error instanceof Error ? error.message : String(error ?? ""),
+    });
+    return null;
+  }
 }
 
 export async function sendApplicationSubmittedEmails(input: ApplicationSubmittedEmailInput) {
   const attachment = await getCvAttachmentFromStorage(input.cvFilePath);
+  const cvReviewUrl = toAbsoluteUrl(input.cvDownloadUrl);
   const safeCandidateName = input.candidateName || "Candidate";
   const safeCandidateEmail = input.candidateEmail?.trim() || "";
   const safeCandidatePhone = input.candidatePhone?.trim() || "";
@@ -128,7 +155,14 @@ export async function sendApplicationSubmittedEmails(input: ApplicationSubmitted
         ${safeCandidatePhone ? `<p style="margin:0 0 8px;"><strong>Phone:</strong> ${escapeHtml(safeCandidatePhone)}</p>` : ""}
         <p style="margin:0;"><strong>Introduction:</strong><br/>${escapeHtml(safeIntroduction).replace(/\n/g, "<br/>")}</p>
       </div>
-      <p style="margin:0;font-size:14px;line-height:1.7;color:#475569;">The candidate CV is attached to this email for your review.</p>
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#475569;">
+        ${
+          attachment
+            ? "The candidate CV is attached to this email for your review."
+            : "We could not attach the CV automatically. Use the secure link below to review it in TalentFlow."
+        }
+      </p>
+      <p style="margin:0;"><a href="${escapeHtml(cvReviewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:700;">Open candidate CV</a></p>
     `
   );
 
@@ -147,7 +181,9 @@ export async function sendApplicationSubmittedEmails(input: ApplicationSubmitted
     safeCandidatePhone ? `- phone: ${safeCandidatePhone}` : null,
     `- introduction: ${safeIntroduction}`,
     "",
-    "The candidate CV is attached to this email.",
+    attachment
+      ? "The candidate CV is attached to this email."
+      : `Review CV in TalentFlow: ${cvReviewUrl}`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -157,7 +193,7 @@ export async function sendApplicationSubmittedEmails(input: ApplicationSubmitted
     subject: `[New Application] ${safeCandidateName} applied for ${input.jobTitle}`,
     text: recruiterText,
     html: recruiterHtml,
-    attachments: [attachment],
+    attachments: attachment ? [attachment] : undefined,
   });
 
   if (!safeCandidateEmail) {

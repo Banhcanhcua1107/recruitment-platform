@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -14,10 +14,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { RecruitmentTrendPoint } from "@/types/recruitment";
 
 export function RecruitmentChart({ data }: { data: RecruitmentTrendPoint[] }) {
-  const [isMounted, setIsMounted] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
+    const element = containerRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect;
+      setIsReady(Boolean(rect && rect.width > 0 && rect.height > 0));
+    });
+
+    observer.observe(element);
+
+    return () => {
+      observer.disconnect();
+    };
   }, []);
 
   return (
@@ -29,9 +45,9 @@ export function RecruitmentChart({ data }: { data: RecruitmentTrendPoint[] }) {
         </p>
       </CardHeader>
       <CardContent className="min-w-0">
-        <div className="h-[320px] min-h-[320px] w-full min-w-0">
-          {isMounted ? (
-            <ResponsiveContainer width="100%" height="100%" minWidth={280}>
+        <div ref={containerRef} className="h-[320px] min-h-[320px] w-full min-w-[280px]">
+          {isReady ? (
+            <ResponsiveContainer width="100%" height={320} minWidth={280}>
               <BarChart data={data}>
                 <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 3" />
                 <XAxis
