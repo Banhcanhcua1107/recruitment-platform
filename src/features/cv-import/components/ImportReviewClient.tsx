@@ -424,6 +424,10 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
     [detail]
   );
   const progressPercent = useMemo(() => getProgressPercent(stepStates), [stepStates]);
+  const progressBarClassName = useMemo(
+    () => `cv-import-progress-${detail.document.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
+    [detail.document.id]
+  );
   const hasRenderedPages = useMemo(
     () => detail.pages.some((page) => Boolean(page.background_url)),
     [detail.pages]
@@ -729,9 +733,12 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                 </div>
 
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                  <style>{`.${progressBarClassName}{width:${progressPercent}%;}`}</style>
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-500 to-emerald-500 transition-[width] duration-500"
-                    style={{ width: `${progressPercent}%` }}
+                    className={cn(
+                      "h-full rounded-full bg-gradient-to-r from-blue-500 via-cyan-500 to-emerald-500 transition-[width] duration-500",
+                      progressBarClassName
+                    )}
                   />
                 </div>
 

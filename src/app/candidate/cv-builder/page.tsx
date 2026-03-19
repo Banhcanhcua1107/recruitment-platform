@@ -322,6 +322,8 @@ function CVDashboardPageContent() {
         ref={uploadInputRef}
         type="file"
         accept=".pdf,.jpg,.jpeg,.png,.webp,.docx"
+        aria-label="Upload CV file"
+        title="Upload CV file"
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];

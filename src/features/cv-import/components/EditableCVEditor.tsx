@@ -75,6 +75,14 @@ function applyDeltaToJson(
   return nextJson;
 }
 
+function cssSafeToken(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function normalizedToPercent(value: number) {
+  return `${Math.max(0, Math.min(100, value * 100))}%`;
+}
+
 function OverlayBlock({
   block,
   selected,
@@ -84,51 +92,53 @@ function OverlayBlock({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const commonStyle = {
-    left: `${block.bbox_normalized.x * 100}%`,
-    top: `${block.bbox_normalized.y * 100}%`,
-    width: `${block.bbox_normalized.width * 100}%`,
-    height: `${block.bbox_normalized.height * 100}%`,
-  };
+  const blockClassName = `cv-overlay-block-${cssSafeToken(block.id)}`;
+  const blockLayoutRule = `.${blockClassName}{left:${normalizedToPercent(block.bbox_normalized.x)};top:${normalizedToPercent(block.bbox_normalized.y)};width:${normalizedToPercent(block.bbox_normalized.width)};height:${normalizedToPercent(block.bbox_normalized.height)};}`;
 
   if (block.type === "avatar") {
     return (
-      <button
-        type="button"
-        onClick={onSelect}
-        className={cn(
-          "absolute overflow-hidden rounded-[18px] border transition",
-          selected
-            ? "border-sky-500 bg-sky-100/40 shadow-[0_0_0_3px_rgba(14,165,233,0.18)]"
-            : "border-slate-300/70 bg-white/10 hover:border-sky-400"
-        )}
-        style={commonStyle}
-      >
-        {block.asset_image_url ? (
-          <img alt="Avatar overlay block" src={block.asset_image_url} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center bg-white/70 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Avatar
-          </div>
-        )}
-      </button>
+      <>
+        <style>{blockLayoutRule}</style>
+        <button
+          type="button"
+          onClick={onSelect}
+          className={cn(
+            "absolute overflow-hidden rounded-[18px] border transition",
+            blockClassName,
+            selected
+              ? "border-sky-500 bg-sky-100/40 shadow-[0_0_0_3px_rgba(14,165,233,0.18)]"
+              : "border-slate-300/70 bg-white/10 hover:border-sky-400"
+          )}
+        >
+          {block.asset_image_url ? (
+            <img alt="Avatar overlay block" src={block.asset_image_url} className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-white/70 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Avatar
+            </div>
+          )}
+        </button>
+      </>
     );
   }
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        "absolute overflow-hidden rounded-[16px] border px-1.5 py-1 text-left transition",
-        selected
-          ? "border-sky-500 bg-white/90 shadow-[0_0_0_3px_rgba(14,165,233,0.18)]"
-          : "border-transparent bg-white/10 hover:border-sky-400/70 hover:bg-white/70"
-      )}
-      style={commonStyle}
-    >
-      <span className="block truncate text-[11px] leading-4 text-slate-900">{blockDisplayText(block) || " "}</span>
-    </button>
+    <>
+      <style>{blockLayoutRule}</style>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "absolute overflow-hidden rounded-[16px] border px-1.5 py-1 text-left transition",
+          blockClassName,
+          selected
+            ? "border-sky-500 bg-white/90 shadow-[0_0_0_3px_rgba(14,165,233,0.18)]"
+            : "border-transparent bg-white/10 hover:border-sky-400/70 hover:bg-white/70"
+        )}
+      >
+        <span className="block truncate text-[11px] leading-4 text-slate-900">{blockDisplayText(block) || " "}</span>
+      </button>
+    </>
   );
 }
 
@@ -555,90 +565,102 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
           </div>
 
           <div className="space-y-6">
-            {detail.pages.map((page) => (
-              <div key={page.page_number} className="rounded-[28px] border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-4 flex items-center justify-between gap-4">
-                  <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                    Page {page.page_number}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {page.canonical_width_px} × {page.canonical_height_px}
-                  </span>
-                </div>
+            {detail.pages.map((page) => {
+              const pageFrameClassName = `cv-page-frame-${page.page_number}`;
+              const pageAspectPadding = (page.canonical_height_px / Math.max(page.canonical_width_px, 1)) * 100;
+              const pageFrameRule = `.${pageFrameClassName}::before{content:\"\";display:block;padding-top:${pageAspectPadding}%;}`;
+              const selectedBlockOnPage = selectedBlock && page.blocks.some((block) => block.id === selectedBlock.id);
+              const selectedBlockClassName = selectedBlockOnPage
+                ? `cv-selected-block-${cssSafeToken(selectedBlock.id)}`
+                : null;
+              const selectedBlockRule = selectedBlockOnPage && selectedBlockClassName
+                ? `.${selectedBlockClassName}{left:${normalizedToPercent(selectedBlock.bbox_normalized.x)};top:${normalizedToPercent(selectedBlock.bbox_normalized.y)};width:${normalizedToPercent(selectedBlock.bbox_normalized.width)};min-height:${normalizedToPercent(selectedBlock.bbox_normalized.height)};}`
+                : "";
 
-                <div
-                  className="relative mx-auto overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm"
-                  style={{
-                    width: "100%",
-                    aspectRatio: `${page.canonical_width_px} / ${page.canonical_height_px}`,
-                  }}
-                >
-                  {page.background_image_url ? (
-                    <img
-                      alt={`CV page ${page.page_number}`}
-                      src={page.background_image_url}
-                      className="absolute inset-0 h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-sm text-slate-400">
-                      Background preview unavailable
-                    </div>
-                  )}
-
-                  <div className="absolute inset-0">
-                    {page.blocks.map((block) => (
-                      <OverlayBlock
-                        key={block.id}
-                        block={block}
-                        selected={block.id === selectedBlockId}
-                        onSelect={() => handleBlockSelect(block)}
-                      />
-                    ))}
+              return (
+                <div key={page.page_number} className="rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-4 flex items-center justify-between gap-4">
+                    <span className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                      Page {page.page_number}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      {page.canonical_width_px} x {page.canonical_height_px}
+                    </span>
                   </div>
 
-                  {selectedBlock && page.blocks.some((block) => block.id === selectedBlock.id) ? (
-                    <div
-                      className="absolute rounded-[18px] border-2 border-sky-500 bg-white/95 p-2 shadow-[0_18px_40px_-28px_rgba(14,165,233,0.6)]"
-                      style={{
-                        left: `${selectedBlock.bbox_normalized.x * 100}%`,
-                        top: `${selectedBlock.bbox_normalized.y * 100}%`,
-                        width: `${selectedBlock.bbox_normalized.width * 100}%`,
-                        minHeight: `${selectedBlock.bbox_normalized.height * 100}%`,
-                      }}
-                    >
-                      {selectedBlock.type === "avatar" ? (
-                        <div className="space-y-2 text-xs text-slate-500">
-                          <p className="font-semibold text-slate-700">Avatar block</p>
-                          <p>Asset replacement API will attach here once image artifact support is expanded.</p>
-                        </div>
-                      ) : (
-                        <div
-                          contentEditable
-                          suppressContentEditableWarning
-                          spellCheck={false}
-                          className="min-h-[48px] whitespace-pre-wrap rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
-                          onFocus={handleBlockFocus}
-                          onInput={(event) => {
-                            const text = event.currentTarget.textContent ?? "";
-                            setActiveTextDraft(text);
-                            updateBlockTextLocal(selectedBlock.id, text);
-                            setPendingBlockSave({
-                              blockId: selectedBlock.id,
-                              text,
-                              locked: selectedBlock.locked,
-                              expectedRevision: detail.autosave_revision,
-                              expectedBlockVersion: selectedBlock.version ?? 1,
-                            });
-                          }}
-                        >
-                          {activeTextDraft}
-                        </div>
-                      )}
+                  <style>{`${pageFrameRule}${selectedBlockRule}`}</style>
+                  <div
+                    className={cn(
+                      "relative mx-auto w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm",
+                      pageFrameClassName
+                    )}
+                  >
+                    {page.background_image_url ? (
+                      <img
+                        alt={`CV page ${page.page_number}`}
+                        src={page.background_image_url}
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center bg-slate-100 text-sm text-slate-400">
+                        Background preview unavailable
+                      </div>
+                    )}
+
+                    <div className="absolute inset-0">
+                      {page.blocks.map((block) => (
+                        <OverlayBlock
+                          key={block.id}
+                          block={block}
+                          selected={block.id === selectedBlockId}
+                          onSelect={() => handleBlockSelect(block)}
+                        />
+                      ))}
                     </div>
-                  ) : null}
+
+                    {selectedBlockOnPage && selectedBlockClassName ? (
+                      <div
+                        className={cn(
+                          "absolute rounded-[18px] border-2 border-sky-500 bg-white/95 p-2 shadow-[0_18px_40px_-28px_rgba(14,165,233,0.6)]",
+                          selectedBlockClassName
+                        )}
+                      >
+                        {selectedBlock.type === "avatar" ? (
+                          <div className="space-y-2 text-xs text-slate-500">
+                            <p className="font-semibold text-slate-700">Avatar block</p>
+                            <p>Asset replacement API will attach here once image artifact support is expanded.</p>
+                          </div>
+                        ) : (
+                          <div
+                            contentEditable
+                            suppressContentEditableWarning
+                            spellCheck={false}
+                            role="textbox"
+                            aria-label="Selected block text editor"
+                            className="min-h-[48px] whitespace-pre-wrap rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
+                            onFocus={handleBlockFocus}
+                            onInput={(event) => {
+                              const text = event.currentTarget.textContent ?? "";
+                              setActiveTextDraft(text);
+                              updateBlockTextLocal(selectedBlock.id, text);
+                              setPendingBlockSave({
+                                blockId: selectedBlock.id,
+                                text,
+                                locked: selectedBlock.locked,
+                                expectedRevision: detail.autosave_revision,
+                                expectedBlockVersion: selectedBlock.version ?? 1,
+                              });
+                            }}
+                          >
+                            {activeTextDraft}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -662,10 +684,16 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               </button>
             </div>
 
+            <label htmlFor="cv-json-working-copy" className="sr-only">
+              JSON working copy editor
+            </label>
             <textarea
+              id="cv-json-working-copy"
               value={jsonDraft}
               onChange={(event) => setJsonDraft(event.target.value)}
               spellCheck={false}
+              aria-label="JSON working copy editor"
+              title="JSON working copy editor"
               className="mt-5 h-[360px] w-full rounded-[24px] border border-slate-200 bg-slate-950 p-5 font-mono text-xs leading-6 text-slate-100 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
             />
           </div>
