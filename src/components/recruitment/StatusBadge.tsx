@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { RecruitmentPipelineStatus, JobStatus } from "@/types/recruitment";
+import type { JobStatus, RecruitmentPipelineStatus } from "@/types/recruitment";
 
 type SupportedStatus = RecruitmentPipelineStatus | JobStatus;
 
@@ -25,8 +25,8 @@ const styles: Record<
   },
   applied: {
     label: "Đã nộp",
-    className: "border-sky-200 bg-sky-50 text-sky-700",
-    dot: "bg-sky-500",
+    className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    dot: "bg-emerald-500",
   },
   new: {
     label: "Mới",
@@ -34,14 +34,14 @@ const styles: Record<
     dot: "bg-sky-500",
   },
   reviewing: {
-    label: "Đang xem xét",
+    label: "Đang xử lý",
     className: "border-amber-200 bg-amber-50 text-amber-700",
     dot: "bg-amber-500",
   },
   interview: {
     label: "Phỏng vấn",
-    className: "border-violet-200 bg-violet-50 text-violet-700",
-    dot: "bg-violet-500",
+    className: "border-cyan-200 bg-cyan-50 text-cyan-700",
+    dot: "bg-cyan-500",
   },
   offer: {
     label: "Đề nghị",

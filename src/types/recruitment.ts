@@ -80,15 +80,52 @@ export interface RecruitmentCompanyProfile {
 export interface RecruitmentCandidate {
   applicationId: string;
   candidateId: string;
+  candidateCode: string;
   fullName: string;
-  email: string;
+  email: string | null;
   phone: string | null;
   resumeUrl: string | null;
+  introduction: string | null;
   coverLetter?: string | null;
   appliedPosition: string;
+  jobId: string;
+  jobUrl: string;
   status: RecruitmentPipelineStatus;
   rawStatus: AnyApplicationStatus;
   appliedAt: string;
+  hasPublicProfile: boolean;
+}
+
+export interface EmployerCandidateRelatedApplication {
+  applicationId: string;
+  jobId: string;
+  jobTitle: string;
+  jobUrl: string;
+  status: RecruitmentPipelineStatus;
+  appliedAt: string;
+  isCurrent: boolean;
+}
+
+export interface EmployerCandidateApplicationDetail {
+  applicationId: string;
+  candidateId: string;
+  candidateCode: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  introduction: string | null;
+  resumeUrl: string | null;
+  appliedAt: string;
+  updatedAt: string;
+  status: RecruitmentPipelineStatus;
+  rawStatus: AnyApplicationStatus;
+  job: {
+    id: string;
+    title: string;
+    url: string;
+    companyName: string | null;
+  };
+  relatedApplications: EmployerCandidateRelatedApplication[];
 }
 
 export interface RecruitmentActivityLog {

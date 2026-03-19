@@ -43,6 +43,8 @@ const EMPLOYER_OPTIONAL_COLUMN_MARKERS = [
 const CANDIDATES_TABLE_MARKERS = [
   'relation "candidates" does not exist',
   "could not find the table 'public.candidates' in the schema cache",
+  'column "candidate_code" does not exist',
+  "column candidates.candidate_code does not exist",
 ];
 
 const ACTIVITY_LOGS_TABLE_MARKERS = [
@@ -936,18 +938,19 @@ export async function getCandidates(
 
   const candidateIds = [...new Set((appRows ?? []).map((row) => String(row.candidate_id)))];
 
-  let [{ data: candidateRows, error: candidatesError }, { data: profileRows, error: profilesError }] =
-    await Promise.all([
-      candidateIds.length > 0
-        ? supabase
-            .from("candidates")
-            .select("id, full_name, email, phone, resume_url")
-            .in("id", candidateIds)
-        : Promise.resolve({ data: [], error: null }),
-      candidateIds.length > 0
-        ? supabase.from("profiles").select("id, full_name, email").in("id", candidateIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
+  const [candidateResult, profileResult] = await Promise.all([
+    candidateIds.length > 0
+      ? supabase
+          .from("candidates")
+          .select("id, full_name, email, phone, resume_url, candidate_code")
+          .in("id", candidateIds)
+      : Promise.resolve({ data: [], error: null }),
+    candidateIds.length > 0
+      ? supabase.from("profiles").select("id, full_name, email").in("id", candidateIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  let { data: candidateRows, error: candidatesError } = candidateResult;
+  const { data: profileRows, error: profilesError } = profileResult;
 
   if (
     candidatesError &&
@@ -989,14 +992,19 @@ export async function getCandidates(
       return {
         applicationId: String(row.id),
         candidateId,
+        candidateCode: candidate?.candidate_code || "CAND-PENDING",
         fullName: normalizedFullName,
         email,
         phone: candidate?.phone ?? null,
         resumeUrl: candidate?.resume_url ?? null,
+        introduction: null,
         appliedPosition: jobsById.get(String(row.job_id)) ?? "Chưa rõ vị trí",
+        jobId: String(row.job_id),
+        jobUrl: `/hr/jobs/${String(row.job_id)}`,
         status: normalizeApplicationStatus(row.status),
         rawStatus: (row.status ?? "new") as AnyApplicationStatus,
         appliedAt: row.created_at,
+        hasPublicProfile: false,
       };
     }),
     total: count ?? 0,

@@ -12,6 +12,7 @@ import { createSystemNotification } from "@/lib/notifications";
 import { renderResumePdfBuffer } from "@/lib/resume-pdf";
 import type {
   AnyApplicationStatus,
+  EmployerCandidateApplicationDetail,
   PaginatedResult,
   RecruitmentCandidate,
   RecruitmentPipelineMetric,
@@ -19,6 +20,7 @@ import type {
 } from "@/types/recruitment";
 
 const APPLICATION_BUCKET = "cv_uploads";
+const CANDIDATE_CODE_FALLBACK = "CAND-PENDING";
 
 export interface CandidateCvOption {
   path: string;
@@ -55,6 +57,12 @@ type JobLookup = {
   employer_id: string | null;
   status: string | null;
   hr_email?: string | null;
+};
+
+type CandidateDirectoryRow = {
+  id: string;
+  candidate_code?: string | null;
+  created_at?: string | null;
 };
 
 function normalizeApplicationStatus(
@@ -124,6 +132,52 @@ function normalizeOptionalString(value: unknown) {
   return next || null;
 }
 
+function buildJobManagementUrl(jobId: string) {
+  return `/hr/jobs/${jobId}`;
+}
+
+function buildCandidateCodeFromCreatedAt(createdAt: string, sequence: number) {
+  const date = new Date(createdAt);
+  const year = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear();
+  return `CAND-${year}-${String(sequence).padStart(4, "0")}`;
+}
+
+async function buildFallbackCandidateCodeMap(candidateIds?: string[]) {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("candidates")
+    .select("id, created_at")
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const allowedIds = candidateIds ? new Set(candidateIds) : null;
+  const yearlyCounters = new Map<number, number>();
+  const fallbackCodes = new Map<string, string>();
+
+  for (const row of (data ?? []) as CandidateDirectoryRow[]) {
+    const candidateId = String(row.id);
+    const createdAt = safeTrim(row.created_at) || new Date().toISOString();
+    const date = new Date(createdAt);
+    const year = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear();
+    const nextSequence = (yearlyCounters.get(year) ?? 0) + 1;
+
+    yearlyCounters.set(year, nextSequence);
+
+    if (!allowedIds || allowedIds.has(candidateId)) {
+      fallbackCodes.set(
+        candidateId,
+        buildCandidateCodeFromCreatedAt(createdAt, nextSequence)
+      );
+    }
+  }
+
+  return fallbackCodes;
+}
+
 function getApplicationErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message;
@@ -164,6 +218,22 @@ async function getAuthenticatedUser() {
   }
 
   return { supabase, user };
+}
+
+async function assertHrViewer(supabase: SupabaseClient, userId: string) {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (profile?.role && profile.role !== "hr") {
+    throw new Error("Chi nha tuyen dung moi co the quan ly danh sach ung vien.");
+  }
 }
 
 async function getCandidateDefaults(
@@ -961,6 +1031,7 @@ export async function getEmployerCandidates(input: {
   limit?: number;
 }): Promise<PaginatedResult<RecruitmentCandidate>> {
   const { supabase, user } = await getAuthenticatedUser();
+  await assertHrViewer(supabase, user.id);
   const page = Math.max(1, input.page ?? 1);
   const limit = Math.max(1, input.limit ?? 8);
 
@@ -985,6 +1056,60 @@ export async function getEmployerCandidates(input: {
     return { items: [], total: 0, page, limit, totalPages: 1 };
   }
 
+  const searchTerm = input.q?.replaceAll(",", " ").trim() ?? "";
+  let matchedCandidateIds: string[] = [];
+  let shouldUseGeneratedCandidateCodes = false;
+
+  if (searchTerm) {
+    const baseSearch = `full_name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`;
+    const { data: candidatesWithCode, error: candidatesWithCodeError } = await supabase
+      .from("candidates")
+      .select("id")
+      .or(`candidate_code.ilike.%${searchTerm}%,${baseSearch}`);
+
+    const shouldFallbackToLegacyCandidateSearch =
+      Boolean(candidatesWithCodeError) &&
+      isApplicationSchemaError(candidatesWithCodeError, [
+        'column "candidate_code" does not exist',
+        "column candidates.candidate_code does not exist",
+      ]);
+    shouldUseGeneratedCandidateCodes = shouldFallbackToLegacyCandidateSearch;
+
+    const { data: legacyCandidateMatches, error: legacyCandidateMatchesError } =
+      shouldFallbackToLegacyCandidateSearch
+        ? await supabase.from("candidates").select("id").or(baseSearch)
+        : { data: null, error: null };
+
+    const candidateMatchError = shouldFallbackToLegacyCandidateSearch
+      ? legacyCandidateMatchesError
+      : candidatesWithCodeError;
+    const candidateMatches = shouldFallbackToLegacyCandidateSearch
+      ? legacyCandidateMatches
+      : candidatesWithCode;
+
+    if (
+      candidateMatchError &&
+      !isApplicationSchemaError(candidateMatchError, [
+        'relation "candidates" does not exist',
+        "could not find the table 'public.candidates' in the schema cache",
+      ])
+    ) {
+      throw new Error(candidateMatchError.message);
+    }
+
+    matchedCandidateIds = (candidateMatches ?? []).map((row) => String(row.id));
+
+    if (shouldUseGeneratedCandidateCodes) {
+      const fallbackCodes = await buildFallbackCandidateCodeMap();
+      const normalizedSearchTerm = searchTerm.toUpperCase();
+      const generatedMatches = [...fallbackCodes.entries()]
+        .filter(([, code]) => code.toUpperCase().includes(normalizedSearchTerm))
+        .map(([id]) => id);
+
+      matchedCandidateIds = [...new Set([...matchedCandidateIds, ...generatedMatches])];
+    }
+  }
+
   let appsQuery = supabase
     .from("applications")
     .select(
@@ -999,11 +1124,18 @@ export async function getEmployerCandidates(input: {
     appsQuery = appsQuery.in("status", getStatusAliases(input.status));
   }
 
-  if (input.q) {
-    const q = input.q.replaceAll(",", " ").trim();
-    appsQuery = appsQuery.or(
-      `full_name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`
-    );
+  if (searchTerm) {
+    const orFilters = [
+      `full_name.ilike.%${searchTerm}%`,
+      `email.ilike.%${searchTerm}%`,
+      `phone.ilike.%${searchTerm}%`,
+    ];
+
+    if (matchedCandidateIds.length > 0) {
+      orFilters.push(`candidate_id.in.(${matchedCandidateIds.join(",")})`);
+    }
+
+    appsQuery = appsQuery.or(orFilters.join(","));
   }
 
   const from = (page - 1) * limit;
@@ -1015,48 +1147,245 @@ export async function getEmployerCandidates(input: {
   }
 
   const candidateIds = [...new Set((appRows ?? []).map((row) => String(row.candidate_id)))];
-  const { data: candidateRows, error: candidatesError } = candidateIds.length
-    ? await supabase
-        .from("candidates")
-        .select("id, full_name, email, phone, resume_url")
-        .in("id", candidateIds)
-    : { data: [], error: null };
+  const [
+    { data: candidateRowsWithCode, error: candidateRowsWithCodeError },
+    { data: publicProfileRows, error: publicProfileRowsError },
+  ] = await Promise.all([
+    candidateIds.length
+      ? supabase
+          .from("candidates")
+          .select("id, candidate_code")
+          .in("id", candidateIds)
+      : Promise.resolve({ data: [], error: null }),
+    candidateIds.length
+      ? supabase
+          .from("candidate_profiles")
+          .select("user_id")
+          .eq("profile_visibility", "public")
+          .in("user_id", candidateIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
 
-  if (candidatesError) {
+  const shouldFallbackToLegacyCandidateLookup =
+    Boolean(candidateRowsWithCodeError) &&
+    isApplicationSchemaError(candidateRowsWithCodeError, [
+      'column "candidate_code" does not exist',
+      "column candidates.candidate_code does not exist",
+    ]);
+  shouldUseGeneratedCandidateCodes =
+    shouldUseGeneratedCandidateCodes || shouldFallbackToLegacyCandidateLookup;
+
+  const { data: legacyCandidateRows, error: legacyCandidateRowsError } =
+    shouldFallbackToLegacyCandidateLookup && candidateIds.length
+      ? await supabase.from("candidates").select("id").in("id", candidateIds)
+      : { data: null, error: null };
+
+  const candidatesError = shouldFallbackToLegacyCandidateLookup
+    ? legacyCandidateRowsError
+    : candidateRowsWithCodeError;
+  const candidateRows = shouldFallbackToLegacyCandidateLookup
+    ? legacyCandidateRows
+    : candidateRowsWithCode;
+
+  if (
+    candidatesError &&
+    !isApplicationSchemaError(candidatesError, [
+      'relation "candidates" does not exist',
+      "could not find the table 'public.candidates' in the schema cache",
+    ])
+  ) {
     throw new Error(candidatesError.message);
   }
 
-  const candidatesById = new Map((candidateRows ?? []).map((row) => [String(row.id), row]));
+  if (
+    publicProfileRowsError &&
+    !isApplicationSchemaError(publicProfileRowsError, [
+      'relation "candidate_profiles" does not exist',
+      "could not find the table 'public.candidate_profiles' in the schema cache",
+    ])
+  ) {
+    throw new Error(publicProfileRowsError.message);
+  }
+
+  const candidatesById = new Map(
+    ((candidateRows ?? []) as CandidateDirectoryRow[]).map((row) => [String(row.id), row])
+  );
+  const publicCandidateIds = new Set((publicProfileRows ?? []).map((row) => String(row.user_id)));
+  const fallbackCandidateCodes =
+    shouldUseGeneratedCandidateCodes && candidateIds.length > 0
+      ? await buildFallbackCandidateCodeMap(candidateIds)
+      : new Map<string, string>();
 
   return {
     items: (appRows ?? []).map((row) => {
-      const candidate = candidatesById.get(String(row.candidate_id));
+      const candidateId = String(row.candidate_id);
+      const jobId = String(row.job_id);
+      const candidate = candidatesById.get(candidateId);
       return {
         applicationId: String(row.id),
-        candidateId: String(row.candidate_id),
-        fullName:
-          safeTrim(row.full_name) ||
-          safeTrim(candidate?.full_name) ||
-          safeTrim(candidate?.email) ||
-          "Candidate",
-        email: safeTrim(row.email) || safeTrim(candidate?.email),
-        phone: normalizeOptionalString(row.phone) ?? normalizeOptionalString(candidate?.phone),
+        candidateId,
+        candidateCode:
+          normalizeOptionalString(candidate?.candidate_code) ??
+          fallbackCandidateCodes.get(candidateId) ??
+          CANDIDATE_CODE_FALLBACK,
+        fullName: safeTrim(row.full_name) || safeTrim(row.email) || "Ung vien",
+        email: normalizeOptionalString(row.email),
+        phone: normalizeOptionalString(row.phone),
         resumeUrl:
           row.cv_file_path || row.cv_file_url
             ? buildInternalCvUrl(String(row.id))
-            : normalizeOptionalString(candidate?.resume_url),
+            : null,
+        introduction:
+          normalizeOptionalString(row.introduction) ?? normalizeOptionalString(row.cover_letter),
         coverLetter:
           normalizeOptionalString(row.introduction) ?? normalizeOptionalString(row.cover_letter),
-        appliedPosition: jobsById.get(String(row.job_id)) ?? "Chua ro vi tri",
+        appliedPosition: jobsById.get(jobId) ?? "Chua ro vi tri",
+        jobId,
+        jobUrl: buildJobManagementUrl(jobId),
         status: normalizeApplicationStatus(row.status),
         rawStatus: (row.status ?? "applied") as AnyApplicationStatus,
         appliedAt: String(row.applied_at || row.created_at),
+        hasPublicProfile: publicCandidateIds.has(candidateId),
       };
     }),
     total: count ?? 0,
     page,
     limit,
     totalPages: Math.max(1, Math.ceil((count ?? 0) / limit)),
+  };
+}
+
+export async function getEmployerCandidateApplicationDetail(
+  applicationId: string
+): Promise<EmployerCandidateApplicationDetail> {
+  const { supabase, user } = await getAuthenticatedUser();
+  await assertHrViewer(supabase, user.id);
+
+  const { data: application, error: applicationError } = await supabase
+    .from("applications")
+    .select(
+      "id, candidate_id, job_id, status, created_at, updated_at, applied_at, full_name, email, phone, introduction, cover_letter, cv_file_path, cv_file_url"
+    )
+    .eq("id", applicationId)
+    .maybeSingle();
+
+  if (applicationError || !application) {
+    throw new Error(applicationError?.message ?? "Khong tim thay don ung tuyen.");
+  }
+
+  const [
+    { data: currentJob, error: currentJobError },
+    { data: employerJobs, error: employerJobsError },
+    { data: candidateWithCode, error: candidateWithCodeError },
+  ] = await Promise.all([
+    supabase
+      .from("jobs")
+      .select("id, title, company_name, employer_id")
+      .eq("id", application.job_id)
+      .eq("employer_id", user.id)
+      .maybeSingle(),
+    supabase.from("jobs").select("id, title").eq("employer_id", user.id),
+    supabase
+      .from("candidates")
+      .select("id, candidate_code")
+      .eq("id", application.candidate_id)
+      .maybeSingle(),
+  ]);
+
+  if (currentJobError || !currentJob) {
+    throw new Error(currentJobError?.message ?? "Ban khong co quyen voi don ung tuyen nay.");
+  }
+
+  if (employerJobsError) {
+    throw new Error(employerJobsError.message);
+  }
+
+  const shouldFallbackToLegacyCandidateDetailLookup =
+    Boolean(candidateWithCodeError) &&
+    isApplicationSchemaError(candidateWithCodeError, [
+      'column "candidate_code" does not exist',
+      "column candidates.candidate_code does not exist",
+    ]);
+
+  const { data: legacyCandidateRow, error: legacyCandidateRowError } =
+    shouldFallbackToLegacyCandidateDetailLookup
+      ? await supabase.from("candidates").select("id").eq("id", application.candidate_id).maybeSingle()
+      : { data: null, error: null };
+
+  const candidateError = shouldFallbackToLegacyCandidateDetailLookup
+    ? legacyCandidateRowError
+    : candidateWithCodeError;
+  const candidate = shouldFallbackToLegacyCandidateDetailLookup
+    ? legacyCandidateRow
+    : candidateWithCode;
+
+  if (
+    candidateError &&
+    !isApplicationSchemaError(candidateError, [
+      'relation "candidates" does not exist',
+      "could not find the table 'public.candidates' in the schema cache",
+    ])
+  ) {
+    throw new Error(candidateError.message);
+  }
+
+  const fallbackCandidateCodes = shouldFallbackToLegacyCandidateDetailLookup
+    ? await buildFallbackCandidateCodeMap([String(application.candidate_id)])
+    : new Map<string, string>();
+
+  const jobsById = new Map((employerJobs ?? []).map((job) => [String(job.id), String(job.title)]));
+  const employerJobIds = [...jobsById.keys()];
+
+  const { data: relatedApplications, error: relatedApplicationsError } = employerJobIds.length
+    ? await supabase
+        .from("applications")
+        .select("id, job_id, status, created_at, applied_at")
+        .eq("candidate_id", application.candidate_id)
+        .in("job_id", employerJobIds)
+        .order("applied_at", { ascending: false })
+        .order("created_at", { ascending: false })
+    : { data: [], error: null };
+
+  if (relatedApplicationsError) {
+    throw new Error(relatedApplicationsError.message);
+  }
+
+  return {
+    applicationId: String(application.id),
+    candidateId: String(application.candidate_id),
+    candidateCode:
+      normalizeOptionalString((candidate as CandidateDirectoryRow | null)?.candidate_code) ??
+      fallbackCandidateCodes.get(String(application.candidate_id)) ??
+      CANDIDATE_CODE_FALLBACK,
+    fullName: safeTrim(application.full_name) || safeTrim(application.email) || "Ung vien",
+    email: normalizeOptionalString(application.email),
+    phone: normalizeOptionalString(application.phone),
+    introduction:
+      normalizeOptionalString(application.introduction) ??
+      normalizeOptionalString(application.cover_letter),
+    resumeUrl:
+      application.cv_file_path || application.cv_file_url
+        ? buildInternalCvUrl(String(application.id))
+        : null,
+    appliedAt: String(application.applied_at || application.created_at),
+    updatedAt: String(application.updated_at || application.created_at),
+    status: normalizeApplicationStatus(application.status),
+    rawStatus: (application.status ?? "applied") as AnyApplicationStatus,
+    job: {
+      id: String(currentJob.id),
+      title: safeTrim(currentJob.title) || "Chua ro vi tri",
+      url: buildJobManagementUrl(String(currentJob.id)),
+      companyName: normalizeOptionalString(currentJob.company_name),
+    },
+    relatedApplications: (relatedApplications ?? []).map((row) => ({
+      applicationId: String(row.id),
+      jobId: String(row.job_id),
+      jobTitle: jobsById.get(String(row.job_id)) ?? "Chua ro vi tri",
+      jobUrl: buildJobManagementUrl(String(row.job_id)),
+      status: normalizeApplicationStatus(row.status),
+      appliedAt: String(row.applied_at || row.created_at),
+      isCurrent: String(row.id) === String(application.id),
+    })),
   };
 }
 
