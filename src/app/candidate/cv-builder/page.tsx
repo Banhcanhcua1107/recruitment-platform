@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -16,6 +16,8 @@ import { OCRPreviewModal } from "./components/ocr/OCRPreviewModal";
 import { CVCard } from "./components/cv/CVCard";
 import { CreateCard } from "./components/cv/CreateCard";
 import { UploadCard } from "./components/cv/UploadCard";
+import { uploadCVImport } from "@/features/cv-import/api/client";
+import { ImportReviewOverlayModal } from "@/features/cv-import/components/ImportReviewOverlayModal";
 import type { CVSection } from "./types";
 
 function CVDashboardPageContent() {
@@ -27,6 +29,26 @@ function CVDashboardPageContent() {
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [templateRedirectLoading, setTemplateRedirectLoading] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [importUploading, setImportUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const importReviewDocumentId = searchParams.get("importReview");
+
+  const setImportReviewQuery = useCallback(
+    (documentId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (documentId) {
+        params.set("importReview", documentId);
+      } else {
+        params.delete("importReview");
+      }
+
+      const query = params.toString();
+      router.replace(query ? `/candidate/cv-builder?${query}` : "/candidate/cv-builder", {
+        scroll: false,
+      });
+    },
+    [router, searchParams]
+  );
 
   const loadResumes = async () => {
     try {
@@ -130,6 +152,25 @@ function CVDashboardPageContent() {
     }
   };
 
+  const handleImportUpload = async (file: File) => {
+    try {
+      setImportUploading(true);
+      setSaveNotice("Đang đưa CV vào hộp xem lại import mới...");
+      const response = await uploadCVImport(file);
+      setSaveNotice("CV đã được đưa vào pipeline. Hộp xem lại sẽ tự cập nhật trạng thái xử lý.");
+      setImportReviewQuery(response.document.id);
+    } catch (err) {
+      console.error("Import CV that bai:", err);
+      alert("Không thể bắt đầu quy trình import CV. Vui lòng thử lại.");
+      setSaveNotice(null);
+    } finally {
+      setImportUploading(false);
+      if (uploadInputRef.current) {
+        uploadInputRef.current.value = "";
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 pb-20 font-['Manrope']">
       {templateRedirectLoading ? (
@@ -188,7 +229,20 @@ function CVDashboardPageContent() {
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <CreateCard />
-            <UploadCard onClick={() => setOcrModalOpen(true)} />
+            <UploadCard onClick={() => uploadInputRef.current?.click()} />
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+            <p className="text-sm font-medium text-slate-500">
+              Mỗi file tải lên sẽ đi qua quy trình import bền vững với queue, artifact manifest và hộp xem lại riêng.
+            </p>
+            <button
+              type="button"
+              onClick={() => setOcrModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-all hover:-translate-y-[1px] hover:bg-slate-100"
+            >
+              Mở OCR modal cũ
+            </button>
           </div>
         </section>
 
@@ -257,6 +311,25 @@ function CVDashboardPageContent() {
         isOpen={ocrModalOpen}
         onClose={() => setOcrModalOpen(false)}
         onConfirm={handleOCRConfirm}
+      />
+
+      <ImportReviewOverlayModal
+        documentId={importReviewDocumentId}
+        onClose={() => setImportReviewQuery(null)}
+      />
+
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png,.webp,.docx"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            void handleImportUpload(file);
+          }
+        }}
+        disabled={importUploading}
       />
     </div>
   );

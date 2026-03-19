@@ -77,6 +77,14 @@ export interface RawOCRBlock {
   confidence: number;
   column?: "left" | "right" | "full_width";
   rect: { x: number; y: number; width: number; height: number };
+  meta?: {
+    level?: number;
+    parent_id?: string | null;
+    region_id?: string | null;
+    reading_order?: number;
+    version?: number;
+    lock_state?: "unlocked" | "user_locked" | "system_locked";
+  };
 }
 
 function normalizeBlockText(text: string): string {
@@ -817,6 +825,7 @@ export function transformRawBlocksToSections(
     ["interests", "Sở thích"],
     ["other", "Nội dung khác"],
   ];
+  void _deprecatedCustomSectionMap;
 
   const customSectionMap: Array<[OCRSectionBucket, string]> = [
     ["activities", "Hoạt động"],

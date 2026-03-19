@@ -166,6 +166,9 @@ class UploadCVResponse(BaseModel):
     markdown_pages: list[str] = Field(default_factory=list)
     raw_text: str = ""
     content: str = ""
+    meta: dict[str, Any] = Field(default_factory=dict)
+    debug: dict[str, Any] = Field(default_factory=dict)
+    raw_ocr: dict[str, Any] = Field(default_factory=dict)
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -193,3 +196,15 @@ class ErrorResponse(BaseModel):
     success: bool = False
     error: str
     detail: Optional[str] = None
+
+
+class CVDocumentJobRequest(BaseModel):
+    document_id: str
+    job_id: str
+
+
+class CVDocumentJobResponse(BaseModel):
+    accepted: bool = True
+    document_id: str
+    job_id: str
+    queue_name: str = "cv-documents"

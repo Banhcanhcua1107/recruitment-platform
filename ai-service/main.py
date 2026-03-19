@@ -27,12 +27,14 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from urllib.parse import quote
 
-from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Body, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 
 from models import (
+    CVDocumentJobRequest,
+    CVDocumentJobResponse,
     DetectedSectionModel,
     ErrorResponse,
     MatchJobRequest,
@@ -44,6 +46,7 @@ from models import (
     StructuredOCRBlockModel,
     UploadCVResponse,
 )
+from celery_app import celery_app
 from services.cv_parser import parse_cv
 from services.cv_layout_parser import parse_structured_cv_from_ocr
 from services.ocr_pipeline import (
@@ -75,6 +78,7 @@ class PreviewAsset:
 
 PREVIEW_STORE: dict[str, PreviewAsset] = {}
 PREVIEW_TTL_SECONDS = int(os.getenv("CV_PREVIEW_TTL_SECONDS", "1800"))
+INTERNAL_API_TOKEN = os.getenv("AI_SERVICE_INTERNAL_TOKEN") or os.getenv("CV_IMPORTS_INTERNAL_TOKEN") or ""
 
 
 def _cleanup_preview_store(now: float | None = None) -> None:
@@ -159,6 +163,42 @@ async def _global_exception_handler(request, exc: Exception):
 @app.get("/health", tags=["system"])
 async def health_check():
     return {"status": "healthy", "service": "cv-processing-api", "version": "3.0.0"}
+
+
+def _authorize_internal_request(authorization: str | None) -> None:
+    if not INTERNAL_API_TOKEN:
+        return
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Missing internal authorization token.")
+
+    scheme, _, token = authorization.partition(" ")
+    normalized = token if scheme.lower() == "bearer" else authorization
+    if normalized != INTERNAL_API_TOKEN:
+        raise HTTPException(status_code=403, detail="Invalid internal authorization token.")
+
+
+@app.post(
+    "/internal/jobs/cv-documents",
+    response_model=CVDocumentJobResponse,
+    tags=["internal"],
+    summary="Enqueue a CV document processing job",
+)
+async def enqueue_cv_document_job(
+    payload: CVDocumentJobRequest,
+    authorization: str | None = Header(default=None),
+):
+    _authorize_internal_request(authorization)
+    celery_app.send_task(
+        "tasks.cv_documents.process_document",
+        args=[payload.document_id, payload.job_id],
+        queue="cv-documents",
+    )
+    return CVDocumentJobResponse(
+        accepted=True,
+        document_id=payload.document_id,
+        job_id=payload.job_id,
+    )
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -501,6 +541,62 @@ def _build_page_results_from_blocks(blocks: list) -> list:
     return page_results
 
 
+def _serialize_raw_ocr_pages(page_results) -> dict[str, object]:
+    return {
+        "page_count": len(page_results),
+        "pages": [
+            {
+                "page": page.page,
+                "image_width": page.image_width,
+                "image_height": page.image_height,
+                "blocks": [
+                    {
+                        "text": block.text,
+                        "bbox": block.bbox,
+                        "confidence": block.confidence,
+                        "page": block.page,
+                        "rect": {
+                            "x": block.rect_x,
+                            "y": block.rect_y,
+                            "width": block.rect_w,
+                            "height": block.rect_h,
+                        },
+                    }
+                    for block in page.blocks
+                ],
+            }
+            for page in page_results
+        ],
+    }
+
+
+def _build_upload_meta(
+    *,
+    pipeline_version: str,
+    document_type: str,
+    document_confidence: float,
+    document_signals: list[str],
+    extraction_method: str,
+    ocr_provider: str,
+    page_count: int,
+    total_blocks: int,
+    warnings: list[str],
+    timings: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "pipeline_version": pipeline_version,
+        "document_type": document_type,
+        "document_confidence": document_confidence,
+        "document_signals": document_signals,
+        "extraction_method": extraction_method,
+        "ocr_provider": ocr_provider,
+        "page_count": page_count,
+        "total_blocks": total_blocks,
+        "warnings": warnings,
+        "timings": timings,
+    }
+
+
 def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnings: list[str]) -> UploadCVResponse:
     from models import OCRBlockModel, OCRPageModel
 
@@ -578,6 +674,24 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
         markdown_pages=[],
         raw_text=parsed["raw_text"],
         content=parsed["raw_text"],
+        meta=_build_upload_meta(
+            pipeline_version="v2-reparse",
+            document_type="cv",
+            document_confidence=1.0,
+            document_signals=["manual_parse_ocr_blocks"],
+            extraction_method="ocr_layout",
+            ocr_provider="",
+            page_count=len(pages_out),
+            total_blocks=total_blocks,
+            warnings=warnings,
+            timings={"total_seconds": round(elapsed, 3)},
+        ),
+        debug={
+            "layout": parsed["layout"],
+            "layout_blocks": parsed["layout"].get("layout_blocks", []),
+            "markdown_pages": [],
+        },
+        raw_ocr=_serialize_raw_ocr_pages(page_results),
     )
 
 
@@ -634,6 +748,24 @@ def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings:
         markdown_pages=result["markdown_pages"],
         raw_text=str(result["raw_text"]),
         content=str(result.get("content") or result["raw_text"]),
+        meta=_build_upload_meta(
+            pipeline_version="v2",
+            document_type=str(result.get("document_type") or "cv"),
+            document_confidence=float(result.get("document_confidence") or 0.0),
+            document_signals=[str(item) for item in result.get("document_signals", [])],
+            extraction_method=str(result["extraction_method"]),
+            ocr_provider=str(result["ocr_provider"]),
+            page_count=int(result["page_count"]),
+            total_blocks=int(result["total_blocks"]),
+            warnings=warnings,
+            timings=dict(result["timings"]),
+        ),
+        debug={
+            "layout": result["layout"],
+            "layout_blocks": result.get("layout_blocks", []),
+            "markdown_pages": result["markdown_pages"],
+        },
+        raw_ocr=_serialize_raw_ocr_pages(page_results),
     )
 
 
