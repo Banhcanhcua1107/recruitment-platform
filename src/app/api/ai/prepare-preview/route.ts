@@ -7,6 +7,8 @@ const AI_SERVICE_URL =
   process.env.NEXT_PUBLIC_AI_SERVICE_URL ||
   "http://localhost:8000";
 
+const AI_SERVICE_ERROR_HINT = `Verify the AI service is reachable at ${AI_SERVICE_URL}.`;
+
 export async function POST(req: NextRequest) {
   try {
     const incoming = await req.formData();
@@ -38,8 +40,7 @@ export async function POST(req: NextRequest) {
     console.error("Proxy prepare-preview error:", error);
     return NextResponse.json(
       {
-        detail:
-          "Proxy prepare-preview failed. Verify the AI service is running on http://localhost:8000.",
+        detail: `Proxy prepare-preview failed. ${AI_SERVICE_ERROR_HINT}`,
       },
       { status: 502 }
     );

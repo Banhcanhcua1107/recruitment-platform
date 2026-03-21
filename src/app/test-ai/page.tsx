@@ -1,5 +1,9 @@
 "use client";
+
 import { useState } from "react";
+
+const AI_SERVICE_URL =
+  process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
 
 export default function TestOCR() {
   const [file, setFile] = useState<File | null>(null);
@@ -7,22 +11,25 @@ export default function TestOCR() {
   const [loading, setLoading] = useState(false);
 
   const handleTest = async () => {
-    if (!file) return alert("Hãy chọn 1 ảnh/PDF CV");
+    if (!file) {
+      alert("Please select a CV image or PDF.");
+      return;
+    }
+
     setLoading(true);
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      // Gọi đến endpoint FastAPI bạn đã dựng ở Prompt 4
-      const res = await fetch("http://localhost:8000/parse-cv", {
+      const res = await fetch(`${AI_SERVICE_URL}/parse-cv`, {
         method: "POST",
         body: formData,
       });
       const data = await res.json();
       setResult(data);
-    } catch (e) {
-      console.error(e);
-      alert("Lỗi kết nối Backend!");
+    } catch (error) {
+      console.error(error);
+      alert(`Could not connect to the AI service at ${AI_SERVICE_URL}.`);
     } finally {
       setLoading(false);
     }
@@ -30,13 +37,26 @@ export default function TestOCR() {
 
   return (
     <div className="p-10">
-      <h1 className="text-2xl font-bold mb-4">Test AI CV Scanner (Qwen-VL)</h1>
-      <label htmlFor="cv-file" className="block mb-2 font-medium">Select CV File:</label>
-      <input id="cv-file" type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-      <button onClick={handleTest} className="bg-blue-600 text-white p-2 rounded ml-2">
-        {loading ? "Đang quét..." : "Bắt đầu quét"}
+      <h1 className="mb-4 text-2xl font-bold">Test AI CV Scanner (Qwen-VL)</h1>
+      <label htmlFor="cv-file" className="mb-2 block font-medium">
+        Select CV File:
+      </label>
+      <input
+        id="cv-file"
+        type="file"
+        onChange={(e) => setFile(e.target.files?.[0] || null)}
+      />
+      <button
+        onClick={handleTest}
+        className="ml-2 rounded bg-blue-600 p-2 text-white"
+      >
+        {loading ? "Scanning..." : "Start scan"}
       </button>
-      {result && <pre className="mt-10 bg-black text-green-400 p-5 rounded">{JSON.stringify(result, null, 2)}</pre>}
+      {result && (
+        <pre className="mt-10 rounded bg-black p-5 text-green-400">
+          {JSON.stringify(result, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }

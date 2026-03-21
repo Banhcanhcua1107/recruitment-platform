@@ -7,6 +7,8 @@ const AI_SERVICE_URL =
   process.env.NEXT_PUBLIC_AI_SERVICE_URL ||
   "http://localhost:8000";
 
+const AI_SERVICE_ERROR_HINT = `Verify the AI service is reachable at ${AI_SERVICE_URL}.`;
+
 interface Params {
   params: Promise<{
     previewId: string;
@@ -43,7 +45,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     console.error("Proxy preview error:", error);
     return NextResponse.json(
       {
-        detail: "Proxy preview failed. Verify the AI service is running on http://localhost:8000.",
+        detail: `Proxy preview failed. ${AI_SERVICE_ERROR_HINT}`,
       },
       { status: 502 }
     );

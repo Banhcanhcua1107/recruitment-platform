@@ -487,7 +487,7 @@ export function OCRPreviewModal({
       const rawMessage =
         err instanceof Error ? err.message : "Lỗi không xác định";
       const message = /failed to fetch|cors|network|err_failed/i.test(rawMessage)
-        ? "Không thể kết nối tới AI service ở http://localhost:8000. Hãy kiểm tra backend đã chạy và đã reload route /upload-cv."
+        ? "Khong the ket noi toi AI service. Hay kiem tra backend da chay va route /upload-cv da san sang."
         : rawMessage;
       setPipelineState((current) => ({
         ...current,

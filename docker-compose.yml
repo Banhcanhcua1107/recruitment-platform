@@ -1,0 +1,135 @@
+services:
+  redis:
+    image: redis:7-bookworm
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  ai-service:
+    image: recruitment-platform-ai-service-dev
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
+    working_dir: /workspace/ai-service
+    env_file:
+      - .env.local
+    environment:
+      AI_SERVICE_URL: http://ai-service:8000
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SOFFICE_PATH: soffice
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      WATCHFILES_FORCE_POLLING: "true"
+    command:
+      - uvicorn
+      - main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --reload
+      - --reload-dir
+      - /workspace/ai-service
+      - --reload-exclude
+      - /workspace/ai-service/venv
+      - --reload-exclude
+      - /workspace/ai-service/__pycache__
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ai-service:/workspace/ai-service
+      - ./docs:/workspace/docs:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  celery-worker:
+    image: recruitment-platform-ai-service-dev
+    working_dir: /workspace/ai-service
+    env_file:
+      - .env.local
+    environment:
+      AI_SERVICE_URL: http://ai-service:8000
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SOFFICE_PATH: soffice
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      WATCHFILES_FORCE_POLLING: "true"
+    command:
+      - watchfiles
+      - --filter
+      - python
+      - --ignore-paths
+      - /workspace/ai-service/venv,/workspace/ai-service/__pycache__
+      - --target-type
+      - command
+      - celery -A celery_app:celery_app worker -Q cv-documents --loglevel=info
+      - /workspace/ai-service
+    volumes:
+      - ./ai-service:/workspace/ai-service
+      - ./docs:/workspace/docs:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    working_dir: /workspace
+    environment:
+      AI_SERVICE_URL: http://ai-service:8000
+      NEXT_PUBLIC_AI_SERVICE_URL: http://localhost:8000
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    command:
+      - npm
+      - run
+      - dev
+      - --
+      - --hostname
+      - 0.0.0.0
+      - --port
+      - "3000"
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/workspace
+      - frontend-node-modules:/workspace/node_modules
+      - frontend-next:/workspace/.next
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      ai-service:
+        condition: service_started
+
+volumes:
+  redis-data:
+  frontend-node-modules:
+  frontend-next:

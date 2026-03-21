@@ -1,0 +1,17 @@
+.git
+.next
+.venv
+.vscode
+node_modules
+ai-service/venv
+__pycache__
+*.pyc
+*.pyo
+*.log
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+coverage
+build
+out
