@@ -5,3 +5,14 @@ npm run dev
 
 & D:/Maucv/recruitment-platform/.venv/Scripts/Activate.ps1
 & d:\Maucv\recruitment-platform\.venv\Scripts\Activate.ps1
+
+
+docker compose up --build
+http://localhost:3000
+http://localhost:8000/health
+docker compose logs -f ai-service
+docker compose logs -f frontend
+docker compose logs -f celery-worker
+docker compose logs -f redis
+
+docker compose down

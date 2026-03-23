@@ -25,6 +25,7 @@ import type {
 import { fetchCVImport, retryCVImport, saveEditableCV } from "@/features/cv-import/api/client";
 import { ImportDocumentPreview } from "@/features/cv-import/components/ImportDocumentPreview";
 import { ImportStatusBadge } from "@/features/cv-import/components/ImportStatusBadge";
+import { PersistedOcrReviewPanel } from "@/features/ocr-viewer";
 
 const ACTIVE_STATUSES = new Set<CVDocumentStatus>([
   "uploaded",
@@ -406,7 +407,6 @@ function deriveSectionStates(
 export function ImportReviewClient({ documentId, initialData }: ImportReviewClientProps) {
   const router = useRouter();
   const [detail, setDetail] = useState(initialData);
-  const [selectedPage, setSelectedPage] = useState(initialData.pages[0]?.page_number ?? 1);
   const [allowPartial, setAllowPartial] = useState(false);
   const [overrideNonCv, setOverrideNonCv] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -428,14 +428,18 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
     () => `cv-import-progress-${detail.document.id.replace(/[^a-zA-Z0-9_-]/g, "_")}`,
     [detail.document.id]
   );
-  const hasRenderedPages = useMemo(
-    () => detail.pages.some((page) => Boolean(page.background_url)),
-    [detail.pages]
-  );
-  const renderedPageCount = useMemo(
-    () => detail.pages.filter((page) => Boolean(page.background_url)).length,
-    [detail.pages]
-  );
+  const persistedBlockCount = useMemo(() => {
+    const parsed = detail.parsed_json as NormalizedParsedCV;
+    if (Array.isArray(parsed.raw_ocr_blocks) && parsed.raw_ocr_blocks.length > 0) {
+      return parsed.raw_ocr_blocks.length;
+    }
+
+    if (Array.isArray(parsed.layout_blocks)) {
+      return parsed.layout_blocks.length;
+    }
+
+    return 0;
+  }, [detail.parsed_json]);
   const extractedPreview = useMemo(() => buildExtractedContentPreview(detail.parsed_json), [detail.parsed_json]);
   const sectionStates = useMemo(
     () => deriveSectionStates(detail.parsed_json, detail.document.status),
@@ -473,15 +477,6 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
   useEffect(() => {
     setDetail(initialData);
   }, [initialData]);
-
-  useEffect(() => {
-    const previewPages = detail.pages.filter((page) => Boolean(page.background_url));
-    if (!previewPages.length) return;
-    const hasSelected = previewPages.some((page) => page.page_number === selectedPage);
-    if (!hasSelected) {
-      setSelectedPage(previewPages[0].page_number);
-    }
-  }, [detail.pages, selectedPage]);
 
   useEffect(() => {
     if (!isActive) return undefined;
@@ -553,16 +548,16 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
               </div>
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                  Bản xem trước tài liệu
+                  OCR document viewer
                 </p>
                 <p className="text-sm font-medium text-slate-700">
-                  {hasRenderedPages
-                    ? `${renderedPageCount} trang`
+                  {persistedBlockCount > 0
+                    ? `${persistedBlockCount} mapped block(s)`
                     : originalArtifact?.download_url
-                      ? "Đang dùng preview từ artifact hiện có"
+                      ? "Using persisted preview artifacts"
                       : isActive
-                        ? "Đang dựng preview"
-                        : "Chưa có preview"}
+                        ? "Waiting for OCR/layout artifacts"
+                        : "No persisted OCR blocks yet"}
                 </p>
               </div>
             </div>
@@ -573,43 +568,19 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col bg-[#eef3f8] px-3 py-4 md:px-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm font-medium text-slate-500">
-                {hasRenderedPages
-                  ? `Trang ${selectedPage}/${Math.max(renderedPageCount, 1)}`
-                  : "Bản xem trước tài liệu"}
-              </p>
-
-              {renderedPageCount > 1 ? (
-                <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-                  {detail.pages
-                    .filter((page) => Boolean(page.background_url))
-                    .map((page) => (
-                    <button
-                      key={page.page_number}
-                      type="button"
-                      onClick={() => setSelectedPage(page.page_number)}
-                      className={cn(
-                        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                        page.page_number === selectedPage
-                          ? "border-blue-500 bg-blue-50 text-blue-700"
-                          : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
-                      )}
-                    >
-                      Trang {page.page_number}
-                    </button>
-                    ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto rounded-[30px] border border-slate-200/90 bg-[#dde5ef] p-3 md:p-4">
-              <ImportDocumentPreview
-                documentId={detail.document.id}
-                pages={detail.pages}
-                artifacts={detail.artifacts}
-                status={detail.document.status}
-                selectedPage={selectedPage}
+            <div className="min-h-0 flex-1 overflow-hidden rounded-[30px] border border-slate-200/90 bg-[#dde5ef] p-3 md:p-4">
+              <PersistedOcrReviewPanel
+                key={detail.document.id}
+                detail={detail}
+                fallbackContent={
+                  <ImportDocumentPreview
+                    documentId={detail.document.id}
+                    pages={detail.pages}
+                    artifacts={detail.artifacts}
+                    status={detail.document.status}
+                    selectedPage={detail.pages[0]?.page_number ?? 1}
+                  />
+                }
               />
             </div>
           </div>

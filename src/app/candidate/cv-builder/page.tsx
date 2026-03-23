@@ -5,20 +5,18 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   createResume,
-  createResumeFromSections,
   deleteResume,
   getMyResumes,
   renameResume,
   type ResumeRow,
 } from "./api";
 import { FileText, FolderOpen, Loader2, Plus, UploadCloud } from "lucide-react";
-import { OCRPreviewModal } from "./components/ocr/OCRPreviewModal";
 import { CVCard } from "./components/cv/CVCard";
 import { CreateCard } from "./components/cv/CreateCard";
 import { UploadCard } from "./components/cv/UploadCard";
 import { uploadCVImport } from "@/features/cv-import/api/client";
 import { ImportReviewOverlayModal } from "@/features/cv-import/components/ImportReviewOverlayModal";
-import type { CVSection } from "./types";
+import { PaddleOcrWorkspaceModal } from "@/features/ocr-viewer";
 
 function CVDashboardPageContent() {
   const router = useRouter();
@@ -135,23 +133,6 @@ function CVDashboardPageContent() {
     }
   };
 
-  const handleOCRConfirm = async (sections: CVSection[]) => {
-    try {
-      const newResume = await createResumeFromSections(sections, {
-        title: "CV từ OCR",
-      });
-
-      if (newResume) {
-        setOcrModalOpen(false);
-        await loadResumes();
-        setSaveNotice("CV vừa quét đã được lưu vào danh sách CV của bạn.");
-      }
-    } catch (err) {
-      console.error("Lưu CV từ OCR thất bại:", err);
-      alert("Không thể lưu CV vừa quét. Vui lòng thử lại.");
-    }
-  };
-
   const handleImportUpload = async (file: File) => {
     try {
       setImportUploading(true);
@@ -241,7 +222,7 @@ function CVDashboardPageContent() {
               onClick={() => setOcrModalOpen(true)}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-all hover:-translate-y-[1px] hover:bg-slate-100"
             >
-              Mở OCR modal cũ
+              OCR document viewer
             </button>
           </div>
         </section>
@@ -307,11 +288,7 @@ function CVDashboardPageContent() {
         </section>
       </div>
 
-      <OCRPreviewModal
-        isOpen={ocrModalOpen}
-        onClose={() => setOcrModalOpen(false)}
-        onConfirm={handleOCRConfirm}
-      />
+      <PaddleOcrWorkspaceModal isOpen={ocrModalOpen} onClose={() => setOcrModalOpen(false)} />
 
       <ImportReviewOverlayModal
         documentId={importReviewDocumentId}
