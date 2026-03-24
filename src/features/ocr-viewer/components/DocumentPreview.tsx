@@ -3,7 +3,12 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef } from "react";
 import { PagePreview } from "@/features/ocr-viewer/components/PagePreview";
-import type { DocumentPreviewSource, NormalizedOcrPage } from "@/features/ocr-viewer/types";
+import { useResizeScale } from "@/features/ocr-viewer/hooks/useResizeScale";
+import type {
+  DocumentPreviewSource,
+  NormalizedOcrPage,
+  PreviewScaleMode,
+} from "@/features/ocr-viewer/types";
 
 const PdfDocumentPreview = dynamic(
   () =>
@@ -24,6 +29,7 @@ interface DocumentPreviewProps {
   activeBlockId: string | null;
   hoveredBlockId: string | null;
   overlayVisible: boolean;
+  scaleMode: PreviewScaleMode;
   zoom: number;
   onBoxHover: (blockId: string | null) => void;
   onBoxClick: (blockId: string) => void;
@@ -35,11 +41,13 @@ export function DocumentPreview({
   activeBlockId,
   hoveredBlockId,
   overlayVisible,
+  scaleMode,
   zoom,
   onBoxHover,
   onBoxClick,
 }: DocumentPreviewProps) {
   const boxRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  const { targetRef, displayedWidth, displayedHeight } = useResizeScale<HTMLDivElement>(1, 1);
 
   const pagesToRender = useMemo(() => {
     if (pages.length > 0) return pages;
@@ -50,6 +58,19 @@ export function DocumentPreview({
 
     return [];
   }, [pages, previewSource]);
+
+  const pageCount = pagesToRender.length;
+  const isSinglePage = pageCount <= 1;
+  const frameWidth = useMemo(() => {
+    const availableWidth = Math.max(0, displayedWidth - (isSinglePage ? 8 : 18));
+    if (!availableWidth) return isSinglePage ? 760 : 760;
+    return isSinglePage ? availableWidth : Math.min(availableWidth, 760);
+  }, [displayedWidth, isSinglePage]);
+
+  const viewportHeight = useMemo(() => {
+    if (!displayedHeight) return 720;
+    return Math.max(420, displayedHeight - (isSinglePage ? 4 : 12));
+  }, [displayedHeight, isSinglePage]);
 
   useEffect(() => {
     if (!activeBlockId) return;
@@ -68,43 +89,56 @@ export function DocumentPreview({
 
   if (!previewSource || previewSource.kind === "none") {
     return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-[28px] border border-dashed border-slate-300 bg-white/80 px-6 text-center text-[13px] text-slate-500">
+      <div
+        ref={targetRef}
+        className="flex h-full min-h-0 items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-white/80 px-6 text-center text-[13px] text-slate-500"
+      >
         Upload or load a document to start the preview.
       </div>
     );
   }
 
-  if (previewSource.kind === "pdf" && previewSource.url) {
-    return (
-      <PdfDocumentPreview
-        pages={pages}
-        previewSource={previewSource}
-        activeBlockId={activeBlockId}
-        hoveredBlockId={hoveredBlockId}
-        overlayVisible={overlayVisible}
-        zoom={zoom}
-        onBoxHover={onBoxHover}
-        onBoxClick={onBoxClick}
-      />
-    );
-  }
-
   return (
-    <div className="space-y-3">
-      {pagesToRender.map((page) => (
-        <PagePreview
-          key={`page-${page.pageIndex}`}
-          page={page}
+    <div ref={targetRef} className="flex h-full min-h-0 flex-col">
+      {previewSource.kind === "pdf" && previewSource.url ? (
+        <PdfDocumentPreview
+          pages={pages}
           previewSource={previewSource}
-          overlayVisible={overlayVisible}
-          zoom={zoom}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
+          overlayVisible={overlayVisible}
+          scaleMode={scaleMode}
+          zoom={zoom}
+          frameWidth={frameWidth}
+          viewportHeight={viewportHeight}
+          singlePage={isSinglePage}
           onBoxHover={onBoxHover}
           onBoxClick={onBoxClick}
-          registerBoxRef={registerBoxRef}
         />
-      ))}
+      ) : (
+        <div className={isSinglePage ? "min-h-0 flex-1 overflow-auto" : "min-h-0 flex-1 overflow-y-auto pr-1"}>
+          <div className={isSinglePage ? "flex min-h-full items-start justify-center pt-1" : "flex flex-col items-center gap-3 pb-1"}>
+            {pagesToRender.map((page) => (
+              <PagePreview
+                key={`page-${page.pageIndex}`}
+                page={page}
+                previewSource={previewSource}
+                overlayVisible={overlayVisible}
+                scaleMode={scaleMode}
+                zoom={zoom}
+                frameWidth={frameWidth}
+                viewportHeight={viewportHeight}
+                singlePage={isSinglePage}
+                activeBlockId={activeBlockId}
+                hoveredBlockId={hoveredBlockId}
+                onBoxHover={onBoxHover}
+                onBoxClick={onBoxClick}
+                registerBoxRef={registerBoxRef}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

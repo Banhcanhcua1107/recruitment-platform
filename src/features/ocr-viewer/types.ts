@@ -57,6 +57,7 @@ export interface OcrLogEntry {
 export type ParseMode = "sync" | "async";
 
 export type PreviewSourceKind = "pdf" | "image" | "page-images" | "none";
+export type PreviewScaleMode = "fitPage" | "fitWidth" | "custom";
 
 export interface DocumentPreviewSource {
   kind: PreviewSourceKind;

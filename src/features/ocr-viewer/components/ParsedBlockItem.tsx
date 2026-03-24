@@ -51,7 +51,7 @@ export function ParsedBlockItem({
       type="button"
       data-block-list-id={block.id}
       className={cn(
-        "w-full rounded-[14px] border px-3 py-2.5 text-left transition-all duration-200",
+        "w-full rounded-[13px] border px-3 py-2 text-left transition-all duration-200",
         "border-slate-200/80 bg-white hover:-translate-y-[1px] hover:border-slate-300 hover:bg-slate-50",
         hovered && "border-cyan-200 bg-cyan-50/75 ring-1 ring-cyan-100",
         active && "border-sky-300 bg-sky-50 ring-1 ring-sky-200",
@@ -63,14 +63,14 @@ export function ParsedBlockItem({
       onClick={() => onClick(block.id)}
     >
       {label ? (
-        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
           {label}
         </p>
       ) : null}
       <p
         className={cn(
-          "text-[13px] leading-5 text-slate-700",
-          prominent && "text-[14px] font-semibold leading-6 text-slate-900",
+          "text-[12px] leading-5 text-slate-700",
+          prominent && "text-[13px] font-semibold leading-5 text-slate-900",
         )}
       >
         {truncateText(block.text)}

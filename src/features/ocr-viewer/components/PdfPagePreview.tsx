@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Page } from "react-pdf";
-import type { NormalizedOcrPage } from "@/features/ocr-viewer/types";
+import { cn } from "@/lib/utils";
+import type { NormalizedOcrPage, PreviewScaleMode } from "@/features/ocr-viewer/types";
 import { OcrOverlay } from "@/features/ocr-viewer/components/OcrOverlay";
 
 interface PdfPagePreviewProps {
   page: NormalizedOcrPage;
   overlayVisible: boolean;
+  scaleMode: PreviewScaleMode;
   zoom: number;
+  frameWidth: number;
+  viewportHeight: number;
+  singlePage: boolean;
   activeBlockId: string | null;
   hoveredBlockId: string | null;
   onBoxHover: (blockId: string | null) => void;
@@ -16,34 +21,40 @@ interface PdfPagePreviewProps {
   registerBoxRef?: (blockId: string, element: HTMLButtonElement | null) => void;
 }
 
-function useElementWidth<T extends HTMLElement>() {
-  const ref = useRef<T | null>(null);
-  const [width, setWidth] = useState(0);
+function resolveScale({
+  mode,
+  zoom,
+  availableWidth,
+  availableHeight,
+  originalWidth,
+  originalHeight,
+}: {
+  mode: PreviewScaleMode;
+  zoom: number;
+  availableWidth: number;
+  availableHeight: number;
+  originalWidth: number;
+  originalHeight: number;
+}) {
+  const widthScale = availableWidth > 0 ? availableWidth / originalWidth : 1;
+  const heightScale = availableHeight > 0 ? availableHeight / originalHeight : 1;
 
-  useEffect(() => {
-    const element = ref.current;
-    if (!element) return;
+  if (mode === "custom") {
+    return Math.max(0.18, Math.min(3.2, zoom));
+  }
 
-    const update = () => setWidth(element.getBoundingClientRect().width);
-    update();
-
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    window.addEventListener("resize", update);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", update);
-    };
-  }, []);
-
-  return { ref, width };
+  const baseScale = mode === "fitPage" ? Math.min(widthScale, heightScale) : widthScale;
+  return Math.max(0.18, Math.min(3.2, baseScale * zoom));
 }
 
 export function PdfPagePreview({
   page,
   overlayVisible,
+  scaleMode,
   zoom,
+  frameWidth,
+  viewportHeight,
+  singlePage,
   activeBlockId,
   hoveredBlockId,
   onBoxHover,
@@ -54,80 +65,112 @@ export function PdfPagePreview({
   const [pdfOriginalHeight, setPdfOriginalHeight] = useState(page.originalHeight);
   const [canvasDisplaySize, setCanvasDisplaySize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const { ref: surfaceRef, width: availableWidth } = useElementWidth<HTMLDivElement>();
-  const effectiveOriginalWidth = pdfOriginalWidth || page.originalWidth || 1;
-  const effectiveOriginalHeight = pdfOriginalHeight || page.originalHeight || 1;
-  const renderedPdfWidth = useMemo(() => {
-    if (!availableWidth) return undefined;
-    return Math.max(260, Math.floor(availableWidth * zoom * 0.9));
-  }, [availableWidth, zoom]);
+  const effectiveOriginalWidth = Math.max(1, pdfOriginalWidth || page.originalWidth || 1);
+  const effectiveOriginalHeight = Math.max(1, pdfOriginalHeight || page.originalHeight || 1);
+  const contentWidth = Math.max(340, frameWidth - 8);
+  const contentHeight = Math.max(singlePage ? 560 : 360, viewportHeight - 28);
+  const updateCanvasDisplaySize = useCallback(() => {
+    const element = canvasRef.current;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    setCanvasDisplaySize((current) => {
+      const nextWidth = rect.width;
+      const nextHeight = rect.height;
+      if (Math.abs(current.width - nextWidth) < 0.5 && Math.abs(current.height - nextHeight) < 0.5) {
+        return current;
+      }
+
+      return { width: nextWidth, height: nextHeight };
+    });
+  }, []);
+
+  const scale = useMemo(
+    () =>
+      resolveScale({
+        mode: scaleMode,
+        zoom,
+        availableWidth: contentWidth,
+        availableHeight: contentHeight,
+        originalWidth: effectiveOriginalWidth,
+        originalHeight: effectiveOriginalHeight,
+      }),
+    [contentHeight, contentWidth, effectiveOriginalHeight, effectiveOriginalWidth, scaleMode, zoom],
+  );
+  const renderedWidth = Math.max(200, Math.round(effectiveOriginalWidth * scale));
 
   useEffect(() => {
     const element = canvasRef.current;
     if (!element) return;
 
-    const update = () => {
-      const rect = element.getBoundingClientRect();
-      setCanvasDisplaySize({ width: rect.width, height: rect.height });
-    };
+    updateCanvasDisplaySize();
 
-    update();
-
-    const observer = new ResizeObserver(update);
+    const observer = new ResizeObserver(() => updateCanvasDisplaySize());
     observer.observe(element);
-    window.addEventListener("resize", update);
+    window.addEventListener("resize", updateCanvasDisplaySize);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", update);
+      window.removeEventListener("resize", updateCanvasDisplaySize);
     };
-  }, [renderedPdfWidth]);
+  }, [page.pageIndex, renderedWidth, updateCanvasDisplaySize]);
 
   return (
-    <section className="rounded-[20px] border border-slate-200/90 bg-white p-2.5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.22)]">
-      <div className="mb-2.5 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Page</p>
-          <h3 className="mt-1 text-[13px] font-semibold text-slate-900">{page.pageIndex + 1}</h3>
+    <section
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden rounded-[20px] border border-slate-200/90 bg-white shadow-[0_18px_44px_-34px_rgba(15,23,42,0.18)]",
+        singlePage ? "h-full max-h-full w-full" : "w-full",
+      )}
+      style={{ width: frameWidth }}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200/90 px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">Page</span>
+          <span className="text-[12px] font-semibold text-slate-900">{page.pageIndex + 1}</span>
         </div>
-        <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500">
-          {Math.round(effectiveOriginalWidth)} × {Math.round(effectiveOriginalHeight)}
+        <div className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+          {Math.round(effectiveOriginalWidth)} x {Math.round(effectiveOriginalHeight)}
         </div>
       </div>
 
-      <div ref={surfaceRef} className="overflow-x-auto rounded-[16px] border border-slate-200 bg-slate-100/70 p-2">
-        <div className="relative mx-auto inline-block">
-          <Page
-            pageNumber={page.pageIndex + 1}
-            width={renderedPdfWidth}
-            canvasRef={canvasRef}
-            renderAnnotationLayer={false}
-            renderTextLayer={false}
-            loading={
-              <div className="flex min-h-[280px] w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
-                Rendering page {page.pageIndex + 1}...
-              </div>
-            }
-            onRenderSuccess={(pdfPage) => {
-              setPdfOriginalWidth(pdfPage.originalWidth || page.originalWidth);
-              setPdfOriginalHeight(pdfPage.originalHeight || page.originalHeight);
-            }}
-          />
-
-          {overlayVisible ? (
-            <OcrOverlay
-              blocks={page.blocks}
-              originalWidth={effectiveOriginalWidth}
-              originalHeight={effectiveOriginalHeight}
-              displayedWidth={canvasDisplaySize.width}
-              displayedHeight={canvasDisplaySize.height}
-              activeBlockId={activeBlockId}
-              hoveredBlockId={hoveredBlockId}
-              onBoxHover={onBoxHover}
-              onBoxClick={onBoxClick}
-              registerBoxRef={registerBoxRef}
+      <div className={cn("min-h-0 flex-1 bg-slate-100/70 p-1", singlePage ? "overflow-auto" : "overflow-x-auto")}>
+        <div className={cn("flex min-h-full justify-center", singlePage ? "items-start pt-1" : "items-center")}>
+          <div className="relative shrink-0">
+            <Page
+              pageNumber={page.pageIndex + 1}
+              width={renderedWidth}
+              canvasRef={(element) => {
+                canvasRef.current = element;
+              }}
+              renderAnnotationLayer={false}
+              renderTextLayer={false}
+              loading={
+                <div className="flex min-h-[260px] w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
+                  Rendering page {page.pageIndex + 1}...
+                </div>
+              }
+              onRenderSuccess={(pdfPage) => {
+                setPdfOriginalWidth(pdfPage.originalWidth || page.originalWidth);
+                setPdfOriginalHeight(pdfPage.originalHeight || page.originalHeight);
+                updateCanvasDisplaySize();
+              }}
             />
-          ) : null}
+
+            {overlayVisible ? (
+              <OcrOverlay
+                blocks={page.blocks}
+                originalWidth={effectiveOriginalWidth}
+                originalHeight={effectiveOriginalHeight}
+                displayedWidth={canvasDisplaySize.width || renderedWidth}
+                displayedHeight={canvasDisplaySize.height || Math.round(effectiveOriginalHeight * scale)}
+                activeBlockId={activeBlockId}
+                hoveredBlockId={hoveredBlockId}
+                onBoxHover={onBoxHover}
+                onBoxClick={onBoxClick}
+                registerBoxRef={registerBoxRef}
+              />
+            ) : null}
+          </div>
         </div>
       </div>
     </section>

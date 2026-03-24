@@ -163,16 +163,16 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#f4f8fb]">
-      <div className="border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:px-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+      <div className="border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur md:px-3.5 md:py-2.5">
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-700">OCR Review</p>
               <h1 className="mt-1 text-lg font-semibold text-slate-900">Không gian review tối giản</h1>
               <p className="mt-1 max-w-3xl text-[13px] leading-5 text-slate-500">{reviewMessage}</p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <ImportStatusBadge status={detail.document.status} />
               <span className="text-[13px] text-slate-500">{localizeDocumentType(detail.document.document_type)}</span>
               <button
@@ -200,7 +200,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
             </div>
           ) : null}
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             {requiresPartial ? (
               <label className="inline-flex items-center gap-2.5 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
                 <input
@@ -262,7 +262,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 p-3 md:p-4">
+      <div className="min-h-0 flex-1 p-2.5 md:p-3">
         <PersistedOcrReviewPanel
           key={detail.document.id}
           detail={detail}

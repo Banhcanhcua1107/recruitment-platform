@@ -76,13 +76,13 @@ export function ParsedBlockList({
   if (!blocks.length) return null;
 
   return (
-    <div className="mx-auto w-full max-w-[560px] space-y-2.5">
+    <div className="mx-auto w-full max-w-[520px] space-y-2">
       {blocks.map((block, index) => {
         const previousBlock = index > 0 ? blocks[index - 1] : null;
         const showPageHeading = previousBlock?.pageIndex !== block.pageIndex;
 
         return (
-          <div key={block.id} className="space-y-2.5">
+          <div key={block.id} className="space-y-2">
             {showPageHeading ? (
               <p className="sticky top-0 z-10 rounded-full bg-slate-50/96 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 backdrop-blur">
                 Trang {block.pageIndex + 1}

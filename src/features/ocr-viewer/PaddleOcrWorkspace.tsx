@@ -1,21 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Eye,
-  EyeOff,
-  FileUp,
-  Link2,
-  Loader2,
-  Minus,
-  Play,
-  Plus,
-  Square,
-} from "lucide-react";
+import { FileUp, Link2, Loader2, Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DocumentPreview } from "@/features/ocr-viewer/components/DocumentPreview";
-import { OcrProcessingState } from "@/features/ocr-viewer/components/OcrProcessingState";
+import { OcrProcessingState, type OcrProcessingStep } from "@/features/ocr-viewer/components/OcrProcessingState";
 import { getReviewableBlocks, ParsedBlockList } from "@/features/ocr-viewer/components/ParsedBlockList";
+import { PreviewScaleToolbar } from "@/features/ocr-viewer/components/PreviewScaleToolbar";
 import { useAsyncParse } from "@/features/ocr-viewer/hooks/useAsyncParse";
 import { PaddleApiError, parseSync } from "@/features/ocr-viewer/services/paddleApi";
 import type {
@@ -24,8 +15,8 @@ import type {
   DocumentPreviewSource,
   NormalizedOcrResult,
   ParseMode,
+  PreviewScaleMode,
 } from "@/features/ocr-viewer/types";
-import type { OcrProcessingStep } from "@/features/ocr-viewer/components/OcrProcessingState";
 import { normalizeOcrResult } from "@/features/ocr-viewer/utils/ocrNormalize";
 
 type AsyncInputMode = "local" | "url";
@@ -37,6 +28,12 @@ interface PaddleOcrWorkspaceProps {
 interface StatusNotice {
   tone: "info" | "error" | "warning";
   text: string;
+}
+
+interface PreviewScaleState {
+  contextKey: string;
+  mode: PreviewScaleMode;
+  zoom: number;
 }
 
 function inferPreviewKindFromFile(file: File): DocumentPreviewSource["kind"] {
@@ -60,6 +57,32 @@ function inferPreviewKindFromUrl(url: string): DocumentPreviewSource["kind"] {
 
 function countBlocks(result: NormalizedOcrResult | null) {
   return result ? getReviewableBlocks(result.pages).length : 0;
+}
+
+function clampZoom(value: number) {
+  return Math.max(0.55, Math.min(2.4, Number(value.toFixed(2))));
+}
+
+function getDefaultPreviewScale(pageCount: number): { mode: PreviewScaleMode; zoom: number } {
+  if (pageCount <= 1) {
+    return { mode: "fitWidth", zoom: 0.96 };
+  }
+
+  return { mode: "fitWidth", zoom: 0.88 };
+}
+
+function getScaleZoomForMode(mode: PreviewScaleMode, pageCount: number) {
+  const singlePage = pageCount <= 1;
+
+  if (mode === "fitPage") {
+    return singlePage ? 1.08 : 0.92;
+  }
+
+  if (mode === "fitWidth") {
+    return singlePage ? 0.96 : 0.88;
+  }
+
+  return singlePage ? 0.96 : 0.88;
 }
 
 function buildStatusNotice(
@@ -100,7 +123,7 @@ function buildStatusNotice(
 
     return {
       tone: "info",
-      text: parts.join(" • ") || "Đang xử lý Async Parse...",
+      text: parts.join(" · ") || "Đang xử lý Async Parse...",
     };
   }
 
@@ -127,12 +150,10 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
   const [hoveredBlockId, setHoveredBlockId] = useState<string | null>(null);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
   const [overlayVisible, setOverlayVisible] = useState(true);
-  const [zoom, setZoom] = useState(0.82);
+  const [scalePreference, setScalePreference] = useState<PreviewScaleState | null>(null);
   const { startJob, cancelJob, status, progress, result: asyncResult, error: asyncError } = useAsyncParse();
 
-  const safeProgress = useMemo<AsyncParseProgress | null>(() => {
-    return progress ?? null;
-  }, [progress]);
+  const safeProgress = useMemo<AsyncParseProgress | null>(() => progress ?? null, [progress]);
 
   useEffect(() => {
     if (!asyncResult) return;
@@ -194,6 +215,24 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
       }
     };
   }, [previewSource, selectedFile]);
+
+  const previewPageCount = useMemo(() => {
+    if (viewerResult?.pages.length) return viewerResult.pages.length;
+    if (previewSource?.kind === "image") return 1;
+    return 0;
+  }, [previewSource, viewerResult]);
+  const scaleContextKey = `${parseMode}:${asyncInputMode}:${selectedFile?.name ?? fileUrl.trim()}:${previewSource?.kind ?? "none"}:${previewPageCount}`;
+  const defaultScale = useMemo<PreviewScaleState>(() => {
+    const defaults = getDefaultPreviewScale(previewPageCount);
+    return {
+      contextKey: scaleContextKey,
+      mode: defaults.mode,
+      zoom: defaults.zoom,
+    };
+  }, [previewPageCount, scaleContextKey]);
+  const resolvedScale = scalePreference?.contextKey === scaleContextKey ? scalePreference : defaultScale;
+  const scaleMode = resolvedScale.mode;
+  const zoom = resolvedScale.zoom;
 
   const reviewableBlockCount = useMemo(() => countBlocks(viewerResult), [viewerResult]);
   const canRunSync = Boolean(selectedFile) && !syncLoading;
@@ -328,54 +367,51 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
   }, [cancelJob]);
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col bg-[#f4f8fb]", className)}>
-      <div className="border-b border-slate-200 bg-white/95 px-3.5 py-3 backdrop-blur md:px-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+    <div className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-[#f4f8fb]", className)}>
+      <div className="border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur md:px-3.5 md:py-2.5">
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-700">PaddleOCR Viewer</p>
               <h2 className="mt-1 text-[15px] font-semibold text-slate-900">Workspace OCR tối giản</h2>
               <p className="mt-1 max-w-3xl text-[13px] leading-5 text-slate-500">
-                Bên trái là preview tài liệu, bên phải chỉ giữ lại nội dung OCR hữu ích để review.
+                Bên trái là preview tài liệu, bên phải là nội dung OCR cần review. Với tài liệu 1 trang, preview sẽ ưu tiên fit gọn trong khung.
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setOverlayVisible((current) => !current)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-[18px] border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
-              >
-                {overlayVisible ? <Eye size={15} /> : <EyeOff size={15} />}
-                {overlayVisible ? "Ẩn overlay" : "Hiện overlay"}
-              </button>
-
-              <div className="inline-flex items-center rounded-[18px] border border-slate-200 bg-white p-1">
-                <button
-                  type="button"
-                  onClick={() => setZoom((current) => Math.max(0.6, Number((current - 0.08).toFixed(2))))}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100"
-                  aria-label="Zoom out"
-                >
-                  <Minus size={13} />
-                </button>
-                <span className="min-w-12 text-center text-[11px] font-semibold text-slate-600">
-                  {Math.round(zoom * 100)}%
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setZoom((current) => Math.min(2, Number((current + 0.08).toFixed(2))))}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-100"
-                  aria-label="Zoom in"
-                >
-                  <Plus size={13} />
-                </button>
-              </div>
-            </div>
+            <PreviewScaleToolbar
+              pageCount={previewPageCount}
+              blockCount={reviewableBlockCount}
+              overlayVisible={overlayVisible}
+              scaleMode={scaleMode}
+              zoom={zoom}
+              onToggleOverlay={() => setOverlayVisible((current) => !current)}
+              onSetScaleMode={(mode) => {
+                setScalePreference({
+                  contextKey: scaleContextKey,
+                  mode,
+                  zoom: getScaleZoomForMode(mode, previewPageCount),
+                });
+              }}
+              onZoomOut={() =>
+                setScalePreference({
+                  contextKey: scaleContextKey,
+                  mode: scaleMode,
+                  zoom: clampZoom(zoom - 0.08),
+                })
+              }
+              onZoomIn={() =>
+                setScalePreference({
+                  contextKey: scaleContextKey,
+                  mode: scaleMode,
+                  zoom: clampZoom(zoom + 0.08),
+                })
+              }
+            />
           </div>
 
-          <div className="grid gap-2.5 xl:grid-cols-[auto_auto_minmax(280px,1fr)_auto]">
-            <div className="inline-flex items-center rounded-[18px] border border-slate-200 bg-slate-50 p-1">
+          <div className="grid gap-2 xl:grid-cols-[auto_auto_minmax(260px,1fr)_auto]">
+            <div className="inline-flex items-center rounded-[16px] border border-slate-200 bg-slate-50 p-1">
               {(["sync", "async"] as ParseMode[]).map((mode) => (
                 <button
                   key={mode}
@@ -385,7 +421,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
                     setError(null);
                   }}
                   className={cn(
-                    "rounded-[14px] px-3 py-1.5 text-[13px] font-medium transition-colors",
+                    "rounded-[12px] px-3 py-1.5 text-[12px] font-medium transition-colors",
                     parseMode === mode ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-white",
                   )}
                 >
@@ -395,7 +431,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
             </div>
 
             {parseMode === "async" ? (
-              <div className="inline-flex items-center rounded-[18px] border border-slate-200 bg-slate-50 p-1">
+              <div className="inline-flex items-center rounded-[16px] border border-slate-200 bg-slate-50 p-1">
                 {(["local", "url"] as AsyncInputMode[]).map((mode) => (
                   <button
                     key={mode}
@@ -405,7 +441,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
                       setError(null);
                     }}
                     className={cn(
-                      "rounded-[14px] px-3 py-1.5 text-[13px] font-medium transition-colors",
+                      "rounded-[12px] px-3 py-1.5 text-[12px] font-medium transition-colors",
                       asyncInputMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:bg-white/70",
                     )}
                   >
@@ -419,7 +455,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
 
             <div className="flex flex-col gap-2.5 md:flex-row">
               {parseMode === "async" && asyncInputMode === "url" ? (
-                <label className="flex h-10 flex-1 items-center gap-2.5 rounded-[18px] border border-slate-200 bg-white px-3.5 text-[13px] text-slate-600 shadow-sm">
+                <label className="flex h-10 flex-1 items-center gap-2.5 rounded-[16px] border border-slate-200 bg-white px-3.5 text-[13px] text-slate-600 shadow-sm">
                   <Link2 size={16} className="text-slate-400" />
                   <input
                     type="url"
@@ -434,7 +470,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
                 >
                   <FileUp size={16} />
                   {selectedFile ? selectedFile.name : "Chọn PDF hoặc ảnh"}
@@ -456,7 +492,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
                 type="button"
                 onClick={parseMode === "sync" ? () => void handleRunSync() : () => void handleRunAsync()}
                 disabled={parseMode === "sync" ? !canRunSync : !canRunAsync || isBusy}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-[18px] bg-slate-900 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-[16px] bg-slate-900 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isBusy ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
                 {parseMode === "sync" ? "Chạy sync" : "Chạy async"}
@@ -466,7 +502,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   <Square size={14} />
                   Dừng
@@ -481,7 +517,7 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
         <div className="px-3.5 pt-3 md:px-4">
           <div
             className={cn(
-              "rounded-[18px] border px-3.5 py-2.5 text-[13px]",
+              "rounded-[16px] border px-3.5 py-2.5 text-[13px]",
               statusNotice.tone === "info" && "border-sky-200 bg-sky-50 text-sky-800",
               statusNotice.tone === "warning" && "border-amber-200 bg-amber-50 text-amber-800",
               statusNotice.tone === "error" && "border-rose-200 bg-rose-50 text-rose-800",
@@ -492,30 +528,31 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 gap-2.5 p-2.5 xl:grid-cols-[minmax(0,1.04fr)_minmax(320px,0.96fr)] xl:p-3">
-        <section className="flex min-h-0 flex-col rounded-[24px] border border-slate-200 bg-white shadow-[0_22px_54px_-38px_rgba(15,23,42,0.28)]">
-          <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 px-3.5 py-3 md:px-4">
+      <div className="grid min-h-0 flex-1 overflow-hidden gap-3 p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_22px_54px_-38px_rgba(15,23,42,0.28)]">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3.5 py-2.5 md:px-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Tài liệu gốc</p>
-              <h3 className="mt-1 text-[15px] font-semibold text-slate-900">
-                {viewerResult?.pages.length ? `${viewerResult.pages.length} trang` : "Preview"}
+              <h3 className="mt-1 text-[14px] font-semibold text-slate-900">
+                {previewPageCount ? `${previewPageCount} trang` : "Preview"}
               </h3>
             </div>
 
             {reviewableBlockCount > 0 ? (
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] text-slate-500">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500">
                 {reviewableBlockCount} block hữu ích
               </span>
             ) : null}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto px-2.5 py-2.5 md:px-3">
+          <div className="min-h-0 flex-1 overflow-hidden px-2.5 py-2.5 md:px-3">
             <DocumentPreview
               pages={viewerResult?.pages ?? []}
               previewSource={previewSource}
               activeBlockId={activeBlockId}
               hoveredBlockId={hoveredBlockId}
               overlayVisible={overlayVisible}
+              scaleMode={scaleMode}
               zoom={zoom}
               onBoxHover={setHoveredBlockId}
               onBoxClick={setActiveBlockId}
@@ -523,10 +560,10 @@ export function PaddleOcrWorkspace({ className }: PaddleOcrWorkspaceProps) {
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-col rounded-[24px] border border-slate-200 bg-white shadow-[0_22px_54px_-38px_rgba(15,23,42,0.28)]">
-          <div className="border-b border-slate-200 px-3.5 py-3 md:px-4">
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_22px_54px_-38px_rgba(15,23,42,0.28)]">
+          <div className="border-b border-slate-200 px-3.5 py-2.5 md:px-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Nội dung OCR</p>
-            <h3 className="mt-1 text-[15px] font-semibold text-slate-900">Quét xong sẽ hiện nội dung CV ở đây</h3>
+            <h3 className="mt-1 text-[14px] font-semibold text-slate-900">Quét xong sẽ hiện nội dung CV ở đây</h3>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 px-2.5 py-2.5 md:px-3">

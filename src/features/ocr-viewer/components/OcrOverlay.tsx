@@ -32,7 +32,7 @@ export function OcrOverlay({
   if (displayedWidth <= 0 || displayedHeight <= 0) return null;
 
   return (
-    <div className="absolute inset-0 pointer-events-none">
+    <div className="pointer-events-none absolute inset-0">
       {blocks.map((block) => {
         const scaled = getScaledBbox(
           block.bbox,
@@ -70,7 +70,7 @@ export function OcrOverlay({
           >
             {(isHovered || isActive) && scaled.width > 36 ? (
               <span className="pointer-events-none absolute left-0 top-0 -translate-y-[calc(100%+6px)] rounded-md bg-slate-950/92 px-2 py-1 text-[10px] font-medium text-white shadow-lg">
-                {block.type} • p{block.pageIndex + 1} • {Math.round(block.bbox.xMax - block.bbox.xMin)}×
+                {block.type} • p{block.pageIndex + 1} • {Math.round(block.bbox.xMax - block.bbox.xMin)}x
                 {Math.round(block.bbox.yMax - block.bbox.yMin)}
               </span>
             ) : null}
