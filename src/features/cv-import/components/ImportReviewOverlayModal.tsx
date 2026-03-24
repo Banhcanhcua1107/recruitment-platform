@@ -78,20 +78,20 @@ export function ImportReviewOverlayModal({
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-4 top-4 z-30 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 hover:text-slate-700 md:right-5 md:top-5"
+            className="absolute right-4 top-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 hover:text-slate-700 md:right-5 md:top-5"
             aria-label="Đóng modal review"
           >
-            <X size={18} />
+            <X size={17} />
           </button>
 
           {isLoading ? (
             <div className="flex h-full items-center justify-center bg-white">
               <div className="text-center">
-                <Loader2 size={28} className="mx-auto animate-spin text-blue-600" />
-                <p className="mt-4 text-lg font-semibold text-slate-900">
+                <Loader2 size={24} className="mx-auto animate-spin text-blue-600" />
+                <p className="mt-3 text-base font-semibold text-slate-900">
                   Đang tải hộp xem lại CV
                 </p>
-                <p className="mt-2 text-sm text-slate-500">
+                <p className="mt-2 text-[13px] text-slate-500">
                   Dữ liệu pipeline sẽ được hiển thị ngay khi sẵn sàng.
                 </p>
               </div>
@@ -99,15 +99,15 @@ export function ImportReviewOverlayModal({
           ) : errorMessage ? (
             <div className="flex h-full items-center justify-center bg-white">
               <div className="max-w-md text-center">
-                <p className="text-lg font-semibold text-slate-900">
+                <p className="text-base font-semibold text-slate-900">
                   Không thể mở bản xem lại
                 </p>
-                <p className="mt-2 text-sm leading-6 text-slate-500">{errorMessage}</p>
-                <div className="mt-5 flex items-center justify-center gap-3">
+                <p className="mt-2 text-[13px] leading-5 text-slate-500">{errorMessage}</p>
+                <div className="mt-4 flex items-center justify-center gap-2.5">
                   <button
                     type="button"
                     onClick={() => void loadDetail()}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+                    className="inline-flex h-9 items-center gap-2 rounded-[18px] bg-slate-900 px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-slate-800"
                   >
                     <RefreshCcw size={16} />
                     Tải lại
@@ -115,7 +115,7 @@ export function ImportReviewOverlayModal({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                    className="inline-flex h-9 items-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                   >
                     Đóng
                   </button>

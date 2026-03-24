@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { DocumentPreviewSource, NormalizedOcrPage } from "@/features/ocr-viewer/types";
+import { Page } from "react-pdf";
+import type { NormalizedOcrPage } from "@/features/ocr-viewer/types";
 import { OcrOverlay } from "@/features/ocr-viewer/components/OcrOverlay";
 
-interface PagePreviewProps {
+interface PdfPagePreviewProps {
   page: NormalizedOcrPage;
-  previewSource: DocumentPreviewSource | null;
   overlayVisible: boolean;
   zoom: number;
   activeBlockId: string | null;
@@ -14,9 +14,6 @@ interface PagePreviewProps {
   onBoxHover: (blockId: string | null) => void;
   onBoxClick: (blockId: string) => void;
   registerBoxRef?: (blockId: string, element: HTMLButtonElement | null) => void;
-  mediaContent?: React.ReactNode;
-  pageLabel?: string;
-  dimensionLabel?: string;
 }
 
 function useElementWidth<T extends HTMLElement>() {
@@ -43,9 +40,8 @@ function useElementWidth<T extends HTMLElement>() {
   return { ref, width };
 }
 
-export function PagePreview({
+export function PdfPagePreview({
   page,
-  previewSource,
   overlayVisible,
   zoom,
   activeBlockId,
@@ -53,30 +49,26 @@ export function PagePreview({
   onBoxHover,
   onBoxClick,
   registerBoxRef,
-  mediaContent,
-  pageLabel,
-  dimensionLabel,
-}: PagePreviewProps) {
+}: PdfPagePreviewProps) {
+  const [pdfOriginalWidth, setPdfOriginalWidth] = useState(page.originalWidth);
+  const [pdfOriginalHeight, setPdfOriginalHeight] = useState(page.originalHeight);
+  const [canvasDisplaySize, setCanvasDisplaySize] = useState({ width: 0, height: 0 });
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { ref: surfaceRef, width: availableWidth } = useElementWidth<HTMLDivElement>();
-  const imageRef = useRef<HTMLImageElement | null>(null);
-  const [imageDisplaySize, setImageDisplaySize] = useState({ width: 0, height: 0 });
-  const effectiveOriginalWidth = page.originalWidth || 1;
-  const effectiveOriginalHeight = page.originalHeight || 1;
-  const pageImageUrl = page.imageUrl || (previewSource?.kind === "image" ? previewSource.url ?? undefined : undefined);
-  const imageWidth = useMemo(() => {
-    if (!page.originalWidth) return undefined;
-    const baseWidth = Math.floor(page.originalWidth * zoom * 0.9);
-    if (!availableWidth) return Math.max(220, baseWidth);
-    return Math.max(220, Math.min(baseWidth, Math.floor(availableWidth)));
-  }, [availableWidth, page.originalWidth, zoom]);
+  const effectiveOriginalWidth = pdfOriginalWidth || page.originalWidth || 1;
+  const effectiveOriginalHeight = pdfOriginalHeight || page.originalHeight || 1;
+  const renderedPdfWidth = useMemo(() => {
+    if (!availableWidth) return undefined;
+    return Math.max(260, Math.floor(availableWidth * zoom * 0.9));
+  }, [availableWidth, zoom]);
 
   useEffect(() => {
-    const element = imageRef.current;
-    if (!element || !pageImageUrl) return;
+    const element = canvasRef.current;
+    if (!element) return;
 
     const update = () => {
       const rect = element.getBoundingClientRect();
-      setImageDisplaySize({ width: rect.width, height: rect.height });
+      setCanvasDisplaySize({ width: rect.width, height: rect.height });
     };
 
     update();
@@ -89,52 +81,46 @@ export function PagePreview({
       observer.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [pageImageUrl]);
-
-  const displayedWidth = pageImageUrl ? imageDisplaySize.width : page.originalWidth;
-  const displayedHeight = pageImageUrl ? imageDisplaySize.height : page.originalHeight;
+  }, [renderedPdfWidth]);
 
   return (
     <section className="rounded-[20px] border border-slate-200/90 bg-white p-2.5 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.22)]">
       <div className="mb-2.5 flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Page</p>
-          <h3 className="mt-1 text-[13px] font-semibold text-slate-900">{pageLabel ?? page.pageIndex + 1}</h3>
+          <h3 className="mt-1 text-[13px] font-semibold text-slate-900">{page.pageIndex + 1}</h3>
         </div>
         <div className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500">
-          {dimensionLabel ?? `${Math.round(page.originalWidth)} × ${Math.round(page.originalHeight)}`}
+          {Math.round(effectiveOriginalWidth)} × {Math.round(effectiveOriginalHeight)}
         </div>
       </div>
 
       <div ref={surfaceRef} className="overflow-x-auto rounded-[16px] border border-slate-200 bg-slate-100/70 p-2">
         <div className="relative mx-auto inline-block">
-          {mediaContent ?? (
-            <>
-              {pageImageUrl ? (
-                // Preview images can be local blob URLs, so next/image is not a fit here.
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  ref={imageRef}
-                  alt={`OCR page ${page.pageIndex + 1}`}
-                  src={pageImageUrl}
-                  className="block h-auto max-w-full rounded-[14px] shadow-sm"
-                  style={{ width: imageWidth }}
-                />
-              ) : (
-                <div className="flex min-h-[280px] w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
-                  Preview unavailable for this page.
-                </div>
-              )}
-            </>
-          )}
+          <Page
+            pageNumber={page.pageIndex + 1}
+            width={renderedPdfWidth}
+            canvasRef={canvasRef}
+            renderAnnotationLayer={false}
+            renderTextLayer={false}
+            loading={
+              <div className="flex min-h-[280px] w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
+                Rendering page {page.pageIndex + 1}...
+              </div>
+            }
+            onRenderSuccess={(pdfPage) => {
+              setPdfOriginalWidth(pdfPage.originalWidth || page.originalWidth);
+              setPdfOriginalHeight(pdfPage.originalHeight || page.originalHeight);
+            }}
+          />
 
           {overlayVisible ? (
             <OcrOverlay
               blocks={page.blocks}
               originalWidth={effectiveOriginalWidth}
               originalHeight={effectiveOriginalHeight}
-              displayedWidth={displayedWidth}
-              displayedHeight={displayedHeight}
+              displayedWidth={canvasDisplaySize.width}
+              displayedHeight={canvasDisplaySize.height}
               activeBlockId={activeBlockId}
               hoveredBlockId={hoveredBlockId}
               onBoxHover={onBoxHover}
