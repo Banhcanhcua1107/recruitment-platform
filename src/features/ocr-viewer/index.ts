@@ -3,10 +3,13 @@ export { PaddleOcrWorkspaceModal } from "@/features/ocr-viewer/PaddleOcrWorkspac
 export { PersistedOcrReviewPanel } from "@/features/ocr-viewer/PersistedOcrReviewPanel";
 export {
   buildSourceTrace,
+  canonicalizeSectionTitle,
   detectSectionHeader,
   extractContactInfo,
   extractTechStack,
+  groupSemanticBlocksIntoSections,
   groupBlocksIntoRuns,
+  mergeBlocksIntoSemanticBlocks,
   parseEducationSection,
   parseExperienceSection,
   parseProjectSection,
@@ -24,6 +27,8 @@ export type {
   SemanticLanguageItem,
   SemanticLink,
   SemanticListItem,
+  SemanticMergedBlock,
+  SemanticMergedBlockType,
   SemanticOtherItem,
   SemanticParagraphItem,
   SemanticProjectItem,

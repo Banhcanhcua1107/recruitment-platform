@@ -1,5 +1,7 @@
+import type { OcrBbox } from "@/features/ocr-viewer/types";
+
 export type SemanticSectionType =
-  | "section"
+  | "summary"
   | "contact_info"
   | "skill_group"
   | "education"
@@ -24,6 +26,20 @@ export type SemanticItemType =
 export interface SemanticSourceTrace {
   sourceBlockIds: string[];
   pageIndexes: number[];
+}
+
+export type SemanticMergedBlockType = "header" | "paragraph" | "list_item" | "other";
+
+export interface SemanticMergedBlock extends SemanticSourceTrace {
+  id: string;
+  type: SemanticMergedBlockType;
+  text: string;
+  bbox: OcrBbox;
+  pageIndex: number;
+  order: number;
+  lines: string[];
+  sectionTitle: string;
+  sectionType: SemanticSectionType;
 }
 
 export interface SemanticLink {

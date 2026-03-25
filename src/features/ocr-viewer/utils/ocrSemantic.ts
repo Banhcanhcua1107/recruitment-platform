@@ -14,6 +14,7 @@ import type {
   SemanticLanguageItem,
   SemanticLink,
   SemanticListItem,
+  SemanticMergedBlock,
   SemanticOtherItem,
   SemanticParagraphItem,
   SemanticProjectItem,
@@ -40,8 +41,8 @@ interface SectionHeaderMatch {
 interface SectionDraft {
   title: string;
   type: SemanticSectionType;
-  headerBlock?: PreparedBlock;
-  blocks: PreparedBlock[];
+  headerBlock?: SemanticMergedBlock;
+  blocks: SemanticMergedBlock[];
 }
 
 interface GroupedRun extends SemanticSourceTrace {
@@ -49,7 +50,7 @@ interface GroupedRun extends SemanticSourceTrace {
   kind: RunKind;
   text: string;
   lines: string[];
-  blocks: PreparedBlock[];
+  blocks: Array<PreparedBlock | SemanticMergedBlock>;
   startY: number;
   endY: number;
   firstPageIndex: number;
@@ -79,18 +80,24 @@ interface AliasDefinition {
 
 const HEADER_TYPES = new Set(["title", "heading", "header", "section"]);
 const NOISE_TYPES = new Set(["figure", "image", "icon", "watermark", "stamp", "seal", "page_number"]);
+const FALLBACK_SECTION_TITLE = "Nội dung khác";
 
 const SECTION_ALIASES: AliasDefinition[] = [
   {
-    type: "section",
+    type: "summary",
     canonicalTitle: "Career Objective",
     aliases: [
       "MUC TIEU NGHE NGHIEP",
+      "MUC TIEU CA NHAN",
+      "MUC TIEU CONG VIEC",
       "CAREER OBJECTIVE",
       "CAREER GOAL",
       "OBJECTIVE",
+      "PERSONAL OBJECTIVE",
       "PROFILE",
+      "PERSONAL PROFILE",
       "SUMMARY",
+      "CAREER SUMMARY",
       "PROFESSIONAL SUMMARY",
       "TOM TAT",
       "GIOI THIEU BAN THAN",
@@ -109,7 +116,7 @@ const SECTION_ALIASES: AliasDefinition[] = [
   {
     type: "project",
     canonicalTitle: "Projects",
-    aliases: ["DU AN", "PROJECT", "PROJECTS", "ACADEMIC PROJECTS"],
+    aliases: ["DU AN", "DU AN HOC TAP", "PROJECT", "PROJECTS", "ACADEMIC PROJECTS", "PROJECT EXPERIENCE"],
   },
   {
     type: "experience",
@@ -117,6 +124,7 @@ const SECTION_ALIASES: AliasDefinition[] = [
     aliases: [
       "KINH NGHIEM",
       "WORK EXPERIENCE",
+      "WORK HISTORY",
       "EXPERIENCE",
       "PROFESSIONAL EXPERIENCE",
       "EMPLOYMENT HISTORY",
@@ -134,9 +142,11 @@ const SECTION_ALIASES: AliasDefinition[] = [
       "THONG TIN CA NHAN",
       "LIEN HE",
       "CONTACT",
+      "CONTACT DETAILS",
       "CONTACT INFORMATION",
       "PERSONAL INFORMATION",
       "PERSONAL INFO",
+      "PERSONAL DETAILS",
     ],
   },
   {
@@ -335,7 +345,7 @@ function normalizeKey(text: string) {
 }
 
 function normalizeInlineWhitespace(text: string) {
-  return text.replace(/[ \\t]+/g, " ");
+  return text.replace(/[ \t]+/g, " ");
 }
 
 export function cleanSemanticText(text: string) {
@@ -351,14 +361,14 @@ export function cleanSemanticText(text: string) {
   cleaned = cleaned.replace(/\bwww\s*\.\s*/gi, "www.");
   cleaned = cleaned.replace(/(?<=\d)\s*-\s*(?=\d)/g, " - ");
   cleaned = cleaned.replace(/\s+([,.;:!?])/g, "$1");
-  cleaned = cleaned.replace(/([,.;:!?])(?![\s\n]|$)/g, "$1 ");
+  cleaned = cleaned.replace(/([,;:!?])(?![\s\n]|$)/g, "$1 ");
   cleaned = cleaned
     .split("\n")
     .map((line) => normalizeInlineWhitespace(line).trim())
     .filter(Boolean)
     .join("\n");
 
-  return cleaned.replace(/[ \\t]{2,}/g, " ").trim();
+  return cleaned.replace(/[ \t]{2,}/g, " ").trim();
 }
 
 function uniqueStrings(values: string[]) {
@@ -495,20 +505,50 @@ function matchSectionAlias(text: string) {
   return null;
 }
 
-export function detectSectionHeader(text: string, block?: Pick<NormalizedOcrBlock, "type" | "bbox">): SectionHeaderMatch | null {
+export function canonicalizeSectionTitle(text: string): SectionHeaderMatch | null {
   const cleaned = cleanSemanticText(text);
   if (!cleaned) return null;
 
   const aliasMatch = matchSectionAlias(cleaned);
-  if (aliasMatch) {
-    return {
-      title: cleaned,
-      type: aliasMatch.type,
-    };
+  return aliasMatch
+    ? {
+        title: cleaned,
+        type: aliasMatch.type,
+      }
+    : null;
+}
+
+function isLikelyHeaderFallback(text: string, block?: Pick<NormalizedOcrBlock, "type" | "bbox">) {
+  const cleaned = cleanSemanticText(text);
+  if (!cleaned) return false;
+  if (isBulletLine(cleaned)) return false;
+  if (wordCount(cleaned) > 7 || cleaned.length > 64) return false;
+  if (/[.!?]$/.test(cleaned)) return false;
+  if ((cleaned.match(EMAIL_PATTERN) ?? []).length > 0 || (cleaned.match(URL_PATTERN) ?? []).length > 0 || isLikelyPhone(cleaned)) {
+    return false;
   }
 
   const normalizedType = block ? normalizeBlockType(block.type) : "";
-  if (!HEADER_TYPES.has(normalizedType) && !isHeaderLikeText(cleaned)) {
+  if (HEADER_TYPES.has(normalizedType)) return true;
+  if (!isHeaderLikeText(cleaned)) return false;
+
+  const width = block ? Math.max(1, block.bbox.xMax - block.bbox.xMin) : 0;
+  const height = block ? Math.max(1, block.bbox.yMax - block.bbox.yMin) : 0;
+  if (block && width > 520 && height < 14 && wordCount(cleaned) >= 5) return false;
+
+  return true;
+}
+
+export function detectSectionHeader(text: string, block?: Pick<NormalizedOcrBlock, "type" | "bbox">): SectionHeaderMatch | null {
+  const cleaned = cleanSemanticText(text);
+  if (!cleaned) return null;
+
+  const canonical = canonicalizeSectionTitle(cleaned);
+  if (canonical) {
+    return canonical;
+  }
+
+  if (!isLikelyHeaderFallback(cleaned, block)) {
     return null;
   }
 
@@ -518,29 +558,261 @@ export function detectSectionHeader(text: string, block?: Pick<NormalizedOcrBloc
   };
 }
 
-function partitionSections(blocks: PreparedBlock[]) {
-  const sections: SectionDraft[] = [];
-  let current: SectionDraft | null = null;
+function looksLikeIdentityText(text: string, pageIndex: number, bbox: NormalizedOcrBlock["bbox"]) {
+  if (pageIndex !== 0) return false;
+  if (bbox.yMin > 280) return false;
+  if (wordCount(text) < 2) return false;
+  if (wordCount(text) > 8) return false;
+  if (text.replace(/\D/g, "").length >= 8) return false;
+  if (/[.@]/.test(text)) return false;
+  return isHeaderLikeText(text);
+}
+
+function mergeBboxes(blocks: Array<Pick<NormalizedOcrBlock, "bbox">>) {
+  return {
+    xMin: Math.min(...blocks.map((block) => block.bbox.xMin)),
+    yMin: Math.min(...blocks.map((block) => block.bbox.yMin)),
+    xMax: Math.max(...blocks.map((block) => block.bbox.xMax)),
+    yMax: Math.max(...blocks.map((block) => block.bbox.yMax)),
+  };
+}
+
+function paragraphGapThreshold(previous: PreparedBlock) {
+  const blockHeight = Math.max(1, previous.bbox.yMax - previous.bbox.yMin);
+  return Math.max(18, blockHeight * 1.35);
+}
+
+function horizontalOverlapRatio(left: Pick<NormalizedOcrBlock, "bbox">, right: Pick<NormalizedOcrBlock, "bbox">) {
+  const overlap = Math.max(0, Math.min(left.bbox.xMax, right.bbox.xMax) - Math.max(left.bbox.xMin, right.bbox.xMin));
+  const minWidth = Math.max(
+    1,
+    Math.min(left.bbox.xMax - left.bbox.xMin, right.bbox.xMax - right.bbox.xMin),
+  );
+  return overlap / minWidth;
+}
+
+function isSameColumn(left: Pick<NormalizedOcrBlock, "bbox">, right: Pick<NormalizedOcrBlock, "bbox">) {
+  const leftWidth = Math.max(1, left.bbox.xMax - left.bbox.xMin);
+  const shift = Math.abs(left.bbox.xMin - right.bbox.xMin);
+  const overlapRatio = horizontalOverlapRatio(left, right);
+  return shift <= Math.max(42, leftWidth * 0.2) || overlapRatio >= 0.58;
+}
+
+function joinParagraphLines(lines: string[]) {
+  const result: string[] = [];
+
+  for (const line of lines.map((entry) => cleanSemanticText(entry)).filter(Boolean)) {
+    const previous = result[result.length - 1];
+    if (!previous) {
+      result.push(line);
+      continue;
+    }
+
+    if (previous.endsWith("-") && /^[A-Za-zÀ-ỹ]/.test(line)) {
+      result[result.length - 1] = `${previous.slice(0, -1)}${line}`;
+      continue;
+    }
+
+    result[result.length - 1] = `${previous} ${line}`.replace(/\s+/g, " ").trim();
+  }
+
+  return cleanSemanticText(result.join(" "));
+}
+
+function createMergedBlock(
+  blocks: PreparedBlock[],
+  type: SemanticMergedBlock["type"],
+  sectionTitle: string,
+  sectionType: SemanticSectionType,
+  textOverride?: string,
+  linesOverride?: string[],
+): SemanticMergedBlock {
+  const trace = buildSourceTraceFromBlocks(blocks);
+  const lines = linesOverride ?? blocks.flatMap((block) => splitLines(block.cleanedText));
+
+  return {
+    id: `merged-${type}-${blocks[0]?.id ?? Math.random().toString(36).slice(2)}`,
+    type,
+    text: textOverride ?? joinParagraphLines(lines),
+    bbox: mergeBboxes(blocks),
+    pageIndex: blocks[0]?.pageIndex ?? 0,
+    order: blocks[0]?.order ?? 0,
+    lines,
+    sectionTitle,
+    sectionType,
+    ...trace,
+  };
+}
+
+function shouldMergeIntoParagraph(
+  current: PreparedBlock[],
+  candidate: PreparedBlock,
+  sectionTitle: string,
+  sectionType: SemanticSectionType,
+) {
+  const previous = current[current.length - 1];
+  if (!previous) return false;
+  if (candidate.pageIndex !== previous.pageIndex) return false;
+  if (detectSectionHeader(candidate.cleanedText, candidate)) return false;
+  if (splitLines(candidate.cleanedText).every(isBulletLine)) return false;
+  if (sectionType === "contact_info") return false;
+
+  const verticalGap = candidate.bbox.yMin - previous.bbox.yMax;
+  if (verticalGap > paragraphGapThreshold(previous)) return false;
+  if (!isSameColumn(previous, candidate)) return false;
+  if (looksLikeIdentityText(candidate.cleanedText, candidate.pageIndex, candidate.bbox)) return false;
+
+  const normalizedSectionTitle = cleanSemanticText(sectionTitle);
+  const currentHeader = detectSectionHeader(previous.cleanedText, previous);
+  if (currentHeader && normalizedSectionTitle && currentHeader.title !== normalizedSectionTitle) {
+    return false;
+  }
+
+  return true;
+}
+
+function ensurePreparedBlocks(input: PreparedBlock[] | NormalizedOcrBlock[] | SemanticInput) {
+  if (Array.isArray(input) && input.length > 0 && "cleanedText" in input[0]) {
+    return input as PreparedBlock[];
+  }
+
+  return prepareBlocks(input as SemanticInput);
+}
+
+export function mergeBlocksIntoSemanticBlocks(input: PreparedBlock[] | NormalizedOcrBlock[] | SemanticInput) {
+  const blocks = ensurePreparedBlocks(input);
+  const merged: SemanticMergedBlock[] = [];
+  let currentParagraph: PreparedBlock[] = [];
+  let currentSectionTitle = "";
+  let currentSectionType: SemanticSectionType = "other";
+
+  const flushParagraph = () => {
+    if (!currentParagraph.length) return;
+    merged.push(createMergedBlock(currentParagraph, "paragraph", currentSectionTitle, currentSectionType));
+    currentParagraph = [];
+  };
 
   for (const block of blocks) {
     const header = detectSectionHeader(block.cleanedText, block);
     if (header) {
+      flushParagraph();
+      currentSectionTitle = header.title;
+      currentSectionType = header.type;
+      merged.push(
+        createMergedBlock([block], "header", currentSectionTitle, currentSectionType, header.title, [header.title]),
+      );
+      continue;
+    }
+
+    const blockLines = splitLines(block.cleanedText);
+    const listLines = blockLines.filter(isBulletLine).map(stripBullet).filter(Boolean);
+    if (blockLines.length > 0 && listLines.length === blockLines.length) {
+      flushParagraph();
+      for (const line of listLines) {
+        merged.push(createMergedBlock([block], "list_item", currentSectionTitle, currentSectionType, line, [line]));
+      }
+      continue;
+    }
+
+    if (currentParagraph.length && shouldMergeIntoParagraph(currentParagraph, block, currentSectionTitle, currentSectionType)) {
+      currentParagraph.push(block);
+      continue;
+    }
+
+    flushParagraph();
+    currentParagraph = [block];
+  }
+
+  flushParagraph();
+  return merged;
+}
+
+function canGroupListItems(left: SemanticMergedBlock, right: SemanticMergedBlock) {
+  if (left.pageIndex !== right.pageIndex) return false;
+  if (left.sectionTitle !== right.sectionTitle || left.sectionType !== right.sectionType) return false;
+  if (!isSameColumn(left, right)) return false;
+  return right.bbox.yMin - left.bbox.yMax <= Math.max(20, (left.bbox.yMax - left.bbox.yMin) * 1.45);
+}
+
+function mergedBlocksToRuns(blocks: SemanticMergedBlock[]) {
+  const runs: GroupedRun[] = [];
+  let currentList: SemanticMergedBlock[] = [];
+
+  const flushList = () => {
+    if (!currentList.length) return;
+    const trace = {
+      sourceBlockIds: uniqueStrings(currentList.flatMap((block) => block.sourceBlockIds)),
+      pageIndexes: Array.from(new Set(currentList.flatMap((block) => block.pageIndexes))).sort((left, right) => left - right),
+    };
+    runs.push({
+      id: `run-list-${runs.length + 1}-${currentList[0].id}`,
+      kind: "list",
+      text: currentList.map((block) => block.text).join("\n"),
+      lines: currentList.flatMap((block) => block.lines.map(stripBullet).filter(Boolean)),
+      blocks: [...currentList],
+      startY: currentList[0].bbox.yMin,
+      endY: currentList[currentList.length - 1].bbox.yMax,
+      firstPageIndex: currentList[0].pageIndex,
+      ...trace,
+    });
+    currentList = [];
+  };
+
+  for (const block of blocks.filter((entry) => entry.type !== "header")) {
+    if (block.type === "list_item") {
+      if (currentList.length > 0 && !canGroupListItems(currentList[currentList.length - 1], block)) {
+        flushList();
+      }
+      currentList.push(block);
+      continue;
+    }
+
+    flushList();
+    runs.push({
+      id: `run-${runs.length + 1}-${block.id}`,
+      kind: "paragraph",
+      text: block.text,
+      lines: block.lines.length ? block.lines : [block.text],
+      blocks: [block],
+      startY: block.bbox.yMin,
+      endY: block.bbox.yMax,
+      firstPageIndex: block.pageIndex,
+      ...buildSourceTraceFromBlocks([{ id: block.id, pageIndex: block.pageIndex }]),
+    });
+  }
+
+  flushList();
+  return runs.filter((run) => run.text);
+}
+
+function partitionMergedBlocks(blocks: SemanticMergedBlock[]) {
+  const sections: SectionDraft[] = [];
+  let current: SectionDraft | null = null;
+
+  for (const block of blocks) {
+    if (block.type === "header") {
       if (current) {
         sections.push(current);
       }
       current = {
-        title: header.title,
-        type: header.type,
+        title: block.sectionTitle || block.text || FALLBACK_SECTION_TITLE,
+        type: block.sectionType,
         headerBlock: block,
         blocks: [],
       };
       continue;
     }
 
-    if (!current) {
+    const nextTitle: string = block.sectionTitle || current?.title || FALLBACK_SECTION_TITLE;
+    const nextType: SemanticSectionType = block.sectionType || current?.type || "other";
+
+    if (!current || current.title !== nextTitle || current.type !== nextType) {
+      if (current) {
+        sections.push(current);
+      }
       current = {
-        title: "Other",
-        type: "other",
+        title: nextTitle,
+        type: nextType,
         blocks: [],
       };
     }
@@ -570,88 +842,12 @@ function isBulletLine(line: string) {
   return BULLET_PATTERN.test(line.trim());
 }
 
-function looksLikeIdentityLine(block: PreparedBlock) {
-  if (block.pageIndex !== 0) return false;
-  if (block.bbox.yMin > 280) return false;
-  if (wordCount(block.cleanedText) > 8) return false;
-  if (/[.@]/.test(block.cleanedText)) return false;
-  return isHeaderLikeText(block.cleanedText);
-}
-
-function gapThreshold(previous: PreparedBlock) {
-  const blockHeight = Math.max(1, previous.bbox.yMax - previous.bbox.yMin);
-  return Math.max(18, blockHeight * 1.3);
-}
-
-function shouldStartNewRun(current: PreparedBlock[], candidate: PreparedBlock) {
-  const previous = current[current.length - 1];
-  if (!previous) return false;
-  if (candidate.pageIndex !== previous.pageIndex) return true;
-
-  const currentLines = splitLines(previous.cleanedText);
-  const candidateLines = splitLines(candidate.cleanedText);
-  const currentIsList = currentLines.every(isBulletLine);
-  const candidateIsList = candidateLines.every(isBulletLine);
-  if (currentIsList !== candidateIsList) return true;
-
-  const verticalGap = candidate.bbox.yMin - previous.bbox.yMax;
-  if (verticalGap > gapThreshold(previous)) return true;
-
-  const horizontalShift = Math.abs(candidate.bbox.xMin - previous.bbox.xMin);
-  if (horizontalShift > Math.max(32, (previous.bbox.xMax - previous.bbox.xMin) * 0.25)) return true;
-
-  return false;
-}
-
-export function groupBlocksIntoRuns(input: PreparedBlock[] | NormalizedOcrBlock[]) {
-  const blocks =
-    input.length > 0 && "cleanedText" in input[0]
-      ? (input as PreparedBlock[])
-      : prepareBlocks(input as NormalizedOcrBlock[]);
-
-  const runs: GroupedRun[] = [];
-  let current: PreparedBlock[] = [];
-
-  const pushRun = () => {
-    if (!current.length) return;
-    const kind: RunKind = current.every((block) => splitLines(block.cleanedText).every(isBulletLine)) ? "list" : "paragraph";
-    const lines =
-      kind === "list"
-        ? current.flatMap((block) => splitLines(block.cleanedText).map(stripBullet).filter(Boolean))
-        : current.flatMap((block) => splitLines(block.cleanedText));
-    const text = kind === "list" ? lines.join("\n") : lines.join(" ");
-    const trace = buildSourceTraceFromBlocks(current);
-    runs.push({
-      id: `run-${runs.length + 1}-${current[0].id}`,
-      kind,
-      text: cleanSemanticText(text),
-      lines: kind === "list" ? lines : [cleanSemanticText(text)],
-      blocks: [...current],
-      startY: current[0].bbox.yMin,
-      endY: current[current.length - 1].bbox.yMax,
-      firstPageIndex: current[0].pageIndex,
-      ...trace,
-    });
-    current = [];
-  };
-
-  for (const block of blocks) {
-    if (!current.length) {
-      current = [block];
-      continue;
-    }
-
-    if (shouldStartNewRun(current, block)) {
-      pushRun();
-      current = [block];
-      continue;
-    }
-
-    current.push(block);
+export function groupBlocksIntoRuns(input: PreparedBlock[] | NormalizedOcrBlock[] | SemanticMergedBlock[]) {
+  if (Array.isArray(input) && input.length > 0 && "sectionTitle" in input[0] && "lines" in input[0] && !("cleanedText" in input[0])) {
+    return mergedBlocksToRuns(input as SemanticMergedBlock[]);
   }
 
-  pushRun();
-  return runs.filter((run) => run.text);
+  return mergedBlocksToRuns(mergeBlocksIntoSemanticBlocks(input as PreparedBlock[] | NormalizedOcrBlock[]));
 }
 
 function findDateRange(text: string): DateRangeMatch | null {
@@ -732,14 +928,12 @@ function isLikelyContactLink(text: string) {
   return /(linkedin|github|facebook|portfolio|behance|dribbble|www\.|https?:\/\/)/i.test(text);
 }
 
-export function extractContactInfo(input: PreparedBlock[] | NormalizedOcrBlock[]) {
-  const blocks =
-    input.length > 0 && "cleanedText" in input[0]
-      ? (input as PreparedBlock[])
-      : prepareBlocks(input as NormalizedOcrBlock[]);
-  const sections = partitionSections(blocks);
+function extractContactInfoFromMergedBlocks(mergedBlocks: SemanticMergedBlock[]) {
+  const sections = partitionMergedBlocks(mergedBlocks);
   const contactSections = sections.filter((section) => section.type === "contact_info");
-  const topRegionBlocks = blocks.filter((block) => block.pageIndex === 0 && block.bbox.yMin <= 420);
+  const topRegionBlocks = mergedBlocks.filter(
+    (block) => block.type !== "header" && block.pageIndex === 0 && block.bbox.yMin <= 420,
+  );
   const prioritized = contactSections.flatMap((section) => section.blocks);
   const scanBlocks = prioritized.length > 0 ? prioritized : topRegionBlocks;
 
@@ -754,8 +948,8 @@ export function extractContactInfo(input: PreparedBlock[] | NormalizedOcrBlock[]
   };
 
   for (const block of scanBlocks) {
-    const text = block.cleanedText;
-    if (!text || looksLikeIdentityLine(block)) continue;
+    const text = cleanSemanticText(block.text);
+    if (!text || looksLikeIdentityText(text, block.pageIndex, block.bbox)) continue;
 
     const emails = text.match(EMAIL_PATTERN) ?? [];
     const urls = extractLinks(text);
@@ -802,6 +996,10 @@ export function extractContactInfo(input: PreparedBlock[] | NormalizedOcrBlock[]
     pageIndexes: Array.from(accumulator.pageIndexes).sort((left, right) => left - right),
     otherLines: uniqueStrings(accumulator.otherLines),
   };
+}
+
+export function extractContactInfo(input: PreparedBlock[] | NormalizedOcrBlock[]) {
+  return extractContactInfoFromMergedBlocks(mergeBlocksIntoSemanticBlocks(input));
 }
 
 function buildContactOutput(contactInfo: ReturnType<typeof extractContactInfo>): SemanticContact {
@@ -1392,9 +1590,23 @@ function buildSectionItems(section: SectionDraft, contact: ReturnType<typeof ext
   return buildGenericItems(runs, section.type);
 }
 
+function getDefaultSectionTitle(type: SemanticSectionType) {
+  if (type === "summary") return "Mục tiêu nghề nghiệp";
+  if (type === "contact_info") return "Thông tin cá nhân";
+  if (type === "skill_group") return "Kỹ năng";
+  if (type === "education") return "Học vấn";
+  if (type === "project") return "Dự án";
+  if (type === "experience") return "Kinh nghiệm";
+  if (type === "certification") return "Chứng chỉ";
+  if (type === "language") return "Ngôn ngữ";
+  return FALLBACK_SECTION_TITLE;
+}
+
 function createSection(section: SectionDraft, contact: ReturnType<typeof extractContactInfo>): SemanticSection | null {
   const nonIdentityBlocks =
-    section.type === "other" ? section.blocks.filter((block) => !looksLikeIdentityLine(block)) : section.blocks;
+    section.type === "other"
+      ? section.blocks.filter((block) => !looksLikeIdentityText(block.text, block.pageIndex, block.bbox))
+      : section.blocks;
   const sourceBlocks = section.headerBlock ? [section.headerBlock, ...nonIdentityBlocks] : nonIdentityBlocks;
   const items = buildSectionItems({ ...section, blocks: nonIdentityBlocks }, contact).filter((item) => {
     if (item.type === "paragraph") return Boolean(item.text);
@@ -1424,20 +1636,31 @@ function createSection(section: SectionDraft, contact: ReturnType<typeof extract
   if (!items.length) return null;
 
   return {
-    title: section.title || "Other",
+    title: cleanSemanticText(section.title) || getDefaultSectionTitle(section.type),
     type: section.type,
     items,
     ...buildSourceTraceFromBlocks(sourceBlocks),
   };
 }
 
-export function transformOcrToSemanticJson(input: SemanticInput): SemanticCvJson {
-  const preparedBlocks = prepareBlocks(input);
-  const contactInfo = extractContactInfo(preparedBlocks);
-  const contact = buildContactOutput(contactInfo);
-  const sections = partitionSections(preparedBlocks)
+export function groupSemanticBlocksIntoSections(input: NormalizedOcrBlock[] | SemanticMergedBlock[]) {
+  const mergedBlocks =
+    Array.isArray(input) && input.length > 0 && "sectionTitle" in input[0]
+      ? (input as SemanticMergedBlock[])
+      : mergeBlocksIntoSemanticBlocks(input as NormalizedOcrBlock[]);
+  const contactInfo = extractContactInfoFromMergedBlocks(mergedBlocks);
+
+  return partitionMergedBlocks(mergedBlocks)
     .map((section) => createSection(section, contactInfo))
     .filter(Boolean) as SemanticSection[];
+}
+
+export function transformOcrToSemanticJson(input: SemanticInput): SemanticCvJson {
+  const preparedBlocks = prepareBlocks(input);
+  const mergedBlocks = mergeBlocksIntoSemanticBlocks(preparedBlocks);
+  const contactInfo = extractContactInfoFromMergedBlocks(mergedBlocks);
+  const contact = buildContactOutput(contactInfo);
+  const sections = groupSemanticBlocksIntoSections(mergedBlocks);
 
   return {
     contact,

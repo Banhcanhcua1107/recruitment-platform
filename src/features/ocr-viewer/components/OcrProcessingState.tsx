@@ -40,62 +40,64 @@ export function OcrProcessingState({
   const progressPercent = getProgressPercent(steps);
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-[480px] flex-col justify-center px-2 py-2.5">
-      <div className="rounded-[20px] border border-slate-200 bg-white p-3.5 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.28)]">
-        <div className="flex items-start gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[16px] bg-cyan-50 text-cyan-700">
-            <ScanSearch size={17} />
+    <div className="mx-auto flex h-full w-full flex-col justify-center px-1.5 py-3 md:px-2">
+      <div className="min-h-[460px] rounded-[28px] border border-slate-200 bg-white p-4 shadow-[0_26px_60px_-40px_rgba(15,23,42,0.32)] md:p-5 lg:p-6">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[18px] bg-cyan-50 text-cyan-700">
+            <ScanSearch size={18} />
           </div>
 
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-700">Đang phân tích CV</p>
-            <h3 className="mt-1 text-[15px] font-semibold text-slate-900">{title}</h3>
-            <p className="mt-1 text-[12px] leading-5 text-slate-500">{description}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-700">
+              Dang phan tich CV
+            </p>
+            <h3 className="mt-1 text-[19px] font-semibold leading-7 text-slate-900">{title}</h3>
+            <p className="mt-1.5 text-[13px] leading-6 text-slate-500">{description}</p>
           </div>
         </div>
 
         {statusText ? (
-          <div className="mt-3 rounded-[16px] border border-cyan-100 bg-cyan-50/70 px-3 py-2 text-[12px] text-cyan-900">
+          <div className="mt-4 rounded-[18px] border border-cyan-100 bg-cyan-50/70 px-3.5 py-2.5 text-[13px] text-cyan-900">
             {statusText}
           </div>
         ) : null}
 
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
           <div
             className="h-full rounded-full bg-gradient-to-r from-cyan-500 via-sky-500 to-cyan-500 transition-[width] duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
 
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-4 space-y-2">
           {steps.map((step) => (
             <div
               key={step.id}
               className={cn(
-                "rounded-[16px] border px-3 py-2",
+                "rounded-[18px] border px-3.5 py-3",
                 step.state === "done" && "border-emerald-100 bg-emerald-50/60",
                 step.state === "processing" && "border-cyan-100 bg-cyan-50/70",
                 step.state === "pending" && "border-slate-200 bg-slate-50",
               )}
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2.5">
                   {step.state === "done" ? (
-                    <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />
+                    <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
                   ) : step.state === "processing" ? (
-                    <Loader2 size={14} className="shrink-0 animate-spin text-cyan-600" />
+                    <Loader2 size={15} className="shrink-0 animate-spin text-cyan-600" />
                   ) : (
-                    <CircleDashed size={14} className="shrink-0 text-slate-400" />
+                    <CircleDashed size={15} className="shrink-0 text-slate-400" />
                   )}
-                  <p className="truncate text-[12px] font-medium text-slate-800">{step.label}</p>
+                  <p className="truncate text-[13px] font-medium text-slate-800">{step.label}</p>
                 </div>
 
                 <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  {step.state === "done" ? "Xong" : step.state === "processing" ? "Đang chạy" : "Chờ"}
+                  {step.state === "done" ? "Xong" : step.state === "processing" ? "Dang chay" : "Cho"}
                 </span>
               </div>
 
-              <p className="mt-1 text-[11px] leading-5 text-slate-500">{step.detail}</p>
+              <p className="mt-1.5 text-[12px] leading-5 text-slate-500">{step.detail}</p>
             </div>
           ))}
         </div>

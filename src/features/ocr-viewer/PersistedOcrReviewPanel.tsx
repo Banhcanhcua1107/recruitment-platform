@@ -4,8 +4,9 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { DocumentPreview } from "@/features/ocr-viewer/components/DocumentPreview";
 import { OcrProcessingState, type OcrProcessingStep } from "@/features/ocr-viewer/components/OcrProcessingState";
-import { getReviewableBlocks, ParsedBlockList } from "@/features/ocr-viewer/components/ParsedBlockList";
 import { PreviewScaleToolbar } from "@/features/ocr-viewer/components/PreviewScaleToolbar";
+import { SemanticReviewPanel } from "@/features/ocr-viewer/components/SemanticReviewPanel";
+import { getReviewableBlocks } from "@/features/ocr-viewer/components/ParsedBlockList";
 import { fetchJsonlResult } from "@/features/ocr-viewer/services/paddleApi";
 import type {
   DocumentPreviewSource,
@@ -18,6 +19,7 @@ import type { CVArtifactKind, CVDocumentDetailResponse, CVDocumentStatus } from 
 interface PersistedOcrReviewPanelProps {
   detail: CVDocumentDetailResponse;
   fallbackContent?: ReactNode;
+  headerActions?: ReactNode;
 }
 
 interface PreviewScaleState {
@@ -64,23 +66,23 @@ function getReviewStatusText(status: CVDocumentStatus, pageCount: number) {
   const safePageCount = Math.max(1, pageCount);
 
   if (["uploaded", "queued", "normalizing", "rendering_preview", "retrying"].includes(status)) {
-    return `Hệ thống đang chuẩn bị file và dựng preview để bắt đầu quét ${safePageCount} trang CV.`;
+    return `He thong dang chuan bi file va dung preview de bat dau quet ${safePageCount} trang CV.`;
   }
 
   if (status === "ocr_running") {
-    return `Đang quét OCR và khôi phục thứ tự đọc của ${safePageCount} trang.`;
+    return `Dang quet OCR va khoi phuc thu tu doc cua ${safePageCount} trang.`;
   }
 
   if (status === "layout_running" || status === "vl_running") {
-    return "Đang phân tích bố cục, nhận diện section và gom nội dung liên quan.";
+    return "Dang phan tich bo cuc, nhan dien section va gom noi dung lien quan.";
   }
 
   if (status === "parsing_structured" || status === "persisting") {
-    return "Đang dựng nội dung cuối cùng để bạn review ở cột bên phải.";
+    return "Dang dung noi dung cuoi cung de ban review o cot ben phai.";
   }
 
   if (status === "partial_ready") {
-    return "Đã có một phần kết quả OCR. Bạn có thể review những nội dung đã sẵn sàng.";
+    return "Da co mot phan ket qua OCR. Ban co the review nhung noi dung da san sang.";
   }
 
   return null;
@@ -95,20 +97,20 @@ function buildReviewSteps(status: CVDocumentStatus): OcrProcessingStep[] {
   return [
     {
       id: "prepare",
-      label: "Chuẩn bị preview",
-      detail: "Nhận file, dựng trang preview và kiểm tra cấu trúc tài liệu.",
+      label: "Chuan bi preview",
+      detail: "Nhan file, dung trang preview va kiem tra cau truc tai lieu.",
       state: isAfterPrepare ? "done" : "processing",
     },
     {
       id: "ocr",
-      label: "Quét OCR",
-      detail: "Nhận diện chữ và khôi phục thứ tự đọc trên từng vùng nội dung.",
+      label: "Quet OCR",
+      detail: "Nhan dien chu va khoi phuc thu tu doc tren tung vung noi dung.",
       state: status === "ocr_running" ? "processing" : isAfterOcr ? "done" : "pending",
     },
     {
       id: "layout",
-      label: "Phân tích bố cục",
-      detail: "Xác định section, heading và nhóm nội dung theo bố cục CV.",
+      label: "Phan tich bo cuc",
+      detail: "Xac dinh section, heading va nhom noi dung theo bo cuc CV.",
       state:
         status === "layout_running" || status === "vl_running"
           ? "processing"
@@ -118,8 +120,8 @@ function buildReviewSteps(status: CVDocumentStatus): OcrProcessingStep[] {
     },
     {
       id: "final",
-      label: "Dựng nội dung review",
-      detail: "Chuẩn bị phần nội dung OCR để hiển thị ở cột phải.",
+      label: "Dung noi dung review",
+      detail: "Chuan bi phan noi dung OCR de hien thi o cot phai.",
       state:
         status === "parsing_structured" || status === "persisting"
           ? "processing"
@@ -150,7 +152,11 @@ function getReadyArtifact(detail: CVDocumentDetailResponse, kind: CVArtifactKind
   );
 }
 
-export function PersistedOcrReviewPanel({ detail, fallbackContent }: PersistedOcrReviewPanelProps) {
+export function PersistedOcrReviewPanel({
+  detail,
+  fallbackContent,
+  headerActions,
+}: PersistedOcrReviewPanelProps) {
   const mountedRef = useRef(true);
   const normalizedFromParsed = useMemo(
     () => normalizeOcrResult({ parsed_json: detail.parsed_json, pages: detail.pages }),
@@ -173,6 +179,7 @@ export function PersistedOcrReviewPanel({ detail, fallbackContent }: PersistedOc
   const hasRenderedPages = detail.pages.some((page) => Boolean(page.background_url));
   const previewFallbackUrl =
     getReadyArtifact(detail, "preview_pdf")?.download_url ?? getReadyArtifact(detail, "original_file")?.download_url;
+
   const previewSource = useMemo<DocumentPreviewSource>(() => {
     if (hasRenderedPages) {
       return { kind: "page-images" };
@@ -196,6 +203,7 @@ export function PersistedOcrReviewPanel({ detail, fallbackContent }: PersistedOc
       ),
     [detail.artifacts],
   );
+
   const isDocumentProcessing =
     !hasReviewContent &&
     [
@@ -210,11 +218,13 @@ export function PersistedOcrReviewPanel({ detail, fallbackContent }: PersistedOc
       "persisting",
       "retrying",
     ].includes(detail.document.status);
+
   const processingSteps = useMemo(() => buildReviewSteps(detail.document.status), [detail.document.status]);
   const processingStatusText = useMemo(
     () => getReviewStatusText(detail.document.status, detail.pages.length || pageCount || 1),
     [detail.document.status, detail.pages.length, pageCount],
   );
+
   const scaleContextKey = `${detail.document.id}:${previewSource.kind}:${pageCount}`;
   const defaultScale = useMemo<PreviewScaleState>(() => {
     const defaults = getDefaultPreviewScale(pageCount);
@@ -230,6 +240,7 @@ export function PersistedOcrReviewPanel({ detail, fallbackContent }: PersistedOc
 
   useEffect(() => {
     mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
     };
@@ -284,53 +295,73 @@ export function PersistedOcrReviewPanel({ detail, fallbackContent }: PersistedOc
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_24px_60px_-44px_rgba(15,23,42,0.24)]">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 md:px-3.5">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-700">OCR Review</p>
-          <h2 className="mt-1 text-[15px] font-semibold text-slate-900">Trái là tài liệu, phải là nội dung cần review</h2>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[26px] border border-slate-200 bg-white shadow-[0_26px_60px_-42px_rgba(15,23,42,0.22)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5 md:px-3.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Layout review
+          </span>
+          {isDocumentProcessing ? (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-medium text-amber-700">
+              Dang OCR
+            </span>
+          ) : hasReviewContent ? (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-medium text-emerald-700">
+              San sang review
+            </span>
+          ) : null}
         </div>
 
-        <PreviewScaleToolbar
-          pageCount={pageCount}
-          blockCount={blockCount}
-          overlayVisible={overlayVisible}
-          scaleMode={scaleMode}
-          zoom={zoom}
-          onToggleOverlay={() => setOverlayVisible((current) => !current)}
-          onSetScaleMode={(mode) => {
-            setScalePreference({
-              contextKey: scaleContextKey,
-              mode,
-              zoom: getScaleZoomForMode(mode, pageCount),
-            });
-          }}
-          onZoomOut={() =>
-            setScalePreference({
-              contextKey: scaleContextKey,
-              mode: scaleMode,
-              zoom: clampZoom(zoom - 0.08),
-            })
-          }
-          onZoomIn={() =>
-            setScalePreference({
-              contextKey: scaleContextKey,
-              mode: scaleMode,
-              zoom: clampZoom(zoom + 0.08),
-            })
-          }
-        />
+        <div className="flex flex-wrap items-center justify-end gap-2.5 pr-10 md:gap-3 md:pr-12">
+          {headerActions}
+          <PreviewScaleToolbar
+            pageCount={pageCount}
+            overlayVisible={overlayVisible}
+            scaleMode={scaleMode}
+            zoom={zoom}
+            onToggleOverlay={() => setOverlayVisible((current) => !current)}
+            onSetScaleMode={(mode) => {
+              setScalePreference({
+                contextKey: scaleContextKey,
+                mode,
+                zoom: getScaleZoomForMode(mode, pageCount),
+              });
+            }}
+            onZoomOut={() =>
+              setScalePreference({
+                contextKey: scaleContextKey,
+                mode: scaleMode,
+                zoom: clampZoom(zoom - 0.08),
+              })
+            }
+            onZoomIn={() =>
+              setScalePreference({
+                contextKey: scaleContextKey,
+                mode: scaleMode,
+                zoom: clampZoom(zoom + 0.08),
+              })
+            }
+          />
+        </div>
       </div>
 
-      {(artifactLoading || artifactError) && !hasBlocks(normalizedResult) ? (
-        <div className="flex items-center gap-2 px-3.5 py-2 text-[13px] text-slate-500 md:px-4">
-          {artifactLoading ? <Loader2 size={15} className="animate-spin text-blue-600" /> : null}
-          <span>{artifactError || "Đang tải nội dung OCR..."}</span>
+      {artifactLoading && !hasBlocks(normalizedResult) ? (
+        <div className="flex items-center gap-2 px-3.5 py-2 text-[12px] text-slate-500 md:px-4">
+          <Loader2 size={15} className="animate-spin text-blue-600" />
+          <span>Dang tai noi dung OCR...</span>
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 overflow-hidden gap-2.5 p-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className="min-h-0 overflow-hidden rounded-[22px] border border-slate-200 bg-slate-50/80 p-1.5 md:p-2">
+      {artifactError && !hasBlocks(normalizedResult) ? (
+        <div className="px-3.5 py-2 md:px-4">
+          <div className="rounded-[14px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+            {artifactError}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="grid min-h-0 flex-1 overflow-hidden gap-2.5 p-2.5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="min-h-0 overflow-hidden rounded-[22px] border border-slate-200 bg-slate-50/90 p-1.5 md:p-2">
           <DocumentPreview
             pages={normalizedResult.pages}
             previewSource={previewSource}
@@ -344,16 +375,16 @@ export function PersistedOcrReviewPanel({ detail, fallbackContent }: PersistedOc
           />
         </div>
 
-        <div className="min-h-0 overflow-y-auto rounded-[22px] border border-slate-200 bg-slate-50/70 px-2 py-1.5 md:px-2.5">
+        <div className="min-h-0 overflow-y-auto rounded-[22px] border border-slate-200 bg-[#f8fbff] px-2 py-1.5 md:px-2.5">
           {isDocumentProcessing || (artifactLoading && !hasReviewContent) ? (
             <OcrProcessingState
-              title="CV đang được quét và phân tích"
-              description="Sau khi hệ thống hoàn tất OCR và gom nội dung, cột phải sẽ tự chuyển sang phần nội dung CV để bạn review."
-              statusText={processingStatusText ?? (artifactLoading ? "Đang đọc dữ liệu OCR đã lưu..." : null)}
+              title="CV dang duoc quet va phan tich"
+              description="Sau khi he thong hoan tat OCR va gom noi dung, cot phai se tu chuyen sang phan noi dung CV de ban review."
+              statusText={processingStatusText ?? (artifactLoading ? "Dang doc du lieu OCR da luu..." : null)}
               steps={processingSteps}
             />
           ) : (
-            <ParsedBlockList
+            <SemanticReviewPanel
               pages={normalizedResult.pages}
               activeBlockId={activeBlockId}
               hoveredBlockId={hoveredBlockId}

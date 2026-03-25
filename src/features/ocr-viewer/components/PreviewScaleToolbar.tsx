@@ -52,7 +52,7 @@ export function PreviewScaleToolbar({
   onZoomIn,
 }: PreviewScaleToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2.5 md:gap-3">
       <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-medium text-slate-500">
         {pageCount} page(s)
       </span>
@@ -63,7 +63,7 @@ export function PreviewScaleToolbar({
         </span>
       ) : null}
 
-      <div className="inline-flex items-center rounded-[16px] border border-slate-200 bg-slate-50 p-1">
+      <div className="inline-flex shrink-0 items-center rounded-[16px] border border-slate-200 bg-slate-50 p-1">
         <ScaleModeButton active={scaleMode === "fitPage"} onClick={() => onSetScaleMode("fitPage")}>
           Fit trang
         </ScaleModeButton>
@@ -75,13 +75,13 @@ export function PreviewScaleToolbar({
       <button
         type="button"
         onClick={onToggleOverlay}
-        className="inline-flex h-8 items-center gap-1.5 rounded-[16px] border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[16px] border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:bg-slate-50"
       >
         {overlayVisible ? <Eye size={14} /> : <EyeOff size={14} />}
         {overlayVisible ? "Ẩn overlay" : "Hiện overlay"}
       </button>
 
-      <div className="inline-flex items-center rounded-[16px] border border-slate-200 bg-white p-1 shadow-sm">
+      <div className="inline-flex shrink-0 items-center rounded-[16px] border border-slate-200 bg-white p-1 shadow-sm">
         <button
           type="button"
           onClick={onZoomOut}

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ExternalLink, Loader2, RefreshCcw, Sparkles } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCcw, Sparkles } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { CVArtifactKind, CVDocumentArtifactView, CVDocumentDetailResponse, CVDocumentStatus } from "@/types/cv-import";
 import { fetchCVImport, retryCVImport, saveEditableCV } from "@/features/cv-import/api/client";
 import { ImportDocumentPreview } from "@/features/cv-import/components/ImportDocumentPreview";
@@ -31,35 +32,29 @@ function getArtifactByKind(artifacts: CVDocumentArtifactView[], kind: CVArtifact
   return artifacts.find((artifact) => artifact.kind === kind && artifact.status === "ready");
 }
 
-function localizeDocumentType(type: CVDocumentDetailResponse["document"]["document_type"]) {
-  if (type === "cv") return "CV";
-  if (type === "non_cv_document") return "Tài liệu không phải CV";
-  return "Chưa xác định loại tài liệu";
-}
-
 function localizeEligibilityReason(reason: string | null): string | null {
   if (!reason) return null;
 
   const labels: Record<string, string> = {
     non_cv_document_requires_override:
-      "Tài liệu này chưa được phân loại là CV. Bạn vẫn có thể tiếp tục nếu xác nhận cho phép.",
+      "Tai lieu nay chua duoc phan loai la CV. Ban van co the tiep tuc neu xac nhan cho phep.",
     partial_results_require_override:
-      "Hiện chỉ có một phần dữ liệu OCR/layout. Hãy cho phép dùng kết quả một phần trước khi mở editor.",
-    document_not_ready: "Tài liệu chưa sẵn sàng để mở editor.",
+      "Hien chi co mot phan du lieu OCR/layout. Hay cho phep dung ket qua mot phan truoc khi mo editor.",
+    document_not_ready: "Tai lieu chua san sang de mo editor.",
   };
 
-  return labels[reason] ?? "Tài liệu vẫn cần xác nhận thêm trước khi mở editor.";
+  return labels[reason] ?? "Tai lieu van can xac nhan them truoc khi mo editor.";
 }
 
 function localizeFailureCode(code: string | null): string | null {
   if (!code) return null;
 
   const labels: Record<string, string> = {
-    non_cv_document: "Tài liệu đã upload được phân loại là không phải CV.",
-    structured_parse_incomplete: "Bước parse có cấu trúc chưa hoàn tất hoàn toàn.",
-    timeout: "Một bước xử lý đã bị quá thời gian.",
-    transient_exhausted: "Dịch vụ xử lý tạm thời không phản hồi sau nhiều lần thử lại.",
-    unhandled: "Pipeline gặp lỗi ngoài dự kiến.",
+    non_cv_document: "Tai lieu da upload duoc phan loai la khong phai CV.",
+    structured_parse_incomplete: "Buoc parse co cau truc chua hoan tat hoan toan.",
+    timeout: "Mot buoc xu ly da bi qua thoi gian.",
+    transient_exhausted: "Dich vu xu ly tam thoi khong phan hoi sau nhieu lan thu lai.",
+    unhandled: "Pipeline gap loi ngoai du kien.",
   };
 
   return labels[code] ?? code.replace(/_/g, " ");
@@ -101,7 +96,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
         setDetail(next);
         setErrorMessage(null);
       } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Không thể tải lại dữ liệu review.");
+        setErrorMessage(error instanceof Error ? error.message : "Khong the tai lai du lieu review.");
       } finally {
         if (!silent) {
           setIsRefreshing(false);
@@ -132,7 +127,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
       await retryCVImport(documentId);
       await loadDocument();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Không thể chạy lại pipeline import.");
+      setErrorMessage(error instanceof Error ? error.message : "Khong the chay lai pipeline import.");
     } finally {
       setIsRetrying(false);
     }
@@ -150,122 +145,113 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
       });
       router.push(response.links.editor);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Không thể tạo bản CV để chỉnh sửa.");
+      setErrorMessage(error instanceof Error ? error.message : "Khong the tao ban CV de chinh sua.");
     } finally {
       setIsSaving(false);
     }
   }, [allowPartial, canOpenEditor, documentId, overrideNonCv, router]);
 
-  const reviewMessage =
-    detail.document.document_type === "non_cv_document"
-      ? "Bên trái là tài liệu gốc, bên phải chỉ giữ lại nội dung OCR thực sự hữu ích để review."
-      : "Bên trái là CV gốc, bên phải là nội dung OCR cần review trước khi mở editor.";
-
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#f4f8fb]">
-      <div className="border-b border-slate-200 bg-white/95 px-3 py-2 backdrop-blur md:px-3.5 md:py-2.5">
-        <div className="flex flex-col gap-2.5">
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-700">OCR Review</p>
-              <h1 className="mt-1 text-lg font-semibold text-slate-900">Không gian review tối giản</h1>
-              <p className="mt-1 max-w-3xl text-[13px] leading-5 text-slate-500">{reviewMessage}</p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col bg-[#eef4fb] p-2.5 md:p-3">
+      <div className="min-h-0 flex-1">
+        <PersistedOcrReviewPanel
+          key={detail.document.id}
+          detail={detail}
+          headerActions={
+            <>
               <ImportStatusBadge status={detail.document.status} />
-              <span className="text-[13px] text-slate-500">{localizeDocumentType(detail.document.document_type)}</span>
+
+              {requiresPartial ? (
+                <button
+                  type="button"
+                  onClick={() => setAllowPartial((current) => !current)}
+                  className={cn(
+                    "inline-flex h-8 items-center rounded-[16px] border px-3 text-[12px] font-medium transition-colors",
+                    allowPartial
+                      ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  )}
+                  title="Cho phep dung ket qua OCR/layout mot phan"
+                >
+                  OCR mot phan
+                </button>
+              ) : null}
+
+              {requiresNonCv ? (
+                <button
+                  type="button"
+                  onClick={() => setOverrideNonCv((current) => !current)}
+                  className={cn(
+                    "inline-flex h-8 items-center rounded-[16px] border px-3 text-[12px] font-medium transition-colors",
+                    overrideNonCv
+                      ? "border-cyan-200 bg-cyan-50 text-cyan-700"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
+                  )}
+                  title="Tiep tuc ngay ca khi tai lieu khong duoc phan loai la CV"
+                >
+                  Bo qua phan loai
+                </button>
+              ) : null}
+
+              {failureNote ? (
+                <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-medium text-rose-700">
+                  {failureNote}
+                </span>
+              ) : null}
+
+              {errorMessage ? (
+                <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-medium text-rose-700">
+                  {errorMessage}
+                </span>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => void loadDocument()}
                 disabled={isRefreshing}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label="Tải lại review"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Tai lai review"
+                title="Tai lai"
               >
-                <RefreshCcw size={16} className={isRefreshing ? "animate-spin" : ""} />
+                <RefreshCcw size={14} className={isRefreshing ? "animate-spin" : ""} />
               </button>
-            </div>
-          </div>
 
-          {failureNote || eligibilityNote || errorMessage ? (
-            <div className="rounded-[18px] border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[13px] text-amber-900">
-              <div className="flex items-start gap-3">
-                <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-500" />
-                <div className="space-y-1">
-                  {failureNote ? <p>{failureNote}</p> : null}
-                  {eligibilityNote ? <p>{eligibilityNote}</p> : null}
-                  {errorMessage ? <p className="text-rose-700">{errorMessage}</p> : null}
-                </div>
-              </div>
-            </div>
-          ) : null}
+              {detail.document.status === "failed" ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRetry()}
+                  disabled={isRetrying}
+                  className="inline-flex h-8 items-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isRetrying ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+                  Thu lai
+                </button>
+              ) : null}
 
-          <div className="flex flex-wrap items-center gap-2">
-            {requiresPartial ? (
-              <label className="inline-flex items-center gap-2.5 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  checked={allowPartial}
-                  onChange={(event) => setAllowPartial(event.target.checked)}
-                />
-                <span>Cho phép dùng kết quả OCR/layout một phần</span>
-              </label>
-            ) : null}
+              {originalArtifact?.download_url ? (
+                <a
+                  href={originalArtifact.download_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-8 items-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                >
+                  File goc
+                  <ExternalLink size={14} />
+                </a>
+              ) : null}
 
-            {requiresNonCv ? (
-              <label className="inline-flex items-center gap-2.5 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  checked={overrideNonCv}
-                  onChange={(event) => setOverrideNonCv(event.target.checked)}
-                />
-                <span>Tiếp tục ngay cả khi tài liệu này không được phân loại là CV</span>
-              </label>
-            ) : null}
-
-            {detail.document.status === "failed" ? (
               <button
                 type="button"
-                onClick={() => void handleRetry()}
-                disabled={isRetrying}
-                className="inline-flex h-9 items-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void handleOpenEditor()}
+                disabled={!canOpenEditor || isSaving}
+                title={eligibilityNote || errorMessage || undefined}
+                className="inline-flex h-8 items-center gap-2 rounded-[16px] bg-slate-900 px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {isRetrying ? <Loader2 size={16} className="animate-spin" /> : <RefreshCcw size={16} />}
-                Thử lại
+                {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                Chuyen sang editor
               </button>
-            ) : null}
-
-            {originalArtifact?.download_url ? (
-              <a
-                href={originalArtifact.download_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex h-9 items-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3.5 text-[13px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
-              >
-                Mở file gốc
-                <ExternalLink size={16} />
-              </a>
-            ) : null}
-
-            <button
-              type="button"
-              onClick={() => void handleOpenEditor()}
-              disabled={!canOpenEditor || isSaving}
-              className="inline-flex h-9 items-center gap-2 rounded-[18px] bg-slate-900 px-4 text-[13px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
-            >
-              {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              Mở editor
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 p-2.5 md:p-3">
-        <PersistedOcrReviewPanel
-          key={detail.document.id}
-          detail={detail}
+            </>
+          }
           fallbackContent={
             <ImportDocumentPreview
               documentId={detail.document.id}
