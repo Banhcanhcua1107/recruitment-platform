@@ -123,6 +123,16 @@ services:
       - .:/workspace
       - frontend-node-modules:/workspace/node_modules
       - frontend-next:/workspace/.next
+      - /workspace/.venv
+      - /workspace/.worktrees
+      - /workspace/.agent
+      - /workspace/.agents
+      - /workspace/.git
+      - /workspace/.vscode
+      - /workspace/ai-service
+      - /workspace/docs
+      - /workspace/mau
+      - /workspace/supabase
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

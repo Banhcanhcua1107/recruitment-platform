@@ -38,6 +38,7 @@ export interface CandidateProfileInput {
 export interface CandidateProfileRecord extends CandidateProfileInput {
   id: string;
   userId: string;
+  document?: unknown | null;
   cvFilePath: string | null;
   cvUrl: string | null;
   createdAt: string;
@@ -64,6 +65,7 @@ export interface PublicCandidateSearchFilters {
 
 export interface PublicCandidateSearchResult {
   candidateId: string;
+  document?: unknown | null;
   fullName: string;
   avatarUrl: string | null;
   headline: string;

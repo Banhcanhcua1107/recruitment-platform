@@ -607,6 +607,12 @@ export interface SaveEditableCVResponse {
   };
 }
 
+export interface SaveOriginalCVResponse {
+  cvUrl: string;
+  filePath: string;
+  message: string;
+}
+
 export interface UpdateEditableBlockRequest {
   edited_text?: string;
   locked?: boolean;

@@ -34,6 +34,7 @@ function CVDashboardPageContent() {
     useState<CVDocumentDetailResponse | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const importReviewDocumentId = searchParams.get("importReview");
+  const hasNoResume = !loading && resumes.length === 0;
 
   const setImportReviewQuery = useCallback(
     (documentId: string | null) => {
@@ -58,7 +59,7 @@ function CVDashboardPageContent() {
       const data = await getMyResumes();
       setResumes(data);
     } catch (err) {
-      console.error("Không thể tải danh sách CV:", err);
+      console.error("Khong the tai danh sach CV:", err);
     } finally {
       setLoading(false);
     }
@@ -85,14 +86,14 @@ function CVDashboardPageContent() {
     const createFromTemplate = async () => {
       try {
         setTemplateRedirectLoading(true);
-        const resume = await createResume(templateId, "CV của tôi");
+        const resume = await createResume(templateId, "CV cua toi");
         if (!cancelled && resume) {
           router.replace(`/candidate/cv-builder/${resume.id}/edit`);
         }
       } catch (err) {
-        console.error("Không thể tạo CV từ mẫu:", err);
+        console.error("Khong the tao CV tu mau:", err);
         if (!cancelled) {
-          alert("Không thể tạo CV từ mẫu đã chọn. Vui lòng thử lại.");
+          alert("Khong the tao CV tu mau da chon. Vui long thu lai.");
           router.replace("/candidate/templates");
         }
       } finally {
@@ -110,15 +111,15 @@ function CVDashboardPageContent() {
   }, [router, searchParams, templateRedirectLoading]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Bạn chắc chắn muốn xóa CV này?")) return;
+    if (!confirm("Ban chac chan muon xoa CV nay?")) return;
 
     try {
       setDeletingId(id);
       await deleteResume(id);
       setResumes((prev) => prev.filter((resume) => resume.id !== id));
-      setSaveNotice("Đã xóa CV khỏi danh sách đã lưu.");
+      setSaveNotice("Da xoa CV khoi danh sach da luu.");
     } catch (err) {
-      console.error("Xóa thất bại:", err);
+      console.error("Xoa that bai:", err);
     } finally {
       setDeletingId(null);
     }
@@ -133,21 +134,21 @@ function CVDashboardPageContent() {
         ),
       );
     } catch (err) {
-      console.error("Đổi tên thất bại:", err);
+      console.error("Doi ten that bai:", err);
     }
   };
 
   const handleImportUpload = async (file: File) => {
     try {
       setImportUploading(true);
-      setSaveNotice("Đang đưa CV vào hộp xem lại import mới...");
+      setSaveNotice("Dang dua CV vao hop xem lai import moi...");
       const response = await uploadCVImport(file);
       setOptimisticReviewDetail(buildOptimisticImportReviewDetail(response));
-      setSaveNotice("CV đã được đưa vào pipeline. Hộp xem lại sẽ tự cập nhật trạng thái xử lý.");
+      setSaveNotice("CV da duoc dua vao pipeline. Hop xem lai se tu cap nhat trang thai xu ly.");
       setImportReviewQuery(response.document.id);
     } catch (err) {
       console.error("Import CV that bai:", err);
-      alert("Không thể bắt đầu quy trình import CV. Vui lòng thử lại.");
+      alert("Khong the bat dau quy trinh import CV. Vui long thu lai.");
       setSaveNotice(null);
     } finally {
       setImportUploading(false);
@@ -158,139 +159,222 @@ function CVDashboardPageContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20 font-['Manrope']">
+    <div className="min-h-screen bg-slate-50 pb-16 font-['Manrope']">
       {templateRedirectLoading ? (
-        <div className="border-b border-emerald-100 bg-emerald-50/90 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-3 text-sm font-medium text-emerald-800">
+        <div className="border-b border-emerald-100 bg-emerald-50">
+          <div className="mx-auto flex max-w-7xl items-center gap-3 px-6 py-3 text-sm font-medium text-emerald-900">
             <Loader2 size={16} className="animate-spin" />
-            Đang tạo CV từ mẫu bạn đã chọn...
+            Dang tao CV tu mau ban da chon...
           </div>
         </div>
       ) : null}
 
       {saveNotice ? (
-        <div className="border-b border-blue-100 bg-blue-50/90 backdrop-blur-sm">
-          <div className="mx-auto max-w-7xl px-6 py-3 text-sm font-medium text-blue-800">
+        <div className="border-b border-sky-100 bg-sky-50">
+          <div className="mx-auto max-w-7xl px-6 py-3 text-sm font-medium text-sky-900">
             {saveNotice}
           </div>
         </div>
       ) : null}
 
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
-          <div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
-              CV của tôi
+        <div className="mx-auto flex min-h-28 max-w-7xl flex-col justify-between gap-4 px-6 py-5 md:flex-row md:items-center">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-700">
+              Candidate Workspace
+            </p>
+            <h1 className="mt-2 text-[26px] font-extrabold tracking-[-0.03em] text-slate-950 md:text-[30px]">
+              CV cua toi
             </h1>
-            <p className="text-sm font-medium text-slate-500">
-              {loading ? "Đang tải..." : `${resumes.length} CV đã lưu`}
+            <p className="mt-2 text-sm font-medium text-slate-500">
+              {loading ? "Dang tai..." : `${resumes.length} CV da luu`}
             </p>
           </div>
           <Link
             href="/candidate/templates"
-            className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 font-bold text-white shadow-lg shadow-emerald-200 transition-all hover:bg-emerald-700 active:scale-95"
+            className="inline-flex items-center gap-2 self-start rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700 active:scale-[0.98] md:self-auto"
           >
             <Plus size={18} />
-            Tạo CV mới
+            Tao CV moi
           </Link>
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl space-y-10 px-6 py-10">
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-6 flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-              <UploadCloud size={22} />
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-7">
+            <div className="mb-7 flex items-start gap-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-sky-100 text-sky-700">
+                <FolderOpen size={22} />
+              </div>
+              <div className="space-y-2">
+                <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-sky-700">
+                  Dashboard
+                </span>
+                <h2 className="text-[24px] font-bold tracking-[-0.03em] text-slate-950">
+                  Cac CV ban da luu
+                </h2>
+                <p className="max-w-2xl text-sm leading-6 text-slate-500">
+                  Xem lai, chinh sua va dung cac CV da luu khi ung tuyen nha tuyen dung.
+                </p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-black tracking-tight text-slate-900">
-                Tạo hoặc tải CV lên
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Tạo CV mới từ thư viện mẫu hoặc tải CV có sẵn để AI quét,
-                làm sạch nội dung và lưu vào hệ thống.
-              </p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            <CreateCard />
-            <UploadCard onClick={() => uploadInputRef.current?.click()} />
-          </div>
+            {loading ? (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="flex h-85 animate-pulse flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                  >
+                    <div className="h-55 bg-slate-100" />
+                    <div className="flex flex-1 flex-col justify-end space-y-3 p-5">
+                      <div className="h-4 w-3/4 rounded-full bg-slate-100" />
+                      <div className="h-3 w-1/2 rounded-full bg-slate-100" />
+                      <div className="mt-auto h-3 w-1/3 rounded-full bg-slate-100" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : resumes.length > 0 ? (
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {resumes.map((resume) => (
+                  <div
+                    key={resume.id}
+                    className="rounded-2xl border border-transparent bg-transparent transition-transform duration-200 hover:-translate-y-0.5"
+                  >
+                    <CVCard
+                      resume={resume}
+                      onDelete={handleDelete}
+                      onRename={handleRename}
+                      isDeleting={deletingId === resume.id}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex min-h-[420px] flex-col items-center justify-center px-6 py-10 text-center">
+                <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                  <FileText size={34} />
+                </div>
+                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700">
+                  Bat dau nhanh
+                </span>
+                <h3 className="mt-5 text-[28px] font-bold tracking-[-0.03em] text-slate-950">
+                  Tao CV dau tien cua ban
+                </h3>
+                <p className="mt-3 max-w-xl text-sm leading-7 text-slate-500">
+                  Chon mot mau co san de bat dau nhanh, sau do ban co the chinh sua va luu lai de ung tuyen.
+                </p>
+                <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row">
+                  <Link
+                    href="/candidate/templates"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition-colors duration-200 hover:bg-emerald-700"
+                  >
+                    <Plus size={18} />
+                    Tao CV moi
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => uploadInputRef.current?.click()}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-50"
+                  >
+                    <UploadCloud size={18} />
+                    Tai CV len
+                  </button>
+                </div>
+                <p className="mt-4 text-sm text-slate-400">
+                  Ban da co CV san? Tai len de bo sung noi dung nhanh hon.
+                </p>
+              </div>
+            )}
+          </section>
 
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-medium text-slate-500">
-              Mỗi file tải lên sẽ đi qua quy trình import bền vững với queue, artifact manifest và hộp xem lại riêng.
-            </p>
-            <button
-              type="button"
-              onClick={() => setOcrModalOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-all hover:-translate-y-[1px] hover:bg-slate-100"
-            >
-              OCR document viewer
-            </button>
-          </div>
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-6 flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-              <FolderOpen size={22} />
-            </div>
-            <div>
-              <h2 className="text-xl font-black tracking-tight text-slate-900">
-                Các CV bạn đã lưu
-              </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">
-                Xem lại, chỉnh sửa và dùng các CV đã lưu khi ứng tuyển nhà
-                tuyển dụng.
-              </p>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3].map((item) => (
-                <div
-                  key={item}
-                  className="flex h-[340px] animate-pulse flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white"
-                >
-                  <div className="h-[220px] bg-slate-100/80" />
-                  <div className="flex flex-1 flex-col justify-end space-y-3 p-4">
-                    <div className="h-4 w-3/4 rounded bg-slate-100" />
-                    <div className="h-3 w-1/2 rounded bg-slate-100" />
-                    <div className="mt-auto h-3 w-1/3 rounded bg-slate-100" />
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm md:p-7">
+            {hasNoResume ? (
+              <div className="space-y-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                    <UploadCloud size={22} />
+                  </div>
+                  <div className="space-y-2">
+                    <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                      Tai CV san co
+                    </span>
+                    <h2 className="text-[24px] font-bold tracking-[-0.03em] text-slate-950">
+                      Import CV da co
+                    </h2>
+                    <p className="max-w-xl text-sm leading-6 text-slate-500">
+                      Tai len CV hien tai de nhap noi dung vao he thong va tiep tuc chinh sua.
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : resumes.length > 0 ? (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {resumes.map((resume) => (
-                <CVCard
-                  key={resume.id}
-                  resume={resume}
-                  onDelete={handleDelete}
-                  onRename={handleRename}
-                  isDeleting={deletingId === resume.id}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 py-20 text-center">
-              <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-sm">
-                <FileText size={36} className="text-slate-300" />
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                  <UploadCard compact onClick={() => uploadInputRef.current?.click()} />
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+                  <p className="text-sm leading-6 text-slate-500">
+                    Ho tro PDF, DOCX va file anh. Sau khi tai len, ban co the xem lai va tiep tuc chinh sua.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOcrModalOpen(true)}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-50 active:scale-[0.98]"
+                  >
+                    OCR document viewer
+                  </button>
+                </div>
               </div>
-              <h3 className="text-lg font-bold text-slate-800">
-                Bạn chưa lưu CV nào
-              </h3>
-              <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                Hãy tạo CV mới từ mẫu hoặc tải CV có sẵn lên để AI quét, sau đó
-                lưu lại vào hệ thống để dùng khi ứng tuyển.
-              </p>
-            </div>
-          )}
-        </section>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] lg:items-start">
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                        <UploadCloud size={22} />
+                      </div>
+                      <div className="space-y-2">
+                        <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                          Import pipeline
+                        </span>
+                        <h2 className="text-[24px] font-bold tracking-[-0.03em] text-slate-950">
+                          Tao hoac tai CV len
+                        </h2>
+                        <p className="max-w-xl text-sm leading-6 text-slate-500">
+                          Tao CV moi tu thu vien mau hoac tai CV co san de bo sung noi dung vao he thong.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:justify-items-end">
+                    <div className="group w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-2 transition-colors duration-200 hover:border-emerald-300 hover:bg-white">
+                      <CreateCard compact />
+                    </div>
+                    <div className="group w-full rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-2 transition-colors duration-200 hover:border-sky-300 hover:bg-white">
+                      <UploadCard compact onClick={() => uploadInputRef.current?.click()} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+                  <p className="max-w-3xl text-sm font-medium leading-6 text-slate-500">
+                    Moi file tai len se di qua quy trinh import va hop xem lai rieng.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setOcrModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors duration-200 hover:bg-slate-100 active:scale-[0.98]"
+                  >
+                    OCR document viewer
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        </div>
       </div>
 
       <PaddleOcrWorkspaceModal isOpen={ocrModalOpen} onClose={() => setOcrModalOpen(false)} />

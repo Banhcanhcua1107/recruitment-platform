@@ -17,6 +17,10 @@ import {
   sanitizeCandidateProfileInput,
   validateCandidateProfileInput,
 } from "@/lib/candidate-profile-shared";
+import {
+  buildProfileDocumentFromLegacyProfile,
+  resolveCandidateProfileDocument,
+} from "@/lib/candidate-profile-document";
 import type {
   CandidateEducation,
   CandidateProfileCvUploadResult,
@@ -38,6 +42,7 @@ const ALLOWED_CV_CONTENT_TYPES = new Set([
 const PROFILE_SELECT = [
   "id",
   "user_id",
+  "document",
   "full_name",
   "avatar_url",
   "headline",
@@ -67,6 +72,7 @@ type AuthProfileRow = {
 type CandidateProfileRow = {
   id: string;
   user_id: string;
+  document: unknown;
   full_name: string | null;
   avatar_url: string | null;
   headline: string | null;
@@ -145,10 +151,22 @@ function toCandidateProfileRecord(
 ): CandidateProfileRecord {
   const workExperiences = normalizeWorkExperiences(row.work_experiences);
   const educations = normalizeEducations(row.educations);
+  const document = resolveCandidateProfileDocument({
+    document: row.document,
+    fullName: row.full_name || getDisplayName(user, authProfile),
+    email: row.email || getProfileEmail(user, authProfile),
+    phone: row.phone || "",
+    location: row.location || "",
+    introduction: row.introduction || "",
+    skills: row.skills,
+    workExperiences,
+    educations,
+  });
 
   return createEmptyCandidateProfile({
     id: String(row.id || ""),
     userId: String(row.user_id || user.id),
+    document,
     fullName: row.full_name || getDisplayName(user, authProfile),
     avatarUrl: row.avatar_url || authProfile?.avatar_url || null,
     headline: row.headline || "",
@@ -176,9 +194,21 @@ function toPublicCandidateSearchResult(row: CandidateProfileRow): PublicCandidat
   const educations = normalizeEducations(row.educations);
   const workExperience = buildWorkExperienceSummary(workExperiences, row.work_experience);
   const education = buildEducationSummary(educations, row.education);
+  const document = resolveCandidateProfileDocument({
+    document: row.document,
+    fullName: row.full_name,
+    email: row.email,
+    phone: row.phone,
+    location: row.location,
+    introduction: row.introduction,
+    skills: row.skills,
+    workExperiences,
+    educations,
+  });
 
   return {
     candidateId: String(row.user_id),
+    document,
     fullName: normalizeString(row.full_name),
     avatarUrl: row.avatar_url || null,
     headline: normalizeString(row.headline),
@@ -251,6 +281,10 @@ async function ensureCurrentCandidateProfileRow(
 
   const insertPayload = {
     user_id: user.id,
+    document: buildProfileDocumentFromLegacyProfile({
+      fullName: getDisplayName(user, authProfile),
+      email: getProfileEmail(user, authProfile),
+    }),
     full_name: getDisplayName(user, authProfile),
     avatar_url: authProfile?.avatar_url || null,
     headline: "",
@@ -346,6 +380,17 @@ export async function upsertCurrentCandidateProfile(input: CandidateProfileInput
   const nextCvUrl = currentRow.cv_file_path
     ? getCandidateProfileCvUrl(user.id)
     : currentRow.cv_url || null;
+  const document = resolveCandidateProfileDocument({
+    document: currentRow.document,
+    fullName: payload.fullName || getDisplayName(user, authProfile),
+    email: payload.email || getProfileEmail(user, authProfile),
+    phone: payload.phone,
+    location: payload.location,
+    introduction: payload.introduction,
+    skills: payload.skills,
+    workExperiences: payload.workExperiences,
+    educations: payload.educations,
+  });
 
   const { data, error } = await supabase
     .from("candidate_profiles")
@@ -353,6 +398,7 @@ export async function upsertCurrentCandidateProfile(input: CandidateProfileInput
       {
         id: currentRow.id,
         user_id: user.id,
+        document,
         full_name: payload.fullName || getDisplayName(user, authProfile),
         avatar_url: payload.avatarUrl,
         headline: payload.headline || null,
@@ -418,12 +464,24 @@ export async function uploadCurrentCandidateProfileCv(
   }
 
   const nextCvUrl = getCandidateProfileCvUrl(user.id);
+  const document = resolveCandidateProfileDocument({
+    document: currentRow.document,
+    fullName: currentRow.full_name || getDisplayName(user, authProfile),
+    email: currentRow.email || getProfileEmail(user, authProfile),
+    phone: currentRow.phone,
+    location: currentRow.location,
+    introduction: currentRow.introduction,
+    skills: currentRow.skills,
+    workExperiences: normalizeWorkExperiences(currentRow.work_experiences),
+    educations: normalizeEducations(currentRow.educations),
+  });
   const { data, error } = await supabase
     .from("candidate_profiles")
     .upsert(
       {
         id: currentRow.id,
         user_id: user.id,
+        document,
         full_name: currentRow.full_name || getDisplayName(user, authProfile),
         avatar_url: currentRow.avatar_url,
         headline: currentRow.headline,

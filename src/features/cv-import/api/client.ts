@@ -12,6 +12,7 @@ import type {
   RestoreEditableVersionResponse,
   SaveEditableCVRequest,
   SaveEditableCVResponse,
+  SaveOriginalCVResponse,
   UpdateEditableBlockRequest,
   UpdateEditableBlockResponse,
   UpdateEditableJSONRequest,
@@ -110,6 +111,15 @@ export async function saveEditableCV(
   });
 
   return parseJSONResponse<SaveEditableCVResponse>(response);
+}
+
+export async function saveOriginalCVFromImport(documentId: string): Promise<SaveOriginalCVResponse> {
+  const response = await fetch(`/api/cv-imports/${documentId}/save-original`, {
+    method: "POST",
+    credentials: "same-origin",
+  });
+
+  return parseJSONResponse<SaveOriginalCVResponse>(response);
 }
 
 export async function fetchEditableCV(editableCvId: string): Promise<EditableCVDetailResponse> {

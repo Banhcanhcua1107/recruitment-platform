@@ -1,5 +1,11 @@
 import { create } from 'zustand';
 import { createClient } from '@/utils/supabase/client';
+import {
+  buildLegacyProfilePatchFromDocument,
+  buildProfileDocumentFromLegacyProfile,
+  resolveCandidateProfileDocument,
+} from '@/lib/candidate-profile-document';
+import type { CandidateWorkExperience } from '@/types/candidate-profile';
 import { 
   ProfileDocument, 
   Section, 
@@ -8,6 +14,32 @@ import {
   getDefaultContent,
   createEmptyDocument 
 } from '../types/profile';
+
+interface ProfilePreviewSource {
+  fullName: string;
+  avatarUrl: string | null;
+  headline: string;
+  email: string;
+  phone: string;
+  location: string;
+  cvUrl: string | null;
+  updatedAt: string | null;
+  workExperiences: CandidateWorkExperience[];
+}
+
+function createEmptyPreviewSource(document?: ProfileDocument | null): ProfilePreviewSource {
+  return {
+    fullName: '',
+    avatarUrl: null,
+    headline: '',
+    email: '',
+    phone: '',
+    location: '',
+    cvUrl: null,
+    updatedAt: document?.meta.updatedAt || null,
+    workExperiences: [],
+  };
+}
 
 // Debounce utility
 function debounce<T extends (...args: Parameters<T>) => void>(
@@ -29,6 +61,7 @@ interface ProfileBuilderState {
   lastSaved: Date | null;
   error: string | null;
   hasUnsavedChanges: boolean;
+  previewSource: ProfilePreviewSource | null;
   
   // UI state
   isAddPanelOpen: boolean;
@@ -68,6 +101,7 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
     lastSaved: null,
     error: null,
     hasUnsavedChanges: false,
+    previewSource: null,
     isAddPanelOpen: false,
     editingSectionId: null,
     _debouncedSave: debouncedSave,
@@ -83,19 +117,19 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
         if (!user) {
           // Not logged in - use empty document for demo
           const emptyDoc = createEmptyDocument();
-          set({ document: emptyDoc, isLoading: false });
+          set({ document: emptyDoc, previewSource: createEmptyPreviewSource(emptyDoc), isLoading: false });
           return;
         }
 
         const { data, error } = await supabase
           .from('candidate_profiles')
-          .select('document')
+          .select('document, full_name, avatar_url, headline, email, phone, location, introduction, skills, work_experiences, educations, cv_url, updated_at')
           .eq('user_id', user.id)
           .single();
 
         if (error && error.code === 'PGRST116') {
           // No profile exists, create empty one
-          const emptyDoc = createEmptyDocument();
+          const emptyDoc = buildProfileDocumentFromLegacyProfile({});
           
           const { error: insertError } = await supabase
             .from('candidate_profiles')
@@ -104,18 +138,46 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
           if (insertError) {
             // Table might not exist - fallback to local state
             console.warn('Could not create profile, using local state:', insertError);
-            set({ document: emptyDoc, isLoading: false });
+            set({ document: emptyDoc, previewSource: createEmptyPreviewSource(emptyDoc), isLoading: false });
             return;
           }
           
-          set({ document: emptyDoc, isLoading: false });
+          set({ document: emptyDoc, previewSource: createEmptyPreviewSource(emptyDoc), isLoading: false });
         } else if (error) {
           // Any other error (including table not existing) - fallback to demo mode
           console.warn('Database error, using demo mode:', error);
           const emptyDoc = createEmptyDocument();
-          set({ document: emptyDoc, isLoading: false });
+          set({ document: emptyDoc, previewSource: createEmptyPreviewSource(emptyDoc), isLoading: false });
         } else {
-          set({ document: data.document as ProfileDocument, isLoading: false });
+          const workExperiences = data.work_experiences ?? [];
+          const resolvedDocument = resolveCandidateProfileDocument({
+            document: data.document,
+            fullName: data.full_name,
+            avatarUrl: data.avatar_url,
+            headline: data.headline,
+            email: data.email,
+            phone: data.phone,
+            location: data.location,
+            introduction: data.introduction,
+            skills: data.skills,
+            workExperiences,
+            educations: data.educations,
+          });
+          set({
+            document: resolvedDocument,
+            previewSource: {
+              fullName: data.full_name || '',
+              avatarUrl: data.avatar_url || null,
+              headline: data.headline || '',
+              email: data.email || '',
+              phone: data.phone || '',
+              location: data.location || '',
+              cvUrl: data.cv_url || null,
+              updatedAt: data.updated_at || resolvedDocument.meta.updatedAt || null,
+              workExperiences,
+            },
+            isLoading: false,
+          });
         }
       } catch (err) {
         console.error('Load profile error:', err);
@@ -123,6 +185,7 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
         const emptyDoc = createEmptyDocument();
         set({ 
           document: emptyDoc,
+          previewSource: createEmptyPreviewSource(emptyDoc),
           isLoading: false,
         });
       }
@@ -151,20 +214,39 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
             updatedAt: new Date().toISOString(),
           },
         };
+        const legacyPatch = buildLegacyProfilePatchFromDocument(updatedDocument);
 
         const { error } = await supabase
           .from('candidate_profiles')
-          .update({ document: updatedDocument })
+          .update({
+            document: updatedDocument,
+            full_name: legacyPatch.full_name,
+            email: legacyPatch.email,
+            phone: legacyPatch.phone,
+            location: legacyPatch.location,
+            introduction: legacyPatch.introduction,
+            skills: legacyPatch.skills,
+            work_experiences: legacyPatch.work_experiences,
+            educations: legacyPatch.educations,
+            work_experience: legacyPatch.work_experience,
+            education: legacyPatch.education,
+          })
           .eq('user_id', user.id);
 
         if (error) throw error;
 
-        set({ 
+        set((state) => ({
           document: updatedDocument,
-          isSaving: false, 
+          isSaving: false,
           lastSaved: new Date(),
           hasUnsavedChanges: false,
-        });
+          previewSource: state.previewSource
+            ? {
+                ...state.previewSource,
+                updatedAt: updatedDocument.meta.updatedAt || state.previewSource.updatedAt,
+              }
+            : createEmptyPreviewSource(updatedDocument),
+        }));
       } catch (err) {
         console.error('Save profile error:', err);
         set({ 
@@ -320,6 +402,7 @@ const EMPTY_SECTIONS: Section[] = [];
 // Selector hooks for performance
 export const useProfileDocument = () => useProfileBuilder((s) => s.document);
 export const useProfileSections = () => useProfileBuilder((s) => s.document?.sections || EMPTY_SECTIONS);
+export const useProfilePreviewSource = () => useProfileBuilder((s) => s.previewSource);
 export const useProfileLoading = () => useProfileBuilder((s) => s.isLoading);
 export const useProfileSaving = () => {
   const isSaving = useProfileBuilder((s) => s.isSaving);
