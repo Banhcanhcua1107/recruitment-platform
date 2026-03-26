@@ -6,6 +6,7 @@ import { DocumentPreview } from "@/features/ocr-viewer/components/DocumentPrevie
 import { OcrProcessingState, type OcrProcessingStep } from "@/features/ocr-viewer/components/OcrProcessingState";
 import { PreviewScaleToolbar } from "@/features/ocr-viewer/components/PreviewScaleToolbar";
 import { SemanticReviewPanel } from "@/features/ocr-viewer/components/SemanticReviewPanel";
+import { normalizeParsedJsonRecord } from "@/features/cv-import/normalize-parsed-json";
 import { getReviewableBlocks } from "@/features/ocr-viewer/components/ParsedBlockList";
 import { fetchJsonlResult } from "@/features/ocr-viewer/services/paddleApi";
 import type {
@@ -13,6 +14,7 @@ import type {
   NormalizedOcrResult,
   PreviewScaleMode,
 } from "@/features/ocr-viewer/types";
+import { buildSemanticJsonFromMappedSections } from "@/features/ocr-viewer/utils/mappedSectionsSemantic";
 import { normalizeOcrResult } from "@/features/ocr-viewer/utils/ocrNormalize";
 import type { CVArtifactKind, CVDocumentDetailResponse, CVDocumentStatus } from "@/types/cv-import";
 
@@ -158,9 +160,14 @@ export function PersistedOcrReviewPanel({
   headerActions,
 }: PersistedOcrReviewPanelProps) {
   const mountedRef = useRef(true);
+  const normalizedParsedJson = useMemo(() => normalizeParsedJsonRecord(detail.parsed_json), [detail.parsed_json]);
   const normalizedFromParsed = useMemo(
-    () => normalizeOcrResult({ parsed_json: detail.parsed_json, pages: detail.pages }),
-    [detail.pages, detail.parsed_json],
+    () => normalizeOcrResult({ parsed_json: normalizedParsedJson, pages: detail.pages }),
+    [detail.pages, normalizedParsedJson],
+  );
+  const semanticOverride = useMemo(
+    () => buildSemanticJsonFromMappedSections(normalizedParsedJson.cleaned_json ?? normalizedParsedJson.mapped_sections),
+    [normalizedParsedJson.cleaned_json, normalizedParsedJson.mapped_sections],
   );
   const [artifactResult, setArtifactResult] = useState<NormalizedOcrResult | null>(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
@@ -199,7 +206,7 @@ export function PersistedOcrReviewPanel({
         (artifact) =>
           artifact.status === "ready" &&
           Boolean(artifact.download_url) &&
-          ["normalized_json", "layout_raw", "ocr_raw"].includes(artifact.kind),
+          ["normalized_json", "mapped_sections", "layout_raw", "ocr_raw"].includes(artifact.kind),
       ),
     [detail.artifacts],
   );
@@ -386,6 +393,7 @@ export function PersistedOcrReviewPanel({
           ) : (
             <SemanticReviewPanel
               pages={normalizedResult.pages}
+              semanticOverride={semanticOverride}
               activeBlockId={activeBlockId}
               hoveredBlockId={hoveredBlockId}
               onHover={setHoveredBlockId}

@@ -32,6 +32,14 @@ from typing import Any
 import pdfplumber
 import requests
 from PIL import Image
+from services.cv_content_cleaner import postprocess_mapped_sections
+from services.mapped_sections import (
+    build_empty_document_analysis,
+    mapped_sections_schema_json,
+    mapped_sections_to_structured_data,
+    normalize_document_analysis,
+    normalize_mapped_sections,
+)
 from services.ocr_service import extract_full_text, run_ocr
 
 logger = logging.getLogger("cv_parser")
@@ -289,90 +297,52 @@ OCR TEXT:
 # Step 5 — Parse structured JSON
 # ─────────────────────────────────────────────────────────────────────
 
-_CV_SCHEMA = """{
-  "personal_information": {
-    "name": "",
-    "email": "",
-    "phone": "",
-    "address": "",
-    "linkedin": ""
-  },
-  "job_title": "",
-  "career_objective": "",
-  "education": [
-    {
-      "institution": "",
-      "degree": "",
-      "field_of_study": "",
-      "start_date": "",
-      "end_date": "",
-      "gpa": ""
-    }
-  ],
-  "skills": [],
-  "projects": [
-    {
-      "name": "",
-      "description": "",
-      "technologies": [],
-      "role": "",
-      "url": ""
-    }
-  ],
-  "experience": [
-    {
-      "company": "",
-      "title": "",
-      "start_date": "",
-      "end_date": "",
-      "description": ""
-    }
-  ],
-  "certificates": [
-    {
-      "name": "",
-      "issuer": "",
-      "date_obtained": ""
-    }
-  ],
-  "interests": []
-}"""
+_CV_SCHEMA = mapped_sections_schema_json()
 
 
-def parse_cv_json(clean_text: str) -> dict[str, Any]:
-    """
-    LLM call #2 — extract structured CV data from clean text.
-    Returns a dict matching _CV_SCHEMA.
-    """
-    prompt = f"""Bạn là chuyên gia phân tích CV.
-Trích xuất thông tin từ văn bản CV dưới đây và trả về JSON theo đúng schema.
+def build_parse_cv_mapping_prompt(source_payload: Any) -> str:
+    payload = source_payload if isinstance(source_payload, dict) else {"clean_text": str(source_payload or "")}
+    return f"""Ban la AI map du lieu CV JSON vao dung section giao dien.
 
-Quy tắc nghiêm ngặt:
-1. Chỉ trả về JSON hợp lệ — không giải thích, không thêm text.
-2. Giữ trường rỗng ("") nếu không có thông tin, mảng rỗng ([]) cho list.
-3. Không bịa thêm thông tin.
-4. Không đổi ngôn ngữ nội dung.
+Hay doc JSON dau vao va gan tung field vao dung box hien thi sau:
+- candidate
+- personal_info
+- summary
+- career_objective
+- education
+- skills
+- projects
+- experience
+- certificates
+- hobbies
+- languages
+- awards
+- others
+
+Quy tac:
+- Khong sua noi dung.
+- Khong them du lieu.
+- Chi phan loai dung section.
+- Neu khong ro, cho vao others.
+- Candidate chi chua ten ung vien, vi tri ung tuyen, avatar.
+- Summary va career_objective la hai section khac nhau.
+- Luon tra day du tat ca top-level keys trong schema, doi tuong rong hoac mang rong neu khong co du lieu.
+- Chi tra ve JSON hop le, khong markdown, khong giai thich.
 
 SCHEMA:
 {_CV_SCHEMA}
 
-VĂN BẢN CV:
-{clean_text}"""
+INPUT JSON:
+{json.dumps(payload, ensure_ascii=False, indent=2)}"""
 
-    try:
-        raw = _call_llm(prompt)
-    except Exception as e:
-        logger.error("Parse LLM failed: %s", e)
-        return {}
 
-    # Strip markdown code fences if present
+def _extract_first_json_object(raw: str) -> dict[str, Any]:
     content = raw
     if content.startswith("```"):
         content = re.sub(r"^```(?:json)?\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
     content = content.strip()
 
-    # Extract first JSON object
     start = content.find("{")
     end = content.rfind("}")
     if start == -1 or end == -1 or end <= start:
@@ -384,6 +354,44 @@ VĂN BẢN CV:
     except json.JSONDecodeError as e:
         logger.error("JSON parse error: %s | Content: %s", e, content[:300])
         return {}
+
+
+def parse_cv_json(source_payload: Any) -> dict[str, Any]:
+    """
+    LLM call #2 — map OCR/text context into mapped_sections.
+    """
+    payload = source_payload if isinstance(source_payload, dict) else {"clean_text": str(source_payload or "")}
+    prompt = f"""Ban la AI chuyen phan tich du lieu CV/ho so ung vien tu JSON OCR tho.
+
+Nhiem vu:
+1. Doc toan bo JSON dau vao.
+2. Hieu ngu nghia tung field, ke ca khi key dat sai hoac khong chuan.
+3. Phan loai du lieu vao dung nhom noi dung de hien thi tren giao dien CV.
+4. Tra ve JSON hop le theo dung schema.
+
+Quy tac:
+1. Chi tra ve JSON hop le, khong them giai thich hay markdown.
+2. Khong duoc bịa them du lieu.
+3. Neu mot field chua ro, dua vao others.
+4. Neu du lieu bi lan nhieu y trong cung field, tach logic neu co the.
+5. Candidate chi chua ten ung vien, vi tri ung tuyen, avatar.
+6. Summary va career_objective la hai section khac nhau.
+7. Luon tra day du tat ca top-level keys trong schema, doi tuong rong hoac mang rong neu khong co du lieu.
+
+SCHEMA:
+{_CV_SCHEMA}
+
+INPUT JSON:
+{json.dumps(payload, ensure_ascii=False, indent=2)}"""
+    prompt = build_parse_cv_mapping_prompt(source_payload)
+
+    try:
+        raw = _call_llm(prompt)
+    except Exception as e:
+        logger.error("Parse LLM failed: %s", e)
+        return normalize_mapped_sections({})
+
+    return normalize_mapped_sections(_extract_first_json_object(raw))
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -455,6 +463,12 @@ def parse_cv(
             "data": {
                 "full_name": None,
                 "job_title": None,
+                "profile": {
+                    "full_name": None,
+                    "job_title": None,
+                    "career_objective": None,
+                    "summary": None,
+                },
                 "contact": {
                     "email": None,
                     "phone": None,
@@ -462,12 +476,16 @@ def parse_cv(
                     "address": None,
                 },
                 "summary": None,
+                "career_objective": None,
                 "skills": [],
                 "experience": [],
                 "education": [],
                 "projects": [],
                 "certifications": [],
                 "languages": [],
+                "awards": [],
+                "hobbies": [],
+                "others": [],
                 "raw_text": "",
             },
             "page_count": page_count,
@@ -475,6 +493,10 @@ def parse_cv(
             "raw_text": "",
             "clean_text": "",
             "cv_json": {},
+            "mapped_sections": normalize_mapped_sections({}),
+            "cleaned_json": normalize_mapped_sections({}),
+            "document_analysis": normalize_document_analysis(build_empty_document_analysis()),
+            "correction_log": [],
             "avatar_url": None,
         }
 
@@ -482,33 +504,33 @@ def parse_cv(
     pre_cleaned = clean_ocr_text(raw_text)
     clean_text = normalize_text(pre_cleaned)
 
-    # ── Parse JSON
-    cv_json = parse_cv_json(clean_text)
-
     # ── Build avatar URL string (data URI for direct <img src=...> usage)
     avatar_url: str | None = None
     if avatar_b64:
         avatar_url = f"data:image/jpeg;base64,{avatar_b64}"
 
-    personal_info = cv_json.get("personal_information", {}) if isinstance(cv_json, dict) else {}
-    structured_data = {
-        "full_name": personal_info.get("name") or None,
-        "job_title": cv_json.get("job_title") or None,
-        "contact": {
-            "email": personal_info.get("email") or None,
-            "phone": personal_info.get("phone") or None,
-            "linkedin": personal_info.get("linkedin") or None,
-            "address": personal_info.get("address") or None,
-        },
-        "summary": cv_json.get("career_objective") or cv_json.get("summary") or None,
-        "skills": cv_json.get("skills") or [],
-        "experience": cv_json.get("experience") or [],
-        "education": cv_json.get("education") or [],
-        "projects": cv_json.get("projects") or [],
-        "certifications": cv_json.get("certificates") or cv_json.get("certifications") or [],
-        "languages": cv_json.get("languages") or [],
+    source_payload = {
+        "source_kind": file_type,
+        "filename": filename,
+        "page_count": page_count,
         "raw_text": raw_text,
+        "clean_text": clean_text,
     }
+    mapped_sections = normalize_mapped_sections(
+        parse_cv_json(source_payload),
+        avatar_url=avatar_url,
+    )
+    postprocess_result = postprocess_mapped_sections(mapped_sections, call_llm=_call_llm)
+    cleaned_json = normalize_mapped_sections(
+        postprocess_result.get("mapped_sections") or mapped_sections,
+        avatar_url=avatar_url,
+    )
+    document_analysis = normalize_document_analysis(
+        postprocess_result.get("document_analysis"),
+        mapped_sections=cleaned_json,
+    )
+    correction_log = postprocess_result.get("correction_log") or []
+    structured_data = mapped_sections_to_structured_data(cleaned_json, raw_text=raw_text)
 
     return {
         "success": True,
@@ -518,6 +540,10 @@ def parse_cv(
         "warnings": warnings,
         "raw_text": raw_text,
         "clean_text": clean_text,
-        "cv_json": cv_json,
+        "cv_json": cleaned_json,
+        "mapped_sections": mapped_sections,
+        "cleaned_json": cleaned_json,
+        "document_analysis": document_analysis,
+        "correction_log": correction_log,
         "avatar_url": avatar_url,
     }

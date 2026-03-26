@@ -23,6 +23,17 @@ from pdf2image import convert_from_bytes
 from PIL import Image, ImageOps
 
 from services.cv_layout_parser import parse_structured_cv_from_ocr
+from services.cv_content_cleaner import postprocess_mapped_sections
+from services.cv_parser import _call_llm, parse_cv_json
+from services.mapped_sections import (
+    build_builder_sections_from_mapped_sections,
+    build_empty_document_analysis,
+    build_empty_mapped_sections,
+    has_meaningful_mapped_sections,
+    normalize_document_analysis,
+    mapped_sections_to_structured_data,
+    normalize_mapped_sections,
+)
 from services.ocr_service import OCRBlock, OCRPageResult, extract_full_text
 
 logger = logging.getLogger("ocr_pipeline")
@@ -1185,6 +1196,10 @@ def _filter_sections_by_keywords(parsed: dict[str, Any], raw_text: str) -> dict[
     # erased and replaced by generic output.
     return {
         "data": dict(parsed.get("data", {})),
+        "mapped_sections": dict(parsed.get("mapped_sections", {})),
+        "cleaned_json": dict(parsed.get("cleaned_json", parsed.get("mapped_sections", {}))),
+        "document_analysis": dict(parsed.get("document_analysis", {})),
+        "correction_log": list(parsed.get("correction_log", [])),
         "detected_sections": list(parsed.get("detected_sections", [])),
         "builder_sections": list(parsed.get("builder_sections", [])),
         "layout": parsed.get("layout", {}),
@@ -1274,6 +1289,10 @@ def _build_non_cv_payload(
 
     return {
         "data": data_payload,
+        "mapped_sections": build_empty_mapped_sections(),
+        "cleaned_json": build_empty_mapped_sections(),
+        "document_analysis": normalize_document_analysis(build_empty_document_analysis()),
+        "correction_log": [],
         "detected_sections": detected_sections,
         "builder_sections": builder_sections,
         "layout": layout_payload,
@@ -1331,6 +1350,48 @@ def process_cv(
 
     if should_try_cv_parse:
         parsed = parse_structured_cv_from_ocr(page_results)
+        llm_mapped_sections = normalize_mapped_sections(
+            parse_cv_json(
+                {
+                    "raw_text": raw_text,
+                    "markdown_pages": structure_result["markdown_pages"],
+                    "ocr_blocks": [
+                        {
+                            "page": block.page,
+                            "text": block.text,
+                            "bbox": _to_xyxy(block.bbox),
+                            "confidence": block.confidence,
+                        }
+                        for page in page_results
+                        for block in page.blocks
+                        if str(block.text or "").strip()
+                    ],
+                    "layout_blocks": structure_result["layout_blocks"],
+                    "detected_sections": [
+                        {
+                            "type": section.get("type"),
+                            "title": section.get("title"),
+                            "content": section.get("content"),
+                        }
+                        for section in parsed.get("detected_sections", [])
+                    ],
+                }
+            )
+        )
+        if has_meaningful_mapped_sections(llm_mapped_sections):
+            postprocess_result = postprocess_mapped_sections(llm_mapped_sections, call_llm=_call_llm)
+            cleaned_json = normalize_mapped_sections(
+                postprocess_result.get("mapped_sections") or llm_mapped_sections,
+            )
+            parsed["mapped_sections"] = llm_mapped_sections
+            parsed["cleaned_json"] = cleaned_json
+            parsed["document_analysis"] = normalize_document_analysis(
+                postprocess_result.get("document_analysis"),
+                mapped_sections=cleaned_json,
+            )
+            parsed["correction_log"] = postprocess_result.get("correction_log") or []
+            parsed["data"] = mapped_sections_to_structured_data(cleaned_json, raw_text=raw_text)
+            parsed["builder_sections"] = build_builder_sections_from_mapped_sections(cleaned_json)
         parsed = _filter_sections_by_keywords(parsed, raw_text)
         if _has_meaningful_cv_payload(parsed):
             structured_blocks = _build_structured_blocks(page_results, parsed, structure_result["layout_blocks"])
@@ -1390,6 +1451,11 @@ def process_cv(
         "total_blocks": sum(len(page.blocks) for page in page_results),
         "blocks": structured_blocks,
         "data": parsed["data"],
+        "mapped_sections": parsed.get("mapped_sections") or build_empty_mapped_sections(),
+        "cleaned_json": parsed.get("cleaned_json") or parsed.get("mapped_sections") or build_empty_mapped_sections(),
+        "document_analysis": parsed.get("document_analysis")
+        or normalize_document_analysis(build_empty_document_analysis()),
+        "correction_log": parsed.get("correction_log") or [],
         "detected_sections": parsed["detected_sections"],
         "builder_sections": parsed["builder_sections"],
         "layout": parsed["layout"],

@@ -16,7 +16,9 @@ import { CreateCard } from "./components/cv/CreateCard";
 import { UploadCard } from "./components/cv/UploadCard";
 import { uploadCVImport } from "@/features/cv-import/api/client";
 import { ImportReviewOverlayModal } from "@/features/cv-import/components/ImportReviewOverlayModal";
+import { buildOptimisticImportReviewDetail } from "@/features/cv-import/review/import-review-detail";
 import { PaddleOcrWorkspaceModal } from "@/features/ocr-viewer";
+import type { CVDocumentDetailResponse } from "@/types/cv-import";
 
 function CVDashboardPageContent() {
   const router = useRouter();
@@ -28,6 +30,8 @@ function CVDashboardPageContent() {
   const [templateRedirectLoading, setTemplateRedirectLoading] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [importUploading, setImportUploading] = useState(false);
+  const [optimisticReviewDetail, setOptimisticReviewDetail] =
+    useState<CVDocumentDetailResponse | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const importReviewDocumentId = searchParams.get("importReview");
 
@@ -138,6 +142,7 @@ function CVDashboardPageContent() {
       setImportUploading(true);
       setSaveNotice("Đang đưa CV vào hộp xem lại import mới...");
       const response = await uploadCVImport(file);
+      setOptimisticReviewDetail(buildOptimisticImportReviewDetail(response));
       setSaveNotice("CV đã được đưa vào pipeline. Hộp xem lại sẽ tự cập nhật trạng thái xử lý.");
       setImportReviewQuery(response.document.id);
     } catch (err) {
@@ -292,7 +297,15 @@ function CVDashboardPageContent() {
 
       <ImportReviewOverlayModal
         documentId={importReviewDocumentId}
-        onClose={() => setImportReviewQuery(null)}
+        initialDetail={
+          importReviewDocumentId && optimisticReviewDetail?.document.id === importReviewDocumentId
+            ? optimisticReviewDetail
+            : null
+        }
+        onClose={() => {
+          setOptimisticReviewDetail(null);
+          setImportReviewQuery(null);
+        }}
       />
 
       <input

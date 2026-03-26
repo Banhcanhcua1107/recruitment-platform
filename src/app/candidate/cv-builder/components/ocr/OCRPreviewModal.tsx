@@ -23,6 +23,7 @@ import {
   type UploadCVResponse,
 } from "./ocr-pipeline-adapter";
 import { useStablePreviewSource } from "./use-stable-preview-source";
+import { normalizeCvSections } from "../../section-normalization";
 import type { CVSection } from "../../types";
 
 interface OCRPreviewModalProps {
@@ -509,11 +510,13 @@ export function OCRPreviewModal({
 
   const resolvedSections = useMemo(
     () =>
-      backendSections && backendSections.length > 0
+      normalizeCvSections(
+        backendSections && backendSections.length > 0
         ? backendSections
         : rawBlocks.length > 0
           ? transformRawBlocksToSections(rawBlocks, draftData)
           : buildFallbackSectionsFromContent(documentContent),
+      ),
     [backendSections, documentContent, draftData, rawBlocks],
   );
 

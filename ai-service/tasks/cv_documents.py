@@ -41,6 +41,7 @@ RAW_DATA_ARTIFACT_KINDS = {
     "vl_raw",
     "parser_raw",
     "normalized_json",
+    "mapped_sections",
 }
 
 
@@ -354,6 +355,7 @@ def process_document(self, document_id: str, job_id: str) -> str:
             repository.update_document_status(document_id, "parsing_structured")
             normalized_json = build_normalized_json(processed, vl_result)
             parser_raw = build_parser_raw_response(processed, normalized_json)
+            mapped_sections = normalized_json.get("mapped_sections") or processed.get("mapped_sections") or {}
             _persist_binary_artifact(
                 repository,
                 storage,
@@ -372,6 +374,16 @@ def process_document(self, document_id: str, job_id: str) -> str:
                 document=document,
                 kind="normalized_json",
                 content=_json_bytes(normalized_json),
+                content_type="application/json",
+                source_stage="parse_structured",
+                extension="json",
+            )
+            _persist_binary_artifact(
+                repository,
+                storage,
+                document=document,
+                kind="mapped_sections",
+                content=_json_bytes(mapped_sections),
                 content_type="application/json",
                 source_stage="parse_structured",
                 extension="json",

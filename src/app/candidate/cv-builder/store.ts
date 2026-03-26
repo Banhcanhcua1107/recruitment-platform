@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { CVContent, CVSection, CVMode, SectionType, CVProfile, AnySectionData } from './types';
+import { normalizeCvSections, normalizeSectionDataIds } from './section-normalization';
 
 // Redefine EditorState with new actions
 interface EditorState {
@@ -266,15 +267,15 @@ export const useCVStore = create<EditorState>((set, get) => ({
   aiSuggestions: [],
 
   loadResumeIntoStore: (sections, styling, templateId) => {
+    const normalizedSections = normalizeCvSections(sections);
     const initialCV: CVContent = {
       meta: { pageSize: 'A4', version: '1.0', templateId },
       theme: styling
         ? { ...DEFAULT_THEME, ...styling }
         : DEFAULT_THEME,
       layout: { type: 'fixed', columns: 12 },
-      sections: sections.map((s) => ({
+      sections: normalizedSections.map((s) => ({
         ...s,
-        id: s.id || uuidv4(),
         containerId: s.containerId || 'main-column',
       })),
     };
@@ -293,11 +294,12 @@ export const useCVStore = create<EditorState>((set, get) => ({
       ? JSON.parse(JSON.stringify(INITIAL_TEMPLATE_SECTIONS)) 
       : []; 
 
+    const normalizedSections = normalizeCvSections(sections as CVSection[]);
     const initialCV = {
         meta: { pageSize: 'A4', version: '1.0', templateId },
         theme: DEFAULT_THEME,
         layout: { type: mode === 'canvas' ? 'grid' : 'fixed', columns: 12 },
-        sections: sections.map((s: CVSection) => ({ ...s, id: s.id || uuidv4(), containerId: s.containerId || 'main-column' })),
+        sections: normalizedSections.map((s: CVSection) => ({ ...s, containerId: s.containerId || 'main-column' })),
       } as CVContent;
 
     set({
@@ -392,7 +394,15 @@ export const useCVStore = create<EditorState>((set, get) => ({
     const newCV = {
       ...state.cv,
       sections: state.cv.sections.map((s) => 
-        s.id === sectionId ? { ...s, data: { ...s.data, ...dataUpdates } } : s
+        s.id === sectionId
+          ? {
+              ...s,
+              data: normalizeSectionDataIds(s.type, {
+                ...s.data,
+                ...dataUpdates,
+              } as AnySectionData),
+            }
+          : s
       ),
     };
     return { cv: newCV, isDirty: true };

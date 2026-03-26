@@ -15,6 +15,7 @@ import type {
   CVDocumentPageView,
   NormalizedParsedCV,
 } from "@/types/cv-import";
+import { normalizeParsedJsonRecord } from "@/features/cv-import/normalize-parsed-json";
 import { logger, measureAsync } from "@/lib/observability";
 
 const AI_SERVICE_URL =
@@ -83,45 +84,7 @@ function isActiveHeartbeat(lastHeartbeatAt: string | null) {
 }
 
 export function normalizeParsedJSON(input: unknown): NormalizedParsedCV {
-  const source = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const profile = (source.profile && typeof source.profile === "object"
-    ? source.profile
-    : {
-        full_name: source.full_name ?? null,
-        job_title: source.job_title ?? null,
-      }) as Record<string, unknown>;
-
-  const contacts = (source.contacts && typeof source.contacts === "object"
-    ? source.contacts
-    : source.contact && typeof source.contact === "object"
-      ? source.contact
-      : {}) as Record<string, unknown>;
-
-  return {
-    profile,
-    contacts,
-    summary: typeof source.summary === "string" ? source.summary : "",
-    experience: Array.isArray(source.experience) ? (source.experience as Array<Record<string, unknown>>) : [],
-    education: Array.isArray(source.education) ? (source.education as Array<Record<string, unknown>>) : [],
-    skills: Array.isArray(source.skills) ? (source.skills as Array<Record<string, unknown> | string>) : [],
-    projects: Array.isArray(source.projects) ? (source.projects as Array<Record<string, unknown>>) : [],
-    certifications: Array.isArray(source.certifications)
-      ? (source.certifications as Array<Record<string, unknown>>)
-      : [],
-    languages: Array.isArray(source.languages) ? (source.languages as Array<Record<string, unknown> | string>) : [],
-    avatar:
-      source.avatar && typeof source.avatar === "object"
-        ? (source.avatar as Record<string, unknown>)
-        : {},
-    raw_ocr_blocks: Array.isArray(source.raw_ocr_blocks)
-      ? (source.raw_ocr_blocks as Array<Record<string, unknown>>)
-      : Array.isArray(source.blocks)
-        ? (source.blocks as Array<Record<string, unknown>>)
-        : [],
-    layout_blocks: Array.isArray(source.layout_blocks)
-      ? (source.layout_blocks as Array<Record<string, unknown>>)
-      : [],
-  };
+  return normalizeParsedJsonRecord(input);
 }
 
 async function enqueueProcessing(documentId: string, jobId: string) {

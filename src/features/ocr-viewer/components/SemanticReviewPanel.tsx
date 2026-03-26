@@ -4,8 +4,10 @@ import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import { Link2, Mail, MapPin, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ParsedBlockList, getReviewableBlocks } from "@/features/ocr-viewer/components/ParsedBlockList";
+import { buildSemanticItemKey } from "@/features/ocr-viewer/components/semanticReviewKeys";
 import type {
   SemanticItem,
+  SemanticCvJson,
   SemanticSection,
   SemanticSectionType,
   SemanticSourceTrace,
@@ -15,6 +17,7 @@ import { transformOcrToSemanticJson } from "@/features/ocr-viewer/utils/ocrSeman
 
 interface SemanticReviewPanelProps {
   pages: NormalizedOcrPage[];
+  semanticOverride?: SemanticCvJson | null;
   activeBlockId: string | null;
   hoveredBlockId: string | null;
   onHover: (blockId: string | null) => void;
@@ -246,17 +249,20 @@ function SelectableRow({
 
 function renderItem(
   item: SemanticItem,
+  index: number,
   activeBlockId: string | null,
   hoveredBlockId: string | null,
   onHover: (blockId: string | null) => void,
   onClick: (blockId: string) => void,
   tone: SectionTone,
 ) {
+  const itemKey = buildSemanticItemKey(item, index);
+
   switch (item.type) {
     case "paragraph":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.text}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -270,7 +276,7 @@ function renderItem(
     case "list":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.items.join(":")}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -291,7 +297,7 @@ function renderItem(
     case "skill_group":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.groupName}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -306,7 +312,7 @@ function renderItem(
     case "education":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.institution}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -326,7 +332,7 @@ function renderItem(
     case "project":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.name}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -347,7 +353,7 @@ function renderItem(
     case "experience":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || joinParts([item.position, item.company])}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -369,7 +375,7 @@ function renderItem(
     case "certification":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.name}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -386,7 +392,7 @@ function renderItem(
     case "language":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.name}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -403,7 +409,7 @@ function renderItem(
     case "contact_info":
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || "contact-info"}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -423,7 +429,7 @@ function renderItem(
     default:
       return (
         <SelectableRow
-          key={item.sourceBlockIds.join(":") || item.text}
+          key={itemKey}
           trace={item}
           activeBlockId={activeBlockId}
           hoveredBlockId={hoveredBlockId}
@@ -518,7 +524,9 @@ function SectionCard({
       </div>
 
       <div className="divide-y divide-slate-100">
-        {section.items.map((item) => renderItem(item, activeBlockId, hoveredBlockId, onHover, onClick, tone))}
+        {section.items.map((item, index) =>
+          renderItem(item, index, activeBlockId, hoveredBlockId, onHover, onClick, tone),
+        )}
       </div>
     </section>
   );
@@ -526,12 +534,16 @@ function SectionCard({
 
 export function SemanticReviewPanel({
   pages,
+  semanticOverride = null,
   activeBlockId,
   hoveredBlockId,
   onHover,
   onClick,
 }: SemanticReviewPanelProps) {
-  const semantic = useMemo(() => transformOcrToSemanticJson(pages), [pages]);
+  const semantic = useMemo(
+    () => semanticOverride ?? transformOcrToSemanticJson(pages),
+    [pages, semanticOverride],
+  );
   const blocks = useMemo(() => getReviewableBlocks(pages), [pages]);
   const profile = useMemo(() => buildProfileSummary(pages), [pages]);
   const hasContact = Boolean(

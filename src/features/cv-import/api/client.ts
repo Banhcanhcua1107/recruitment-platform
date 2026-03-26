@@ -73,6 +73,7 @@ export async function uploadCVImport(file: File): Promise<CVImportSummaryRespons
 
   const response = await fetch("/api/cv-imports", {
     method: "POST",
+    credentials: "same-origin",
     body: formData,
   });
 
@@ -82,6 +83,7 @@ export async function uploadCVImport(file: File): Promise<CVImportSummaryRespons
 export async function fetchCVImport(documentId: string): Promise<CVDocumentDetailResponse> {
   const response = await fetch(`/api/cv-imports/${documentId}`, {
     cache: "no-store",
+    credentials: "same-origin",
   });
   return parseJSONResponse<CVDocumentDetailResponse>(response);
 }
@@ -89,6 +91,7 @@ export async function fetchCVImport(documentId: string): Promise<CVDocumentDetai
 export async function retryCVImport(documentId: string): Promise<CVImportSummaryResponse> {
   const response = await fetch(`/api/cv-imports/${documentId}/retry`, {
     method: "POST",
+    credentials: "same-origin",
   });
   return parseJSONResponse<CVImportSummaryResponse>(response);
 }
@@ -99,6 +102,7 @@ export async function saveEditableCV(
 ): Promise<SaveEditableCVResponse> {
   const response = await fetch(`/api/cv-imports/${documentId}/save-editable`, {
     method: "POST",
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
     },

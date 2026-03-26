@@ -6,6 +6,12 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
+from services.mapped_sections import (
+    build_builder_sections_from_mapped_sections,
+    build_empty_mapped_sections,
+    mapped_sections_to_structured_data,
+    normalize_mapped_sections,
+)
 from services.ocr_service import OCRBlock, OCRPageResult, extract_full_text
 
 
@@ -1255,6 +1261,160 @@ def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str,
 
     return {
         "data": structured,
+        "detected_sections": detected_sections,
+        "builder_sections": builder_sections,
+        "layout": layout,
+        "raw_text": raw_text,
+    }
+
+
+def parse_structured_cv_from_ocr(page_results: list[OCRPageResult]) -> dict[str, Any]:
+    sections = detect_cv_sections(page_results)
+    layout = _serialize_layout(detect_columns(page_results))
+    raw_text = extract_full_text(page_results)
+    full_name, job_title, contact = _infer_header_and_contact(sections)
+
+    mapped_sections = build_empty_mapped_sections()
+    mapped_sections["candidate"]["name"] = full_name or ""
+    mapped_sections["candidate"]["job_title"] = job_title or ""
+    mapped_sections["personal_info"]["email"] = contact["email"] or ""
+    mapped_sections["personal_info"]["phone"] = contact["phone"] or ""
+    mapped_sections["personal_info"]["address"] = contact["address"] or ""
+    mapped_sections["personal_info"]["links"] = [
+        {
+            "label": item.get("network") or "Link",
+            "url": item.get("url") or "",
+        }
+        for item in contact.get("socials", [])
+        if item.get("url")
+    ]
+
+    detected_sections: list[dict[str, Any]] = []
+
+    for section in sections:
+        if section.type == "header":
+            continue
+
+        section_payload: dict[str, Any] = {
+            "type": section.type,
+            "title": section.title,
+            "content": section.content,
+            "items": [],
+            "line_ids": [line.id for line in section.lines],
+            "block_indices": [idx for line in section.lines for idx in line.block_indices],
+        }
+
+        if section.type == "career_objective":
+            mapped_sections["career_objective"]["text"] = section.content
+        elif section.type == "contact":
+            contact_items: list[dict[str, str]] = []
+            for line in section.lines:
+                value, _ = _strip_contact_prefix(line.text)
+                value = _normalize_contact_value(value)
+                if not value:
+                    continue
+                if _looks_like_email(value):
+                    mapped_sections["personal_info"]["email"] = value
+                    contact_items.append({"kind": "email", "value": value})
+                elif _looks_like_phone(value):
+                    mapped_sections["personal_info"]["phone"] = value
+                    contact_items.append({"kind": "phone", "value": value})
+                elif _looks_like_url(value):
+                    network = "LinkedIn" if "linkedin" in value.lower() else "Link"
+                    links = mapped_sections["personal_info"].setdefault("links", [])
+                    if not any(item["url"] == value for item in links):
+                        links.append({"label": network, "url": value})
+                    contact_items.append({"kind": network.lower(), "value": value})
+                elif _looks_like_address(value):
+                    mapped_sections["personal_info"]["address"] = value
+                    contact_items.append({"kind": "address", "value": value})
+                else:
+                    contact_items.append({"kind": "text", "value": value})
+            section_payload["items"] = contact_items
+        elif section.type == "work_experience":
+            items = parse_work_experience(section.lines)
+            section_payload["items"] = items
+            mapped_sections["experience"] = [
+                {
+                    "company": item.get("company", ""),
+                    "role": item.get("title", ""),
+                    "description": item.get("description", ""),
+                    "start_date": item.get("start_date", ""),
+                    "end_date": item.get("end_date", ""),
+                }
+                for item in items
+            ]
+        elif section.type == "projects":
+            items = parse_projects(section.lines)
+            section_payload["items"] = items
+            mapped_sections["projects"] = [
+                {
+                    "name": item.get("name", ""),
+                    "description": item.get("description", ""),
+                    "technologies": item.get("technologies", []),
+                    "role": item.get("role", ""),
+                    "start_date": item.get("start_date", ""),
+                    "end_date": item.get("end_date", ""),
+                    "github": item.get("github", ""),
+                    "url": item.get("url", ""),
+                }
+                for item in items
+            ]
+        elif section.type == "skills":
+            items = _clean_skill_items(parse_skills(section.lines))
+            section_payload["items"] = items
+            mapped_sections["skills"] = normalize_mapped_sections({"skills": items})["skills"]
+        elif section.type == "education":
+            items = parse_education(section.lines)
+            section_payload["items"] = items
+            mapped_sections["education"] = [
+                {
+                    "school": item.get("institution", ""),
+                    "degree": item.get("degree", ""),
+                    "major": item.get("field_of_study", ""),
+                    "gpa": item.get("gpa", ""),
+                    "start_date": item.get("start_date", ""),
+                    "end_date": item.get("end_date", ""),
+                    "description": item.get("description", ""),
+                }
+                for item in items
+            ]
+        elif section.type == "certifications":
+            items = parse_certifications(section.lines)
+            section_payload["items"] = items
+            mapped_sections["certificates"] = [
+                {
+                    "name": item.get("name", ""),
+                    "issuer": item.get("issuer", ""),
+                    "year": item.get("date_obtained", ""),
+                    "url": item.get("url", ""),
+                }
+                for item in items
+            ]
+        elif section.type == "interests":
+            mapped_sections["hobbies"] = list(
+                dict.fromkeys(line.text.strip() for line in section.lines if line.text.strip())
+            )
+        elif section.type == "activities":
+            if section.content:
+                mapped_sections["others"].append(section.content)
+        elif section.content:
+            mapped_sections["others"].append(section.content)
+
+        detected_sections.append(section_payload)
+
+    mapped_sections = normalize_mapped_sections(mapped_sections)
+    structured = mapped_sections_to_structured_data(mapped_sections, raw_text=raw_text)
+    builder_sections = build_builder_sections_from_mapped_sections(mapped_sections)
+
+    layout["section_layout"] = {
+        "left_column": ["personal_info", "skill_list"],
+        "right_column": ["header", "summary", "education_list", "project_list", "experience_list", "certificate_list"],
+    }
+
+    return {
+        "data": structured,
+        "mapped_sections": mapped_sections,
         "detected_sections": detected_sections,
         "builder_sections": builder_sections,
         "layout": layout,

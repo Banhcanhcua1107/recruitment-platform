@@ -345,12 +345,359 @@ function normalizeLegacyPipelineResult(raw: Record<string, unknown>): Normalized
   return buildPages(pageMeta.length, pageMeta, dedupeBlocks(blocks), "legacy", []);
 }
 
+function inferMappedSections(parsed: Record<string, unknown>) {
+  if (objectWithKeys(parsed.cleaned_json)) {
+    return parsed.cleaned_json as Record<string, unknown>;
+  }
+
+  if (objectWithKeys(parsed.mapped_sections)) {
+    return parsed.mapped_sections as Record<string, unknown>;
+  }
+
+  if (
+    "candidate" in parsed ||
+    "personal_info" in parsed ||
+    "summary" in parsed ||
+    "career_objective" in parsed ||
+    "skills" in parsed
+  ) {
+    return parsed;
+  }
+
+  return null;
+}
+
+function mappedText(value: unknown) {
+  if (objectWithKeys(value)) {
+    return toStringValue(value.text ?? value.value ?? value.content ?? value.description);
+  }
+
+  return toStringValue(value);
+}
+
+function mappedList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => mappedList(item));
+  }
+
+  if (objectWithKeys(value)) {
+    if ("name" in value) {
+      const name = toStringValue(value.name);
+      return name ? [name] : [];
+    }
+
+    return Object.values(value).flatMap((item) => mappedList(item));
+  }
+
+  const text = toStringValue(value);
+  if (!text) return [];
+  return text
+    .split(/\r?\n|[;,|]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function buildSyntheticBlocksFromMappedSections(
+  mappedSections: Record<string, unknown>,
+  baseMeta: Array<Partial<NormalizedOcrPage> | undefined>,
+) {
+  const firstPage = baseMeta[0] ?? {};
+  const pageWidth = clampPositive(firstPage.originalWidth) || 840;
+  const pageHeight = clampPositive(firstPage.originalHeight) || 1188;
+  const marginX = 64;
+  const marginY = 48;
+  const contentWidth = Math.max(260, pageWidth - marginX * 2);
+
+  let pageIndex = 0;
+  let currentY = marginY;
+  let order = 0;
+  const blocks: NormalizedOcrBlock[] = [];
+
+  const ensureRoom = (height: number) => {
+    if (currentY + height <= pageHeight - marginY) return;
+    pageIndex += 1;
+    currentY = marginY;
+  };
+
+  const pushBlock = (
+    type: string,
+    text: string,
+    options?: {
+      xMin?: number;
+      width?: number;
+      height?: number;
+      gapAfter?: number;
+      meta?: Record<string, unknown>;
+    },
+  ) => {
+    const cleanedText = text.trim();
+    if (!cleanedText) return;
+
+    const height = options?.height ?? 18;
+    ensureRoom(height + 12);
+
+    const bbox = {
+      xMin: options?.xMin ?? marginX,
+      yMin: currentY,
+      xMax: (options?.xMin ?? marginX) + (options?.width ?? contentWidth),
+      yMax: currentY + height,
+    };
+
+    blocks.push({
+      id: buildId("mapped-sections", pageIndex, order, bbox, type, cleanedText),
+      pageIndex,
+      type,
+      text: cleanedText,
+      bbox,
+      order,
+      confidence: 1,
+      meta: {
+        synthetic: true,
+        source: "mapped_sections",
+        ...(options?.meta ?? {}),
+      },
+    });
+
+    order += 1;
+    currentY += height + (options?.gapAfter ?? 10);
+  };
+
+  const pushSectionTitle = (title: string, sectionType: string) => {
+    pushBlock("title", title, {
+      height: 20,
+      gapAfter: 12,
+      meta: { semantic_section_type: sectionType },
+    });
+  };
+
+  const candidate = objectWithKeys(mappedSections.candidate)
+    ? (mappedSections.candidate as Record<string, unknown>)
+    : {};
+  const personalInfo = objectWithKeys(mappedSections.personal_info)
+    ? (mappedSections.personal_info as Record<string, unknown>)
+    : {};
+  const summary = mappedText(mappedSections.summary);
+  const careerObjective = mappedText(mappedSections.career_objective);
+
+  const name = toStringValue(candidate.name);
+  const jobTitle = toStringValue(candidate.job_title);
+  if (name) {
+    pushBlock("title", name, { width: Math.min(contentWidth, 420), height: 24, gapAfter: 8 });
+  }
+  if (jobTitle) {
+    pushBlock("text", jobTitle, { width: Math.min(contentWidth, 420), gapAfter: 18 });
+  }
+
+  const contactLines = [
+    toStringValue(personalInfo.email),
+    toStringValue(personalInfo.phone),
+    toStringValue(personalInfo.address),
+    toStringValue(personalInfo.current_school)
+      ? `Current school: ${toStringValue(personalInfo.current_school)}`
+      : "",
+    toStringValue(personalInfo.academic_year)
+      ? `Academic year: ${toStringValue(personalInfo.academic_year)}`
+      : "",
+    toStringValue(personalInfo.location) ? `Location: ${toStringValue(personalInfo.location)}` : "",
+    ...(Array.isArray(personalInfo.links)
+      ? personalInfo.links
+          .filter(objectWithKeys)
+          .map((item) => toStringValue(item.url ?? item.link))
+          .filter(Boolean)
+      : []),
+  ].filter(Boolean);
+
+  if (contactLines.length) {
+    pushSectionTitle("Contact Information", "contact_info");
+    contactLines.forEach((line) => pushBlock("text", line, { gapAfter: 8 }));
+    currentY += 12;
+  }
+
+  if (summary) {
+    pushSectionTitle("Summary", "summary");
+    pushBlock("text", summary, { height: 20, gapAfter: 18 });
+  }
+
+  if (careerObjective) {
+    pushSectionTitle("Career Objective", "summary");
+    pushBlock("text", careerObjective, { height: 20, gapAfter: 18 });
+  }
+
+  const education = Array.isArray(mappedSections.education)
+    ? (mappedSections.education.filter(objectWithKeys) as Record<string, unknown>[])
+    : [];
+  if (education.length) {
+    pushSectionTitle("Education", "education");
+    education.forEach((item) => {
+      const school = toStringValue(item.school);
+      const subtitle = [
+        toStringValue(item.degree),
+        toStringValue(item.major),
+        [toStringValue(item.start_date), toStringValue(item.end_date)].filter(Boolean).join(" - "),
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      const gpa = toStringValue(item.gpa);
+      const description = toStringValue(item.description);
+
+      const primaryLine = school
+        ? `- School: ${school}`
+        : subtitle || description;
+      pushBlock("text", primaryLine, { gapAfter: 8 });
+      if (subtitle && subtitle !== school) {
+        pushBlock("text", subtitle, { xMin: marginX + 14, gapAfter: 8 });
+      }
+      if (gpa) {
+        pushBlock("text", `GPA: ${gpa}`, { xMin: marginX + 14, gapAfter: 8 });
+      }
+      if (description) {
+        pushBlock("text", description, { xMin: marginX + 14, gapAfter: 10 });
+      }
+    });
+    currentY += 10;
+  }
+
+  const skills = objectWithKeys(mappedSections.skills)
+    ? (mappedSections.skills as Record<string, unknown>)
+    : {};
+  const skillBuckets: Array<[string, string]> = [
+    ["programming_languages", "Programming Languages:"],
+    ["frontend", "Front-End:"],
+    ["backend", "Back-End:"],
+    ["database", "Database:"],
+    ["tools", "Tools:"],
+    ["soft_skills", "Soft Skills:"],
+    ["others", "Others:"],
+  ];
+  const hasSkills = skillBuckets.some(([key]) => mappedList(skills[key]).length > 0);
+  if (hasSkills) {
+    pushSectionTitle("Skills", "skill_group");
+    skillBuckets.forEach(([key, label]) => {
+      const items = mappedList(skills[key]);
+      if (!items.length) return;
+      pushBlock("text", `- ${label} ${items.join(", ")}`, {
+        gapAfter: 8,
+        meta: { semantic_bucket: key },
+      });
+    });
+    currentY += 10;
+  }
+
+  const projects = Array.isArray(mappedSections.projects)
+    ? (mappedSections.projects.filter(objectWithKeys) as Record<string, unknown>[])
+    : [];
+  if (projects.length) {
+    pushSectionTitle("Projects", "project");
+    projects.forEach((item) => {
+      const title = toStringValue(item.name);
+      const detailLine = [
+        toStringValue(item.role),
+        [toStringValue(item.start_date), toStringValue(item.end_date)].filter(Boolean).join(" - "),
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      const description = toStringValue(item.description);
+      const tech = mappedList(item.technologies).join(", ");
+      const link = toStringValue(item.url || item.github);
+
+      const primaryLine = title ? `Project: ${title}.` : `${description || detailLine}.`;
+      pushBlock("text", primaryLine, { gapAfter: 8 });
+      if (detailLine) {
+        pushBlock("text", detailLine, { xMin: marginX + 14, gapAfter: 8 });
+      }
+      if (description) {
+        pushBlock("text", description, { xMin: marginX + 14, gapAfter: 8 });
+      }
+      if (tech) {
+        pushBlock("text", `Tech stack: ${tech}.`, { xMin: marginX + 14, gapAfter: 8 });
+      }
+      if (link) {
+        pushBlock("text", link, { xMin: marginX + 14, gapAfter: 10 });
+      }
+    });
+    currentY += 10;
+  }
+
+  const experience = Array.isArray(mappedSections.experience)
+    ? (mappedSections.experience.filter(objectWithKeys) as Record<string, unknown>[])
+    : [];
+  if (experience.length) {
+    pushSectionTitle("Experience", "experience");
+    experience.forEach((item) => {
+      const heading = [toStringValue(item.role), toStringValue(item.company)].filter(Boolean).join(" | ");
+      const dateLine = [toStringValue(item.start_date), toStringValue(item.end_date)]
+        .filter(Boolean)
+        .join(" - ");
+      const description = toStringValue(item.description);
+
+      pushBlock("text", heading || description || dateLine, { gapAfter: 8 });
+      if (dateLine) {
+        pushBlock("text", dateLine, { xMin: marginX + 14, gapAfter: 8 });
+      }
+      if (description) {
+        pushBlock("text", description, { xMin: marginX + 14, gapAfter: 10 });
+      }
+    });
+    currentY += 10;
+  }
+
+  const certificates = Array.isArray(mappedSections.certificates)
+    ? (mappedSections.certificates.filter(objectWithKeys) as Record<string, unknown>[])
+    : [];
+  if (certificates.length) {
+    pushSectionTitle("Certifications", "certification");
+    certificates.forEach((item) => {
+      const line = [toStringValue(item.name), toStringValue(item.issuer), toStringValue(item.year)]
+        .filter(Boolean)
+        .join(" | ");
+      pushBlock("text", line, { gapAfter: 8 });
+      const url = toStringValue(item.url);
+      if (url) {
+        pushBlock("text", url, { xMin: marginX + 14, gapAfter: 8 });
+      }
+    });
+    currentY += 10;
+  }
+
+  const languages = Array.isArray(mappedSections.languages)
+    ? (mappedSections.languages.filter(objectWithKeys) as Record<string, unknown>[])
+    : [];
+  if (languages.length) {
+    pushSectionTitle("Languages", "language");
+    languages.forEach((item) => {
+      const line = `- ${[toStringValue(item.name), toStringValue(item.proficiency)].filter(Boolean).join(" - ")}`;
+      pushBlock("text", line, { gapAfter: 8 });
+    });
+    currentY += 10;
+  }
+
+  const otherLines = [
+    ...mappedList(mappedSections.hobbies).map((item) => `- Hobby item: ${item}`),
+    ...((Array.isArray(mappedSections.awards)
+      ? mappedSections.awards.filter(objectWithKeys).map((item) =>
+          ["- Award", toStringValue(item.name), toStringValue(item.issuer), toStringValue(item.year)]
+            .filter(Boolean)
+            .join(": "),
+        )
+      : []) as string[]),
+    ...mappedList(mappedSections.others).map((item) => `- Other note: ${item}`),
+  ].filter(Boolean);
+
+  if (otherLines.length) {
+    pushSectionTitle("Other", "other");
+    otherLines.forEach((line) => pushBlock("text", line, { gapAfter: 8 }));
+  }
+
+  return blocks;
+}
+
 function normalizePersistedResult(raw: Record<string, unknown>): NormalizedOcrResult | null {
   const parsed = objectWithKeys(raw.parsed_json) ? raw.parsed_json : raw;
   const rawBlocks = Array.isArray(parsed.raw_ocr_blocks) ? parsed.raw_ocr_blocks : [];
   const layoutBlocks = Array.isArray(parsed.layout_blocks) ? parsed.layout_blocks : [];
+  const mappedSections = inferMappedSections(parsed);
 
-  if (!rawBlocks.length && !layoutBlocks.length && !Array.isArray(raw.pages)) {
+  if (!rawBlocks.length && !layoutBlocks.length && !Array.isArray(raw.pages) && !mappedSections) {
     return null;
   }
 
@@ -368,7 +715,7 @@ function normalizePersistedResult(raw: Record<string, unknown>): NormalizedOcrRe
       })
     : [];
 
-  const blocks = sourceBlocks.flatMap((candidate, blockIndex) => {
+  let blocks = sourceBlocks.flatMap((candidate, blockIndex) => {
     if (!objectWithKeys(candidate)) return [];
     const pageIndex = inferPageIndex(candidate.page ?? candidate.pageIndex ?? candidate.page_num, 0);
     const polygon = inferPolygonFromNode(candidate);
@@ -390,6 +737,10 @@ function normalizePersistedResult(raw: Record<string, unknown>): NormalizedOcrRe
       } satisfies NormalizedOcrBlock,
     ];
   });
+
+  if (!blocks.length && mappedSections) {
+    blocks = buildSyntheticBlocksFromMappedSections(mappedSections, pageMeta);
+  }
 
   return buildPages(pageMeta.length, pageMeta, dedupeBlocks(blocks), "persisted", []);
 }
