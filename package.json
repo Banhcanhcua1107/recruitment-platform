@@ -4,6 +4,7 @@
     "private": true,
     "scripts": {
         "dev": "next dev --turbopack",
+        "dev:docker": "next dev --webpack",
         "build": "next build",
         "start": "next start",
         "lint": "eslint",
@@ -16,6 +17,7 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@hookform/resolvers": "^5.2.2",
         "@huggingface/inference": "^4.13.14",
+        "@modelcontextprotocol/sdk": "^1.28.0",
         "@pdftron/webviewer": "^11.11.0",
         "@react-pdf/renderer": "^4.3.2",
         "@supabase/ssr": "^0.8.0",

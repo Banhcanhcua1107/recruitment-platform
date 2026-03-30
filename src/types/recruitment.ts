@@ -26,6 +26,14 @@ export interface RecruitmentDashboardStats {
   candidatesToday: number;
 }
 
+export interface RecruitmentJobPortfolioSummary {
+  totalJobs: number;
+  openJobs: number;
+  draftJobs: number;
+  closedJobs: number;
+  totalApplicants: number;
+}
+
 export interface RecruitmentTrendPoint {
   date: string;
   label: string;

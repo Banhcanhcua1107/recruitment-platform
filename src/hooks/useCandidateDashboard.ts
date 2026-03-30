@@ -2,32 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { calculateCandidateProfileCompletion } from "@/lib/candidate-profile-shared";
-import type { Application, CV, DashboardData, DashboardStats, Job } from "@/types/dashboard";
+import type { DashboardData } from "@/types/dashboard";
 
-function normalizeStatus(status: string | null | undefined): Application["status"] {
-  switch (status) {
-    case "pending":
-    case "new":
-    case "applied":
-      return "applied";
-    case "viewed":
-    case "reviewing":
-      return "reviewing";
-    case "interviewing":
-    case "interview":
-      return "interview";
-    case "offered":
-    case "offer":
-      return "offer";
-    case "hired":
-      return "hired";
-    case "rejected":
-      return "rejected";
-    default:
-      return "applied";
-  }
-}
+type DashboardPayload = Omit<DashboardData, "isLoading" | "error">;
 
 export function useCandidateDashboard() {
   const [data, setData] = useState<DashboardData>({
@@ -52,170 +29,57 @@ export function useCandidateDashboard() {
 
     async function fetchDashboardData() {
       try {
-        const {
-          data: { user: authUser },
-        } = await supabase.auth.getUser();
+        const response = await fetch("/api/candidate/dashboard", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const payload = (await response.json().catch(() => null)) as
+          | (DashboardPayload & { error?: string })
+          | null;
 
-        if (!authUser) {
-          throw new Error("Bạn cần đăng nhập để xem bảng điều khiển.");
+        if (!response.ok) {
+          throw new Error(payload?.error || "Khong the tai bang dieu khien moi nhat.");
         }
 
-        const [
-          profileResponse,
-          applicationsResponse,
-          savedJobsResponse,
-          resumesResponse,
-          viewsResponse,
-          recommendedJobsResponse,
-          notificationsResponse,
-        ] = await Promise.all([
-          supabase
-            .from("candidate_profiles")
-            .select("full_name, avatar_url, headline, email, phone, location, introduction, skills, work_experiences, educations, work_experience, education, cv_file_path, cv_url")
-            .eq("user_id", authUser.id)
-            .maybeSingle(),
-          supabase
-            .from("applications")
-            .select(`
-              id,
-              status,
-              created_at,
-              job_id,
-              jobs (
-                id,
-                title,
-                company_name,
-                logo_url,
-                salary,
-                location
-              )
-            `)
-            .eq("candidate_id", authUser.id)
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("saved_jobs")
-            .select("id", { count: "exact", head: true })
-            .eq("user_id", authUser.id),
-          supabase
-            .from("resumes")
-            .select("id, title, updated_at")
-            .eq("user_id", authUser.id)
-            .order("updated_at", { ascending: false })
-            .limit(3),
-          supabase
-            .from("profile_views")
-            .select("id", { count: "exact", head: true })
-            .eq("candidate_id", authUser.id),
-          supabase
-            .from("jobs")
-            .select("id, title, company_name, logo_url, salary, location, requirements")
-            .eq("status", "open")
-            .order("created_at", { ascending: false })
-            .limit(4),
-          supabase
-            .from("notifications")
-            .select("id", { count: "exact", head: true })
-            .eq("recipient_id", authUser.id)
-            .eq("is_read", false),
-        ]);
-
-        const applicationsRaw = applicationsResponse.data || [];
-        const recentApplications: Application[] = applicationsRaw.slice(0, 5).map((application) => {
-          const job = Array.isArray(application.jobs) ? application.jobs[0] : application.jobs;
-          return {
-            id: String(application.id),
-            job_id: String(application.job_id),
-            status: normalizeStatus(application.status),
-            created_at: String(application.created_at),
-            job: {
-              id: String(job.id),
-              title: String(job.title),
-              company_name: String(job.company_name),
-              logo_url: job.logo_url ? String(job.logo_url) : undefined,
-              salary: job.salary ? String(job.salary) : undefined,
-              location: job.location ? String(job.location) : undefined,
-            },
-          };
-        });
-
-        const stats: DashboardStats = {
-          totalApplied: applicationsRaw.length,
-          interviews: applicationsRaw.filter((application) =>
-            ["interviewing", "interview"].includes(String(application.status))
-          ).length,
-          savedJobs: savedJobsResponse.count || 0,
-          profileViews: viewsResponse.count || 0,
-        };
-
-        const profile = profileResponse.data;
-        const completionPercentage = calculateCandidateProfileCompletion({
-          fullName: String(profile?.full_name || authUser.user_metadata?.full_name || authUser.email || ""),
-          avatarUrl: String(profile?.avatar_url || authUser.user_metadata?.avatar_url || ""),
-          headline: String(profile?.headline || ""),
-          email: String(profile?.email || authUser.email || ""),
-          phone: String(profile?.phone || ""),
-          location: String(profile?.location || ""),
-          introduction: String(profile?.introduction || ""),
-          skills: Array.isArray(profile?.skills) ? profile.skills.map((item) => String(item)) : [],
-          workExperiences: Array.isArray(profile?.work_experiences)
-            ? profile.work_experiences
-            : [],
-          educations: Array.isArray(profile?.educations) ? profile.educations : [],
-          workExperience: String(profile?.work_experience || ""),
-          education: String(profile?.education || ""),
-          cvUrl: String(profile?.cv_url || ""),
-          cvFilePath: String(profile?.cv_file_path || ""),
-        });
-
-        const recommendedJobs: Job[] = (recommendedJobsResponse.data || []).map((job) => ({
-          id: String(job.id),
-          title: String(job.title),
-          company_name: String(job.company_name),
-          logo_url: job.logo_url ? String(job.logo_url) : undefined,
-          salary: job.salary ? String(job.salary) : undefined,
-          location: job.location ? String(job.location) : undefined,
-          requirements: Array.isArray(job.requirements)
-            ? job.requirements.map((item) => String(item))
-            : undefined,
-        }));
-
-        const cvs: CV[] = (resumesResponse.data || []).map((resume) => ({
-          id: String(resume.id),
-          title: String(resume.title || "CV của tôi"),
-          updated_at: String(resume.updated_at),
-          url: `/candidate/cv-builder/${resume.id}/edit`,
-        }));
-
         setData({
-          user: {
-            id: authUser.id,
-            full_name: String(profile?.full_name || authUser.user_metadata?.full_name || authUser.email || ""),
-            email: String(profile?.email || authUser.email || ""),
-            phone: profile?.phone ? String(profile.phone) : undefined,
-            avatar_url: profile?.avatar_url
-              ? String(profile.avatar_url)
-              : authUser.user_metadata?.avatar_url,
-            completion_percentage: completionPercentage,
+          user: payload?.user ?? null,
+          stats: payload?.stats ?? {
+            totalApplied: 0,
+            profileViews: 0,
+            interviews: 0,
+            savedJobs: 0,
           },
-          stats,
-          notificationCount: notificationsResponse.count || 0,
-          recentApplications,
-          recommendedJobs,
-          cvs,
+          notificationCount: payload?.notificationCount ?? 0,
+          recentApplications: Array.isArray(payload?.recentApplications)
+            ? payload.recentApplications
+            : [],
+          recommendedJobs: Array.isArray(payload?.recommendedJobs)
+            ? payload.recommendedJobs
+            : [],
+          cvs: Array.isArray(payload?.cvs) ? payload.cvs : [],
           isLoading: false,
           error: null,
         });
 
         if (!activeChannel) {
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          if (!user) {
+            return;
+          }
+
           activeChannel = supabase
-            .channel(`candidate-dashboard-${authUser.id}`)
+            .channel(`candidate-dashboard-${user.id}`)
             .on(
               "postgres_changes",
               {
                 event: "*",
                 schema: "public",
                 table: "applications",
-                filter: `candidate_id=eq.${authUser.id}`,
+                filter: `candidate_id=eq.${user.id}`,
               },
               () => {
                 void fetchDashboardData();
@@ -227,7 +91,29 @@ export function useCandidateDashboard() {
                 event: "*",
                 schema: "public",
                 table: "notifications",
-                filter: `recipient_id=eq.${authUser.id}`,
+                filter: `recipient_id=eq.${user.id}`,
+              },
+              () => {
+                void fetchDashboardData();
+              }
+            )
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: "jobs",
+              },
+              () => {
+                void fetchDashboardData();
+              }
+            )
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: "employers",
               },
               () => {
                 void fetchDashboardData();
@@ -242,7 +128,7 @@ export function useCandidateDashboard() {
           error:
             error instanceof Error
               ? error.message
-              : "Không thể tải dữ liệu bảng điều khiển.",
+              : "Khong the tai du lieu bang dieu khien.",
         }));
       }
     }

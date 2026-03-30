@@ -53,7 +53,7 @@ export default function RecentApplications({
         <h3 className="text-2xl font-black uppercase tracking-tight text-slate-900">
           Ứng tuyển gần đây
         </h3>
-        <Link href="/candidate/applications" className="text-lg font-black text-primary hover:underline">
+        <Link href="/candidate/jobs/applied" className="text-lg font-black text-primary hover:underline">
           Xem tất cả
         </Link>
       </div>

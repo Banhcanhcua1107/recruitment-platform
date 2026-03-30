@@ -106,12 +106,13 @@ services:
       AI_SERVICE_URL: http://ai-service:8000
       NEXT_PUBLIC_AI_SERVICE_URL: http://localhost:8000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      DOCKER_DEV: "true"
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
     command:
       - npm
       - run
-      - dev
+      - dev:docker
       - --
       - --hostname
       - 0.0.0.0

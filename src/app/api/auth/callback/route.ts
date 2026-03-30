@@ -1,8 +1,19 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
 
+function getSafeOrigin(request: Request) {
+  const url = new URL(request.url)
+
+  if (url.hostname === '0.0.0.0') {
+    url.hostname = 'localhost'
+  }
+
+  return url.origin
+}
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
+  const origin = getSafeOrigin(request)
   const code = searchParams.get('code')
 
   if (code) {

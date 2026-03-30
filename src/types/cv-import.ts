@@ -87,6 +87,31 @@ export interface BoundingBox {
   height: number;
 }
 
+export type EditableDocumentRegionType = "text" | "image";
+export type EditableDocumentRegionLevel = "line" | "block" | "image";
+
+export interface EditableDocumentRegionChild {
+  id: string;
+  level: EditableDocumentRegionLevel;
+  type: EditableDocumentRegionType;
+  bbox: BoundingBox;
+  text?: string | null;
+  confidence?: number | null;
+  block_ids?: string[];
+}
+
+export interface EditableDocumentRegion {
+  id: string;
+  level: EditableDocumentRegionLevel;
+  type: EditableDocumentRegionType;
+  bbox: BoundingBox;
+  text: string | null;
+  confidence?: number | null;
+  block_ids: string[];
+  primary_block_id: string | null;
+  children?: EditableDocumentRegionChild[];
+}
+
 export interface CVArtifactRecord {
   id: string;
   document_id: string;
@@ -569,6 +594,7 @@ export interface EditableCVPageView {
   canonical_height_px: number;
   background_image_url: string | null;
   blocks: EditableCVBlockView[];
+  regions?: EditableDocumentRegion[];
 }
 
 export interface EditableCVDetailResponse {
@@ -631,6 +657,18 @@ export interface UpdateEditableBlockResponse {
     updated_at: string;
   };
   updated_json_delta: Record<string, unknown>;
+  autosave_revision: number;
+}
+
+export interface UpdateEditableBlockAssetResponse {
+  block: {
+    id: string;
+    asset_artifact_id: string | null;
+    asset_image_url: string | null;
+    version?: number;
+    lock_state?: EditableCVLockState;
+    updated_at: string;
+  };
   autosave_revision: number;
 }
 

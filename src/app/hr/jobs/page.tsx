@@ -1,10 +1,12 @@
+import Link from "next/link";
 import { JobTable } from "@/components/recruitment/JobTable";
+import { RecruiterWorkspaceTabs } from "@/components/hr/RecruiterWorkspaceTabs";
+import { DashboardStatsCard } from "@/components/recruitment/DashboardStatsCard";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { getJobs } from "@/lib/recruitment";
-import Link from "next/link";
+import { getJobPortfolioSummary, getJobs } from "@/lib/recruitment";
 
 interface JobsPageProps {
   searchParams: Promise<{
@@ -20,35 +22,90 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
   const status = params.status ?? "all";
   const page = params.page ?? "1";
 
-  const jobs = await getJobs({
-    q,
-    status: status as "all" | "open" | "closed" | "draft",
-    page: Number(page),
-    limit: 8,
-  });
+  const [jobs, portfolioSummary] = await Promise.all([
+    getJobs({
+      q,
+      status: status as "all" | "open" | "closed" | "draft",
+      page: Number(page),
+      limit: 8,
+    }),
+    getJobPortfolioSummary(),
+  ]);
 
   return (
-    <div className="mx-auto flex max-w-[1440px] flex-col gap-8 px-6 py-10 lg:px-10">
-      <section className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">
-            Quản lý tin tuyển dụng
-          </p>
-          <h1 className="text-4xl font-black tracking-tight text-slate-900 lg:text-5xl">
-            Quản lý tin đang mở và bản nháp
-          </h1>
-          <p className="max-w-2xl text-base text-slate-500 lg:text-lg">
-            Tìm kiếm tin tuyển dụng, lọc theo trạng thái, chỉnh sửa nội dung và đóng tin trong khu vực nhà tuyển dụng.
-          </p>
+    <div className="space-y-6">
+      <section className="rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.24)]">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="space-y-3">
+            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">
+              Job operations
+            </p>
+            <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
+              Quản lý danh mục tin tuyển dụng của recruiter
+            </h1>
+            <p className="max-w-3xl text-sm leading-7 text-slate-500 sm:text-base">
+              Theo dõi bản nháp, tin đã đăng, tin đã đóng và số lượng ứng viên cho từng vị trí
+              trong một bảng vận hành dễ quét.
+            </p>
+          </div>
+
+          <div className="flex items-start gap-4">
+            <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+                Tổng ứng viên
+              </p>
+              <p className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                {portfolioSummary.totalApplicants}
+              </p>
+            </div>
+            <Link className={buttonVariants("default", "lg")} href="/hr/jobs/create">
+              <span className="material-symbols-outlined text-[18px]">add_circle</span>
+              Tạo tin mới
+            </Link>
+          </div>
         </div>
-        <Link className={buttonVariants("default", "lg")} href="/hr/jobs/create">
-          Tạo tin mới
-        </Link>
       </section>
+
+      <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardStatsCard
+          title="Tổng tin"
+          value={portfolioSummary.totalJobs}
+          subtitle="Toàn bộ tin trong recruiter workspace"
+          icon="work"
+        />
+        <DashboardStatsCard
+          title="Đã đăng"
+          value={portfolioSummary.openJobs}
+          subtitle="Các vị trí đang nhận hồ sơ ứng tuyển"
+          icon="campaign"
+        />
+        <DashboardStatsCard
+          title="Bản nháp"
+          value={portfolioSummary.draftJobs}
+          subtitle="Tin đang được chuẩn bị trước khi public"
+          icon="edit_note"
+        />
+        <DashboardStatsCard
+          title="Đã đóng"
+          value={portfolioSummary.closedJobs}
+          subtitle="Tin đã ngừng nhận hồ sơ và cần lưu trữ"
+          icon="inventory_2"
+        />
+      </section>
+
+      <RecruiterWorkspaceTabs
+        activeId={status === "all" ? "all" : status}
+        items={[
+          { id: "all", label: "Tất cả", href: "/hr/jobs", count: portfolioSummary.totalJobs },
+          { id: "open", label: "Đã đăng", href: "/hr/jobs?status=open", count: portfolioSummary.openJobs },
+          { id: "draft", label: "Bản nháp", href: "/hr/jobs?status=draft", count: portfolioSummary.draftJobs },
+          { id: "closed", label: "Đã đóng", href: "/hr/jobs?status=closed", count: portfolioSummary.closedJobs },
+        ]}
+      />
 
       <Card className="rounded-[32px] border-slate-200/80">
         <CardHeader>
-          <CardTitle>Bộ lọc</CardTitle>
+          <CardTitle>Bộ lọc danh mục tin</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="grid gap-4 md:grid-cols-[minmax(0,2fr)_220px_auto]">
@@ -59,7 +116,7 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
             />
             <Select name="status" defaultValue={status}>
               <option value="all">Tất cả trạng thái</option>
-              <option value="open">Đang mở</option>
+              <option value="open">Đã đăng</option>
               <option value="draft">Bản nháp</option>
               <option value="closed">Đã đóng</option>
             </Select>

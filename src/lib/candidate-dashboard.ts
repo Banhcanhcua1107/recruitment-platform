@@ -3,7 +3,7 @@ import "server-only";
 import { calculateCandidateProfileCompletion } from "@/lib/candidate-profile-shared";
 import { getCurrentCandidateProfile } from "@/lib/candidate-profiles";
 import { getCandidateApplicationsList } from "@/lib/applications";
-import { getAllJobs } from "@/lib/jobs";
+import { getFreshPublicJobs } from "@/lib/jobs";
 import type { CandidateDashboardData } from "@/types/candidate-dashboard";
 import { createClient } from "@/utils/supabase/server";
 
@@ -51,7 +51,7 @@ export async function getCandidateDashboardData(): Promise<CandidateDashboardDat
   ] = await Promise.all([
     getCurrentCandidateProfile(),
     getCandidateApplicationsList(),
-    getAllJobs(),
+    getFreshPublicJobs(),
     supabase
       .from("saved_jobs")
       .select("id", { count: "exact", head: true })
@@ -108,7 +108,22 @@ export async function getCandidateDashboardData(): Promise<CandidateDashboardDat
       savedJobs: savedJobsCount ?? 0,
     },
     notificationCount: unreadNotificationCount ?? 0,
-    recentApplications: recentApplications.slice(0, 5),
+    recentApplications: recentApplications.slice(0, 5).map((application) => ({
+      id: application.id,
+      jobId: application.job_id,
+      status: application.status,
+      appliedAt: application.created_at,
+      createdAt: application.created_at,
+      updatedAt: application.created_at,
+      job: {
+        id: application.job.id,
+        title: application.job.title,
+        companyName: application.job.company_name,
+        logoUrl: application.job.logo_url ?? null,
+        salary: application.job.salary ?? null,
+        location: application.job.location ?? null,
+      },
+    })),
     recommendedJobs: recommendedJobs.slice(0, 6),
     cvs: (resumeRows ?? []).map((resume) => ({
       id: String(resume.id),

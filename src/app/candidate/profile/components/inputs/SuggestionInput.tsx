@@ -112,9 +112,9 @@ export default function SuggestionInput({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className={`
-            w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl
-            text-slate-900 placeholder:text-slate-400
-            focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white
+            w-full rounded-xl border border-slate-300/90 bg-white/75 px-4 py-3
+            text-slate-900 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] backdrop-blur-[2px] placeholder:text-slate-400
+            focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/25
             transition-all
             ${icon ? 'pl-12' : ''}
           `}

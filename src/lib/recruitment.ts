@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import type {
   AnyApplicationStatus,
@@ -14,6 +14,7 @@ import type {
   RecruitmentCompanyProfile,
   RecruitmentDashboardStats,
   RecruitmentJob,
+  RecruitmentJobPortfolioSummary,
   RecruitmentPipelineMetric,
   RecruitmentPipelineStatus,
   RecruitmentTrendPoint,
@@ -348,18 +349,41 @@ async function getEmployerJobRecords(
   return scopedQuery.data ?? [];
 }
 
-async function getEmployerJobIds(supabase: SupabaseClient, employerId: string) {
-  const rows = await getEmployerJobRecords(supabase, employerId);
-  return rows.map((row) => row.id);
-}
-
 const getCurrentEmployerJobRecords = cache(async function getCurrentEmployerJobRecords() {
   const { supabase, employer } = await getRecruitmentContext();
   return getEmployerJobRecords(supabase, employer.id);
 });
 
+async function getEmployerJobStatusRows(
+  supabase: SupabaseClient,
+  employerId: string
+) {
+  let { data, error } = await supabase
+    .from("jobs")
+    .select("id, status")
+    .eq("employer_id", employerId);
+
+  if (
+    error &&
+    isSchemaError(error, [...JOB_EMPLOYER_COLUMN_MARKERS, ...JOB_OPTIONAL_COLUMN_MARKERS])
+  ) {
+    const fallback = await supabase.from("jobs").select("id");
+    data = (fallback.data ?? []).map((row) => ({ ...row, status: "open" }));
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    status: String((row as { status?: string | null }).status ?? "open"),
+  }));
+}
+
 export async function getDashboardStats(): Promise<RecruitmentDashboardStats> {
-  const { supabase, employer } = await getRecruitmentContext();
+  const { supabase } = await getRecruitmentContext();
   const jobRows = await getCurrentEmployerJobRecords();
   const jobIds = jobRows.map((row) => row.id);
   const totalJobs = jobRows.length;
@@ -405,8 +429,54 @@ export async function getDashboardStats(): Promise<RecruitmentDashboardStats> {
   };
 }
 
-export async function getApplicationsTrend(): Promise<RecruitmentTrendPoint[]> {
+export async function getJobPortfolioSummary(): Promise<RecruitmentJobPortfolioSummary> {
   const { supabase, employer } = await getRecruitmentContext();
+  const jobs = await getEmployerJobStatusRows(supabase, employer.id);
+  const summary: RecruitmentJobPortfolioSummary = {
+    totalJobs: jobs.length,
+    openJobs: 0,
+    draftJobs: 0,
+    closedJobs: 0,
+    totalApplicants: 0,
+  };
+
+  for (const job of jobs) {
+    if (job.status === "draft") {
+      summary.draftJobs += 1;
+      continue;
+    }
+
+    if (job.status === "closed") {
+      summary.closedJobs += 1;
+      continue;
+    }
+
+    summary.openJobs += 1;
+  }
+
+  if (jobs.length === 0) {
+    return summary;
+  }
+
+  const { data: applications, error: applicationsError } = await supabase
+    .from("applications")
+    .select("job_id")
+    .in(
+      "job_id",
+      jobs.map((job) => job.id)
+    );
+
+  if (applicationsError) {
+    throw new Error(applicationsError.message);
+  }
+
+  summary.totalApplicants = (applications ?? []).length;
+
+  return summary;
+}
+
+export async function getApplicationsTrend(): Promise<RecruitmentTrendPoint[]> {
+  const { supabase } = await getRecruitmentContext();
   const jobIds = (await getCurrentEmployerJobRecords()).map((row) => row.id);
   const today = startOfDay(new Date());
   const points: RecruitmentTrendPoint[] = [];
@@ -455,7 +525,7 @@ export async function getApplicationsTrend(): Promise<RecruitmentTrendPoint[]> {
 }
 
 export async function getPipelineMetrics(): Promise<RecruitmentPipelineMetric[]> {
-  const { supabase, employer } = await getRecruitmentContext();
+  const { supabase } = await getRecruitmentContext();
   const jobIds = (await getCurrentEmployerJobRecords()).map((row) => row.id);
 
   const base: RecruitmentPipelineMetric[] = (

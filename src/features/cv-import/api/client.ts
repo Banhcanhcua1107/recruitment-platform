@@ -14,6 +14,7 @@ import type {
   SaveEditableCVResponse,
   SaveOriginalCVResponse,
   UpdateEditableBlockRequest,
+  UpdateEditableBlockAssetResponse,
   UpdateEditableBlockResponse,
   UpdateEditableJSONRequest,
   UpdateEditableJSONResponse,
@@ -143,6 +144,33 @@ export async function updateEditableBlock(
   });
 
   return parseJSONResponse<UpdateEditableBlockResponse>(response);
+}
+
+export async function replaceEditableBlockAsset(
+  editableCvId: string,
+  blockId: string,
+  file: File,
+): Promise<UpdateEditableBlockAssetResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`/api/editable-cvs/${editableCvId}/blocks/${blockId}/asset`, {
+    method: "POST",
+    body: formData,
+  });
+
+  return parseJSONResponse<UpdateEditableBlockAssetResponse>(response);
+}
+
+export async function clearEditableBlockAsset(
+  editableCvId: string,
+  blockId: string,
+): Promise<UpdateEditableBlockAssetResponse> {
+  const response = await fetch(`/api/editable-cvs/${editableCvId}/blocks/${blockId}/asset`, {
+    method: "DELETE",
+  });
+
+  return parseJSONResponse<UpdateEditableBlockAssetResponse>(response);
 }
 
 export async function updateEditableJSON(

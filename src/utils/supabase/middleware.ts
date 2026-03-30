@@ -1,6 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+function getSafeRedirectUrl(path: string, request: NextRequest) {
+  const url = request.nextUrl.clone()
+  url.pathname = path
+  url.search = ''
+
+  if (url.hostname === '0.0.0.0') {
+    url.hostname = 'localhost'
+  }
+
+  return url
+}
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -18,7 +30,7 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({
             request,
           })
@@ -36,11 +48,12 @@ export async function updateSession(request: NextRequest) {
 
   // 3. STRICT GUARD LOGIC
 
+  // TODO(multi-role): replace these path-prefix checks with membership-aware workspace guards.
   // A. Protected Routes (Candidate/HR Dashboard, Profile)
   // If NOT logged in -> Redirect to /login
   if (path.startsWith('/candidate') || path.startsWith('/hr') || path.startsWith('/profile')) {
       if (!user) {
-          return NextResponse.redirect(new URL('/login', request.url))
+        return NextResponse.redirect(getSafeRedirectUrl('/login', request))
       }
   }
 
@@ -53,7 +66,7 @@ export async function updateSession(request: NextRequest) {
       
       if (user && !path.startsWith('/register/role-selection')) { 
           // Note: The prompt asks for /role-selection as a separate route.
-          return NextResponse.redirect(new URL('/', request.url))
+          return NextResponse.redirect(getSafeRedirectUrl('/', request))
       }
   }
 
@@ -61,9 +74,10 @@ export async function updateSession(request: NextRequest) {
   if (path.startsWith('/role-selection')) {
       if (!user) {
           // Not logged in -> Login
-          return NextResponse.redirect(new URL('/login', request.url))
+        return NextResponse.redirect(getSafeRedirectUrl('/login', request))
       }
       
+      // TODO(multi-role): redirect to workspace selection only when the account has zero memberships.
       // Logged in -> Check if already has role
       const { data: profile } = await supabase
           .from('profiles')
@@ -73,7 +87,7 @@ export async function updateSession(request: NextRequest) {
 
       if (profile?.role) {
           // Already has role -> Go Home
-          return NextResponse.redirect(new URL('/', request.url))
+          return NextResponse.redirect(getSafeRedirectUrl('/', request))
       }
       // If role is null -> Allow stay on /role-selection
   }

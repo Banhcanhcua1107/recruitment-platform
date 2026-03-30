@@ -58,7 +58,7 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
 
   const handleCandidateClick = (candidate: RecruitmentCandidate) => {
     if (candidate.hasPublicProfile) {
-      router.push(`/hr/candidates/${candidate.candidateId}`);
+      router.push(`/candidate/${candidate.candidateId}?from=hr`);
       return;
     }
 

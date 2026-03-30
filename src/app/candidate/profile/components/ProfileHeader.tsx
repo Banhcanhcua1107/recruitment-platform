@@ -5,14 +5,12 @@ import { useProfileBuilder } from '../stores/profileBuilderStore';
 
 interface ProfileHeaderProps {
   userName?: string;
-  avatarUrl?: string;
   viewMode?: 'edit' | 'preview';
   onViewModeChange?: (mode: 'edit' | 'preview') => void;
 }
 
 export default function ProfileHeader({
-  userName = 'Nguoi dung',
-  avatarUrl,
+  userName = 'Ứng viên',
   viewMode = 'edit',
   onViewModeChange,
 }: ProfileHeaderProps) {
@@ -25,106 +23,127 @@ export default function ProfileHeader({
   } = useProfileBuilder();
 
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
-        e.preventDefault();
-        e.returnValue = '';
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) {
+        return;
       }
+
+      event.preventDefault();
+      event.returnValue = '';
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  const getSaveStatusText = () => {
-    if (error) return error;
-    if (isSaving) return 'Dang luu...';
+  const saveStatus = (() => {
+    if (error) {
+      return {
+        icon: 'error',
+        tone: 'text-rose-600 bg-rose-50 border-rose-200',
+        label: error,
+      };
+    }
+
+    if (isSaving) {
+      return {
+        icon: 'sync',
+        tone: 'text-amber-600 bg-amber-50 border-amber-200',
+        label: 'Đang lưu thay đổi...',
+      };
+    }
+
     if (lastSaved) {
       const time = lastSaved.toLocaleTimeString('vi-VN', {
         hour: '2-digit',
         minute: '2-digit',
       });
-      return `Da luu luc ${time}`;
-    }
-    if (hasUnsavedChanges) return 'Chua luu';
-    return 'Tu dong luu';
-  };
 
-  const getSaveStatusColor = () => {
-    if (error) return 'text-red-500';
-    if (isSaving || hasUnsavedChanges) return 'text-amber-500';
-    return 'text-green-500';
-  };
+      return {
+        icon: 'cloud_done',
+        tone: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+        label: `Đã lưu lúc ${time}`,
+      };
+    }
+
+    if (hasUnsavedChanges) {
+      return {
+        icon: 'schedule',
+        tone: 'text-amber-600 bg-amber-50 border-amber-200',
+        label: 'Có thay đổi chưa lưu',
+      };
+    }
+
+    return {
+      icon: 'check_circle',
+      tone: 'text-slate-600 bg-slate-50 border-slate-200',
+      label: 'Tự động lưu đang bật',
+    };
+  })();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-100 bg-white/90 backdrop-blur-lg">
-      <div className="mx-auto max-w-[1360px] px-6 py-4 lg:px-10">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="size-12 overflow-hidden rounded-2xl bg-slate-100">
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={avatarUrl}
-                  alt={userName}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-slate-400">
-                  <span className="material-symbols-outlined text-2xl">person</span>
-                </div>
-              )}
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-slate-900">Ho so cua {userName}</h1>
-              <div className={`flex items-center gap-2 text-sm font-medium ${getSaveStatusColor()}`}>
-                {isSaving ? (
-                  <span className="material-symbols-outlined animate-spin text-base">sync</span>
-                ) : error ? (
-                  <span className="material-symbols-outlined text-base">error</span>
-                ) : (
-                  <span className="material-symbols-outlined text-base">cloud_done</span>
-                )}
-                {getSaveStatusText()}
-              </div>
-            </div>
+    <section className="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)] sm:px-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">
+              Quản lý hồ sơ
+            </p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+              Hồ sơ của {userName}
+            </h2>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            {onViewModeChange ? (
-              <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1">
-                {(['edit', 'preview'] as const).map((mode) => {
-                  const isActive = viewMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => onViewModeChange(mode)}
-                      className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                        isActive
-                          ? 'bg-white text-slate-900 shadow-sm'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {mode === 'edit' ? 'Edit' : 'Preview'}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-
-            {viewMode === 'edit' ? (
-              <button
-                onClick={() => setAddPanelOpen(true)}
-                className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 font-bold text-white shadow-lg shadow-primary/20 transition-all hover:bg-primary-hover"
-              >
-                <span className="material-symbols-outlined text-xl">add</span>
-                Them muc
-              </button>
-            ) : null}
+          <div
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold ${saveStatus.tone}`}
+          >
+            <span
+              className={`material-symbols-outlined text-[18px] ${
+                isSaving ? 'animate-spin' : ''
+              }`}
+            >
+              {saveStatus.icon}
+            </span>
+            <span>{saveStatus.label}</span>
           </div>
         </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          {onViewModeChange ? (
+            <div className="inline-flex items-center rounded-2xl bg-slate-100 p-1">
+              {(['edit', 'preview'] as const).map((mode) => {
+                const isActive = viewMode === mode;
+
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => onViewModeChange(mode)}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold transition-all ${
+                      isActive
+                        ? 'bg-white text-primary shadow-sm'
+                        : 'text-slate-500 hover:text-primary'
+                    }`}
+                  >
+                    {mode === 'edit' ? 'Chỉnh sửa' : 'Xem hồ sơ'}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {viewMode === 'edit' ? (
+            <button
+              type="button"
+              onClick={() => setAddPanelOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-primary px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-hover"
+            >
+              <span className="material-symbols-outlined text-[20px]">add</span>
+              Thêm mục
+            </button>
+          ) : null}
+        </div>
       </div>
-    </header>
+    </section>
   );
 }

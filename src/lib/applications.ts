@@ -10,6 +10,8 @@ import {
 } from "@/lib/email/application-emails";
 import { createSystemNotification } from "@/lib/notifications";
 import { renderResumePdfBuffer } from "@/lib/resume-pdf";
+import { applyEmployerBrandingToJob } from "@/lib/employer-branding";
+import type { Application } from "@/types/dashboard";
 import type {
   AnyApplicationStatus,
   EmployerCandidateApplicationDetail,
@@ -63,6 +65,34 @@ type CandidateDirectoryRow = {
   id: string;
   candidate_code?: string | null;
   created_at?: string | null;
+};
+
+type EmployerBrandingRow = {
+  id: string;
+  company_name?: string | null;
+  logo_url?: string | null;
+};
+
+type CandidateApplicationJobRow = {
+  id?: string | null;
+  title?: string | null;
+  company_name?: string | null;
+  logo_url?: string | null;
+  salary?: string | null;
+  location?: string | null;
+  employer_id?: string | null;
+  employment_type?: string | null;
+  level?: string | null;
+  full_address?: string | null;
+};
+
+type CandidateApplicationListRow = {
+  id: string;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  job_id?: string | null;
+  jobs?: CandidateApplicationJobRow | CandidateApplicationJobRow[] | null;
 };
 
 function normalizeApplicationStatus(
@@ -218,6 +248,114 @@ async function getAuthenticatedUser() {
   }
 
   return { supabase, user };
+}
+
+async function getEmployerBrandingMap(employerIds: string[]) {
+  if (employerIds.length === 0) {
+    return new Map<string, EmployerBrandingRow>();
+  }
+
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("employers")
+    .select("id, company_name, logo_url")
+    .in("id", employerIds);
+
+  if (
+    error &&
+    (
+      error.message?.toLowerCase().includes('relation "employers" does not exist') ||
+      error.message?.toLowerCase().includes("could not find the table 'public.employers'")
+    )
+  ) {
+    return new Map<string, EmployerBrandingRow>();
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return new Map(
+    ((data ?? []) as EmployerBrandingRow[]).map((row) => [row.id, row] as const)
+  );
+}
+
+function resolveApplicationJob(row: CandidateApplicationListRow) {
+  return Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
+}
+
+function buildDashboardApplication(
+  application: CandidateApplicationListRow,
+  employerBrandingMap: Map<string, EmployerBrandingRow>
+): Application {
+  const job = resolveApplicationJob(application);
+  const employerId = normalizeOptionalString(job?.employer_id);
+  const brandedJob = applyEmployerBrandingToJob(
+    {
+      employer_id: employerId,
+      company_name: normalizeOptionalString(job?.company_name),
+      logo_url: normalizeOptionalString(job?.logo_url),
+    },
+    employerId ? employerBrandingMap.get(employerId) : undefined
+  );
+
+  return {
+    id: String(application.id),
+    job_id: String(application.job_id ?? job?.id ?? ""),
+    status: normalizeApplicationStatus(application.status) as Application["status"],
+    created_at: String(application.created_at ?? application.updated_at ?? new Date().toISOString()),
+    job: {
+      id: String(job?.id ?? application.job_id ?? ""),
+      title: safeTrim(job?.title) || "Chua cap nhat tieu de",
+      company_name: safeTrim(brandedJob.company_name) || "Nha tuyen dung",
+      logo_url: normalizeOptionalString(brandedJob.logo_url) ?? undefined,
+      salary: normalizeOptionalString(job?.salary) ?? undefined,
+      location: normalizeOptionalString(job?.location) ?? undefined,
+    },
+  };
+}
+
+export async function getCandidateApplicationsList(): Promise<Application[]> {
+  const { supabase, user } = await getAuthenticatedUser();
+
+  const { data, error } = await supabase
+    .from("applications")
+    .select(`
+      id,
+      status,
+      created_at,
+      updated_at,
+      job_id,
+      jobs (
+        id,
+        title,
+        company_name,
+        logo_url,
+        salary,
+        location,
+        employer_id
+      )
+    `)
+    .eq("candidate_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const applications = (data ?? []) as CandidateApplicationListRow[];
+  const employerIds = [
+    ...new Set(
+      applications
+        .map((application) => normalizeOptionalString(resolveApplicationJob(application)?.employer_id))
+        .filter((employerId): employerId is string => Boolean(employerId))
+    ),
+  ];
+  const employerBrandingMap = await getEmployerBrandingMap(employerIds);
+
+  return applications.map((application) =>
+    buildDashboardApplication(application, employerBrandingMap)
+  );
 }
 
 async function assertHrViewer(supabase: SupabaseClient, userId: string) {
@@ -1462,6 +1600,7 @@ export async function getCandidateApplicationDetail(applicationId: string) {
         title,
         company_name,
         logo_url,
+        employer_id,
         salary,
         location,
         employment_type,
@@ -1494,6 +1633,16 @@ export async function getCandidateApplicationDetail(applicationId: string) {
   }
 
   const job = Array.isArray(application.jobs) ? application.jobs[0] : application.jobs;
+  const employerId = normalizeOptionalString(job?.employer_id);
+  const employerBrandingMap = await getEmployerBrandingMap(employerId ? [employerId] : []);
+  const brandedJob = applyEmployerBrandingToJob(
+    {
+      employer_id: employerId,
+      company_name: normalizeOptionalString(job?.company_name),
+      logo_url: normalizeOptionalString(job?.logo_url),
+    },
+    employerId ? employerBrandingMap.get(employerId) : undefined
+  );
   return {
     id: String(application.id),
     status: normalizeApplicationStatus(application.status),
@@ -1517,8 +1666,8 @@ export async function getCandidateApplicationDetail(applicationId: string) {
     job: {
       id: String(job?.id || ""),
       title: safeTrim(job?.title),
-      companyName: safeTrim(job?.company_name || "Recruiter"),
-      logoUrl: normalizeOptionalString(job?.logo_url),
+      companyName: safeTrim(brandedJob.company_name || "Recruiter"),
+      logoUrl: normalizeOptionalString(brandedJob.logo_url),
       salary: normalizeOptionalString(job?.salary),
       location: normalizeOptionalString(job?.location),
       employmentType: normalizeOptionalString(job?.employment_type),

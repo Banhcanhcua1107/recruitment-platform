@@ -21,12 +21,12 @@ interface JobTableProps {
 
 export function JobTable({ data, query }: JobTableProps) {
   return (
-    <Card className="rounded-[32px] border-slate-200/80">
-      <CardHeader className="flex flex-row items-center justify-between">
+    <Card className="overflow-hidden rounded-[32px] border-slate-200/80 shadow-[0_22px_60px_-36px_rgba(15,23,42,0.18)]">
+      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.98)_100%)]">
         <div>
-          <CardTitle>Tin tuyển dụng</CardTitle>
-          <p className="text-sm text-slate-500">
-            Quản lý tin tuyển dụng của công ty và bật/tắt hiển thị public để test luồng ATS.
+          <CardTitle>Danh mục tin tuyển dụng</CardTitle>
+          <p className="text-sm leading-6 text-slate-500">
+            Theo dõi trạng thái phát hành, số hồ sơ ứng tuyển và thao tác quản trị trên từng tin.
           </p>
         </div>
         <Link className={buttonVariants("default", "lg")} href="/hr/jobs/create">
@@ -34,23 +34,36 @@ export function JobTable({ data, query }: JobTableProps) {
         </Link>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <Table>
+        <Table className="min-w-[1080px]">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="pl-6">Tiêu đề</TableHead>
+              <TableHead className="pl-6">Vị trí</TableHead>
               <TableHead>Địa điểm</TableHead>
               <TableHead>Trạng thái</TableHead>
-              <TableHead>Public</TableHead>
+              <TableHead>Công khai</TableHead>
               <TableHead>Ngày đăng</TableHead>
-              <TableHead>Số ứng viên</TableHead>
+              <TableHead>Ứng viên</TableHead>
               <TableHead className="pr-6 text-right">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {data.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="px-6 py-16 text-center text-slate-500">
-                  Không có tin tuyển dụng phù hợp với bộ lọc hiện tại.
+                <TableCell colSpan={7} className="px-6 py-16">
+                  <div className="mx-auto flex max-w-md flex-col items-center gap-4 text-center">
+                    <div className="flex size-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                      <span className="material-symbols-outlined text-[28px]">work_off</span>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-base font-semibold tracking-tight text-slate-900">
+                        Chưa có tin phù hợp với bộ lọc hiện tại
+                      </p>
+                      <p className="text-sm leading-6 text-slate-500">
+                        Hãy nới bộ lọc hoặc tạo một tin tuyển dụng mới để recruiter workspace bắt
+                        đầu thu hút hồ sơ.
+                      </p>
+                    </div>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
@@ -58,11 +71,16 @@ export function JobTable({ data, query }: JobTableProps) {
                 <TableRow key={job.id}>
                   <TableCell className="pl-6">
                     <div className="space-y-1">
-                      <p className="font-semibold text-slate-900">{job.title}</p>
+                      <Link
+                        href={`/hr/jobs/${job.id}`}
+                        className="font-semibold text-slate-900 transition-colors hover:text-primary"
+                      >
+                        {job.title}
+                      </Link>
                       <p className="text-xs text-slate-400">ID: {job.id}</p>
                     </div>
                   </TableCell>
-                  <TableCell>{job.location || "Từ xa"}</TableCell>
+                  <TableCell>{job.location || "Linh hoạt địa điểm"}</TableCell>
                   <TableCell>
                     <StatusBadge status={job.status} />
                   </TableCell>
@@ -75,22 +93,25 @@ export function JobTable({ data, query }: JobTableProps) {
                           : "border-slate-200 bg-slate-100 text-slate-600",
                       ].join(" ")}
                     >
-                      {job.isPublicVisible ? "Hiện" : "Ẩn"}
+                      {job.isPublicVisible ? "Đang hiển thị" : "Đã ẩn"}
                     </span>
                   </TableCell>
                   <TableCell>
                     {job.postedAt
                       ? new Date(job.postedAt).toLocaleDateString("vi-VN")
-                      : "Không có"}
+                      : "Chưa đăng"}
                   </TableCell>
                   <TableCell className="font-semibold text-slate-900">
                     {job.candidateCount}
                   </TableCell>
                   <TableCell className="pr-6">
                     <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm">
-                        <Link href={`/hr/jobs/${job.id}`}>Chỉnh sửa</Link>
-                      </Button>
+                      <Link
+                        href={`/hr/jobs/${job.id}`}
+                        className={buttonVariants("outline", "sm")}
+                      >
+                        Chỉnh sửa
+                      </Link>
                       <form action={toggleJobPublicVisibilityAction}>
                         <input type="hidden" name="id" value={job.id} />
                         <input

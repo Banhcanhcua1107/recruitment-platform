@@ -1,7 +1,7 @@
 "use client";
 
+import type { ComponentType } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Document, pdfjs } from "react-pdf";
 import { PdfPagePreview } from "@/features/ocr-viewer/components/PdfPagePreview";
 import type {
   DocumentPreviewSource,
@@ -9,7 +9,9 @@ import type {
   PreviewScaleMode,
 } from "@/features/ocr-viewer/types";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+type ReactPdfModule = typeof import("react-pdf");
+type ReactPdfDocumentComponent = ReactPdfModule["Document"];
+type ReactPdfPageComponent = ComponentType<Record<string, unknown>>;
 
 interface PdfDocumentPreviewProps {
   pages: NormalizedOcrPage[];
@@ -42,6 +44,7 @@ export function PdfDocumentPreview({
 }: PdfDocumentPreviewProps) {
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [reactPdfModule, setReactPdfModule] = useState<ReactPdfModule | null>(null);
   const boxRefs = useRef(new Map<string, HTMLButtonElement | null>());
 
   const pagesToRender = useMemo(() => {
@@ -65,6 +68,39 @@ export function PdfDocumentPreview({
     element?.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
   }, [activeBlockId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void import("react-pdf")
+      .then((module) => {
+        module.pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+          "pdfjs-dist/build/pdf.worker.min.mjs",
+          import.meta.url,
+        ).toString();
+
+        if (!cancelled) {
+          setReactPdfModule(module);
+        }
+      })
+      .catch((error) => {
+        console.error("react-pdf module load error", error);
+        if (!cancelled) {
+          setPdfError(
+            error instanceof Error ? error.message : "Unable to initialize PDF preview.",
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    setPdfPageCount(0);
+    setPdfError(null);
+  }, [previewSource.url]);
+
   const registerBoxRef = (blockId: string, element: HTMLButtonElement | null) => {
     if (element) {
       boxRefs.current.set(blockId, element);
@@ -74,9 +110,28 @@ export function PdfDocumentPreview({
     boxRefs.current.delete(blockId);
   };
 
+  const DocumentComponent = reactPdfModule?.Document as ReactPdfDocumentComponent | undefined;
+  const PageComponent = reactPdfModule?.Page as ReactPdfPageComponent | undefined;
+
+  if (!DocumentComponent || !PageComponent) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {pdfError ? (
+          <div className="flex min-h-[420px] items-center justify-center rounded-[30px] border border-rose-200 bg-rose-50 px-6 text-center text-sm text-rose-700">
+            {pdfError}
+          </div>
+        ) : (
+          <div className="flex min-h-[420px] items-center justify-center rounded-[30px] border border-slate-200 bg-white text-sm text-slate-500">
+            Loading PDF preview...
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <Document
+      <DocumentComponent
         key={previewSource.url}
         file={previewSource.url}
         loading={
@@ -103,6 +158,7 @@ export function PdfDocumentPreview({
             {pagesToRender.map((page) => (
               <PdfPagePreview
                 key={`pdf-page-${page.pageIndex}`}
+                PageComponent={PageComponent}
                 page={page}
                 overlayVisible={overlayVisible}
                 scaleMode={scaleMode}
@@ -119,7 +175,7 @@ export function PdfDocumentPreview({
             ))}
           </div>
         </div>
-      </Document>
+      </DocumentComponent>
     </div>
   );
 }

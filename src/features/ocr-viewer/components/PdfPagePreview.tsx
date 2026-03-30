@@ -1,12 +1,13 @@
 "use client";
 
+import type { ComponentType } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Page } from "react-pdf";
 import { cn } from "@/lib/utils";
 import type { NormalizedOcrPage, PreviewScaleMode } from "@/features/ocr-viewer/types";
 import { OcrOverlay } from "@/features/ocr-viewer/components/OcrOverlay";
 
 interface PdfPagePreviewProps {
+  PageComponent: ComponentType<Record<string, unknown>>;
   page: NormalizedOcrPage;
   overlayVisible: boolean;
   scaleMode: PreviewScaleMode;
@@ -48,6 +49,7 @@ function resolveScale({
 }
 
 export function PdfPagePreview({
+  PageComponent,
   page,
   overlayVisible,
   scaleMode,
@@ -136,10 +138,10 @@ export function PdfPagePreview({
       <div className={cn("min-h-0 flex-1 bg-slate-100/70 p-1", singlePage ? "overflow-auto" : "overflow-x-auto")}>
         <div className={cn("flex min-h-full justify-center", singlePage ? "items-start pt-1" : "items-center")}>
           <div className="relative shrink-0">
-            <Page
+            <PageComponent
               pageNumber={page.pageIndex + 1}
               width={renderedWidth}
-              canvasRef={(element) => {
+              canvasRef={(element: HTMLCanvasElement | null) => {
                 canvasRef.current = element;
               }}
               renderAnnotationLayer={false}
@@ -149,7 +151,7 @@ export function PdfPagePreview({
                   Rendering page {page.pageIndex + 1}...
                 </div>
               }
-              onRenderSuccess={(pdfPage) => {
+              onRenderSuccess={(pdfPage: { originalHeight?: number; originalWidth?: number }) => {
                 setPdfOriginalWidth(pdfPage.originalWidth || page.originalWidth);
                 setPdfOriginalHeight(pdfPage.originalHeight || page.originalHeight);
                 updateCanvasDisplaySize();

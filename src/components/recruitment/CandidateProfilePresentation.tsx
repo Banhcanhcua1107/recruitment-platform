@@ -12,6 +12,19 @@ function createInitials(name: string) {
     .join("");
 }
 
+function scrollToPublicSection(sectionId: string) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const element = document.getElementById(`section-${sectionId}`);
+  if (!element) {
+    return;
+  }
+
+  element.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function InfoPill({
   icon,
   value,
@@ -427,11 +440,11 @@ export function CandidateProfilePresentation({
   return (
     <>
       <section className="overflow-hidden rounded-[36px] border border-slate-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.08)]">
-        <div className="h-40 bg-[linear-gradient(120deg,#0f172a_0%,#0f766e_46%,#38bdf8_100%)] sm:h-52" />
-        <div className="px-6 pb-8 sm:px-8 lg:px-10">
-          <div className="-mt-16 flex flex-col gap-6 lg:-mt-20 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-end">
-              <div className="flex size-28 items-center justify-center overflow-hidden rounded-[28px] border-4 border-white bg-slate-100 text-3xl font-black text-slate-700 shadow-lg sm:size-32">
+        <div className="h-40 bg-[linear-gradient(120deg,#0f172a_0%,#2f5fe8_42%,#38bdf8_100%)] sm:h-52" />
+        <div className="px-6 pt-4 pb-6 sm:px-8 sm:pt-5">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-end">
+              <div className="-mt-10 flex size-24 items-center justify-center overflow-hidden rounded-full border-4 border-white bg-slate-100 text-3xl font-black text-slate-700 shadow-lg sm:-mt-12 sm:size-28">
                 {avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -444,9 +457,9 @@ export function CandidateProfilePresentation({
                 )}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-3 pt-1 sm:pt-0">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">
+                  <h1 className="text-3xl font-black tracking-tight text-slate-900">
                     {displayName}
                   </h1>
                   <span className="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
@@ -476,7 +489,7 @@ export function CandidateProfilePresentation({
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-3 sm:flex-row lg:self-start">
               {displayEmail ? (
                 <a
                   href={`mailto:${displayEmail}`}
@@ -484,6 +497,15 @@ export function CandidateProfilePresentation({
                 >
                   <span className="material-symbols-outlined text-lg">mail</span>
                   Gửi email
+                </a>
+              ) : null}
+              {displayPhone ? (
+                <a
+                  href={`tel:${displayPhone.replace(/\s+/g, "")}`}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"
+                >
+                  <span className="material-symbols-outlined text-lg">call</span>
+                  Gọi điện
                 </a>
               ) : null}
               {cvUrl ? (
@@ -499,13 +521,32 @@ export function CandidateProfilePresentation({
               ) : null}
             </div>
           </div>
+
+          {mainSections.length > 0 ? (
+            <nav className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
+              {mainSections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => scrollToPublicSection(section.id)}
+                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:border-primary hover:text-primary"
+                >
+                  {getSectionMeta(section.type)?.name || section.type}
+                </button>
+              ))}
+            </nav>
+          ) : null}
         </div>
       </section>
 
       {mainSections.length > 0 || hasContactCard || cvUrl ? (
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-8">
-            {mainSections.map((section) => renderPublicSection(section))}
+            {mainSections.map((section) => (
+              <div key={section.id} id={`section-${section.id}`}>
+                {renderPublicSection(section)}
+              </div>
+            ))}
           </div>
 
           {hasContactCard || cvUrl ? (

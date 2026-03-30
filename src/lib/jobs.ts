@@ -132,7 +132,7 @@ function applyEmployerBranding(job: Job, employerProfile?: EmployerProfile): Job
   };
 }
 
-const getSupabaseJobs = cache(async function getSupabaseJobs(): Promise<Job[]> {
+async function getSupabaseJobsImpl(): Promise<Job[]> {
   try {
     const supabase = await createClient();
 
@@ -182,11 +182,18 @@ const getSupabaseJobs = cache(async function getSupabaseJobs(): Promise<Job[]> {
   } catch {
     return [];
   }
-});
+}
+
+const getCachedSupabaseJobs = cache(getSupabaseJobsImpl);
 
 /** Return every public job. */
 export async function getAllJobs(): Promise<Job[]> {
-  return getSupabaseJobs();
+  return getCachedSupabaseJobs();
+}
+
+/** Return fresh public jobs without the React request cache. */
+export async function getFreshPublicJobs(): Promise<Job[]> {
+  return getSupabaseJobsImpl();
 }
 
 /** Find a single public job by id. */

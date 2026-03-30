@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type ChangeEvent } from "react";
 import {
   Download,
   History,
@@ -14,10 +14,12 @@ import {
   Sparkles,
 } from "lucide-react";
 import {
+  clearEditableBlockAsset,
   createEditableVersion,
   exportEditableCV,
   fetchEditableCV,
   isAPIClientError,
+  replaceEditableBlockAsset,
   restoreEditableVersion,
   updateEditableBlock,
   updateEditableJSON,
@@ -25,8 +27,14 @@ import {
 import { ImportStatusBadge } from "@/features/cv-import/components/ImportStatusBadge";
 import { setValueAtPath } from "@/features/cv-import/sync/json-path";
 import { useEditableCVEditorStore } from "@/features/cv-import/store/useEditableCVEditorStore";
+import { buildEditableDocumentRegionsFromBlocks } from "@/features/cv-import/transforms/editable-regions";
 import { cn } from "@/lib/utils";
-import type { EditableCVBlockView, EditableCVDetailResponse, JSONPatchOperation } from "@/types/cv-import";
+import type {
+  EditableCVBlockView,
+  EditableCVDetailResponse,
+  EditableDocumentRegion,
+  JSONPatchOperation,
+} from "@/types/cv-import";
 
 interface EditableCVEditorProps {
   initialData: EditableCVDetailResponse;
@@ -64,6 +72,11 @@ function blockDisplayText(block: EditableCVBlockView) {
   return block.edited_text ?? block.original_text ?? "";
 }
 
+function regionDisplayText(region: EditableDocumentRegion, block: EditableCVBlockView | null) {
+  if (region.type === "image") return "";
+  return block ? blockDisplayText(block) : region.text ?? "";
+}
+
 function applyDeltaToJson(
   current: EditableCVDetailResponse["updated_json"],
   delta: Record<string, unknown>
@@ -83,19 +96,21 @@ function normalizedToPercent(value: number) {
   return `${Math.max(0, Math.min(100, value * 100))}%`;
 }
 
-function OverlayBlock({
+function OverlayRegion({
+  region,
   block,
   selected,
   onSelect,
 }: {
-  block: EditableCVBlockView;
+  region: EditableDocumentRegion;
+  block: EditableCVBlockView | null;
   selected: boolean;
   onSelect: () => void;
 }) {
-  const blockClassName = `cv-overlay-block-${cssSafeToken(block.id)}`;
-  const blockLayoutRule = `.${blockClassName}{left:${normalizedToPercent(block.bbox_normalized.x)};top:${normalizedToPercent(block.bbox_normalized.y)};width:${normalizedToPercent(block.bbox_normalized.width)};height:${normalizedToPercent(block.bbox_normalized.height)};}`;
+  const blockClassName = `cv-overlay-block-${cssSafeToken(region.id)}`;
+  const blockLayoutRule = `.${blockClassName}{left:${normalizedToPercent(region.bbox.x)};top:${normalizedToPercent(region.bbox.y)};width:${normalizedToPercent(region.bbox.width)};height:${normalizedToPercent(region.bbox.height)};}`;
 
-  if (block.type === "avatar") {
+  if (region.type === "image") {
     return (
       <>
         <style>{blockLayoutRule}</style>
@@ -110,11 +125,11 @@ function OverlayBlock({
               : "border-slate-300/70 bg-white/10 hover:border-sky-400"
           )}
         >
-          {block.asset_image_url ? (
-            <img alt="Avatar overlay block" src={block.asset_image_url} className="h-full w-full object-cover" />
+          {block?.asset_image_url ? (
+            <img alt="Image overlay block" src={block.asset_image_url} className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-white/70 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Avatar
+              Image
             </div>
           )}
         </button>
@@ -136,7 +151,9 @@ function OverlayBlock({
             : "border-transparent bg-white/10 hover:border-sky-400/70 hover:bg-white/70"
         )}
       >
-        <span className="block truncate text-[11px] leading-4 text-slate-900">{blockDisplayText(block) || " "}</span>
+        <span className="block truncate text-[11px] leading-4 text-slate-900">
+          {regionDisplayText(region, block) || " "}
+        </span>
       </button>
     </>
   );
@@ -145,6 +162,8 @@ function OverlayBlock({
 export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
   const initializedRef = useRef(false);
   const pendingSaveTimeoutRef = useRef<number | null>(null);
+  const textEditorRef = useRef<HTMLDivElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const {
     detail,
     jsonDraft,
@@ -162,6 +181,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
     updateBlockTextLocal,
     updateBlockLockLocal,
     mergeServerBlockUpdate,
+    mergeServerBlockAssetUpdate,
     applyUpdatedJSON,
     pushHistory,
     undo,
@@ -171,6 +191,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
   const [activeTextDraft, setActiveTextDraft] = useState("");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
   const [pendingBlockSave, setPendingBlockSave] = useState<{
     blockId: string;
     text: string;
@@ -185,14 +206,59 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
     initializedRef.current = true;
   }, [initialData, initialize]);
 
+  const pageRegions = useMemo(
+    () =>
+      detail?.pages.map((page) => ({
+        ...page,
+        regions: page.regions?.length ? page.regions : buildEditableDocumentRegionsFromBlocks(page.blocks),
+      })) ?? [],
+    [detail],
+  );
+
   const selectedBlock = useMemo(() => {
     if (!detail || !selectedBlockId) return null;
-    return detail.pages.flatMap((page) => page.blocks).find((block) => block.id === selectedBlockId) ?? null;
+    return (
+      detail.pages.flatMap((page) => page.blocks).find((block) => block.id === selectedBlockId) ?? null
+    );
   }, [detail, selectedBlockId]);
+
+  const selectedRegion = useMemo(() => {
+    if (pageRegions.length === 0) return null;
+    if (selectedRegionId) {
+      const explicitRegion = pageRegions
+        .flatMap((page) => page.regions)
+        .find((region) => region.id === selectedRegionId);
+      if (explicitRegion) return explicitRegion;
+    }
+    if (!selectedBlockId) return null;
+    return (
+      pageRegions
+        .flatMap((page) => page.regions)
+        .find((region) => region.block_ids.includes(selectedBlockId)) ?? null
+    );
+  }, [pageRegions, selectedBlockId, selectedRegionId]);
 
   useEffect(() => {
     setActiveTextDraft(selectedBlock ? blockDisplayText(selectedBlock) : "");
   }, [selectedBlock]);
+
+  useEffect(() => {
+    if (selectedRegion) {
+      setSelectedRegionId(selectedRegion.id);
+      return;
+    }
+    if (pageRegions[0]?.regions[0]) {
+      setSelectedRegionId(pageRegions[0].regions[0].id);
+    }
+  }, [pageRegions, selectedRegion]);
+
+  useEffect(() => {
+    if (!selectedRegion || selectedRegion.type !== "text" || !textEditorRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      textEditorRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedRegion]);
 
   useEffect(() => {
     return () => {
@@ -296,12 +362,86 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
     }
   };
 
-  const handleBlockSelect = (block: EditableCVBlockView) => {
-    selectBlock(block.id);
+  const handleRegionSelect = (region: EditableDocumentRegion) => {
+    setSelectedRegionId(region.id);
+    selectBlock(region.primary_block_id ?? region.block_ids[0] ?? null);
   };
 
   const handleBlockFocus = () => {
     pushHistory();
+  };
+
+  const handleReplaceImage = () => {
+    if (!selectedBlock || selectedRegion?.type !== "image") return;
+    imageInputRef.current?.click();
+  };
+
+  const handleImageFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    if (!detail || !selectedBlock) return;
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    startTransition(async () => {
+      try {
+        setSaving(true);
+        setError(null);
+        const response = await replaceEditableBlockAsset(detail.editable_cv_id, selectedBlock.id, file);
+        mergeServerBlockAssetUpdate(
+          selectedBlock.id,
+          response.block.asset_artifact_id,
+          response.block.asset_image_url,
+          {
+            version: response.block.version,
+            lockState: response.block.lock_state,
+          },
+        );
+        replaceDetail(await fetchEditableCV(detail.editable_cv_id));
+        setLastSavedAt(response.block.updated_at);
+      } catch (assetError) {
+        if (isAPIClientError(assetError) && assetError.status === 409) {
+          await handleConflictRefresh(
+            "Image region changed in a newer session. The editor has been refreshed with the latest state.",
+          );
+        } else {
+          setError(assetError instanceof Error ? assetError.message : "Unable to replace image.");
+        }
+      } finally {
+        setSaving(false);
+      }
+    });
+  };
+
+  const handleClearImage = () => {
+    if (!detail || !selectedBlock || selectedRegion?.type !== "image") return;
+    startTransition(async () => {
+      try {
+        setSaving(true);
+        setError(null);
+        const response = await clearEditableBlockAsset(detail.editable_cv_id, selectedBlock.id);
+        mergeServerBlockAssetUpdate(
+          selectedBlock.id,
+          response.block.asset_artifact_id,
+          response.block.asset_image_url,
+          {
+            version: response.block.version,
+            lockState: response.block.lock_state,
+          },
+        );
+        replaceDetail(await fetchEditableCV(detail.editable_cv_id));
+        setLastSavedAt(response.block.updated_at);
+      } catch (assetError) {
+        if (isAPIClientError(assetError) && assetError.status === 409) {
+          await handleConflictRefresh(
+            "Image region changed in a newer session. The editor has been refreshed with the latest state.",
+          );
+        } else {
+          setError(assetError instanceof Error ? assetError.message : "Unable to clear image.");
+        }
+      } finally {
+        setSaving(false);
+      }
+    });
   };
 
   const handleLockToggle = () => {
@@ -538,6 +678,14 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
         </div>
       </section>
 
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
+
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_440px]">
         <div className="rounded-[36px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.34)]">
           <div className="mb-5 flex items-center justify-between gap-4">
@@ -547,7 +695,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               </p>
               <h2 className="mt-2 text-xl font-black text-slate-950">Overlay blocks stay anchored to the source page</h2>
             </div>
-            {selectedBlock ? (
+            {selectedBlock && selectedRegion?.type === "text" ? (
               <button
                 type="button"
                 onClick={handleLockToggle}
@@ -565,16 +713,17 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
           </div>
 
           <div className="space-y-6">
-            {detail.pages.map((page) => {
+            {pageRegions.map((page) => {
               const pageFrameClassName = `cv-page-frame-${page.page_number}`;
               const pageAspectPadding = (page.canonical_height_px / Math.max(page.canonical_width_px, 1)) * 100;
               const pageFrameRule = `.${pageFrameClassName}::before{content:\"\";display:block;padding-top:${pageAspectPadding}%;}`;
-              const selectedBlockOnPage = selectedBlock && page.blocks.some((block) => block.id === selectedBlock.id);
-              const selectedBlockClassName = selectedBlockOnPage
-                ? `cv-selected-block-${cssSafeToken(selectedBlock.id)}`
+              const selectedRegionOnPage =
+                selectedRegion && page.regions.some((region) => region.id === selectedRegion.id);
+              const selectedRegionClassName = selectedRegionOnPage
+                ? `cv-selected-block-${cssSafeToken(selectedRegion.id)}`
                 : null;
-              const selectedBlockRule = selectedBlockOnPage && selectedBlockClassName
-                ? `.${selectedBlockClassName}{left:${normalizedToPercent(selectedBlock.bbox_normalized.x)};top:${normalizedToPercent(selectedBlock.bbox_normalized.y)};width:${normalizedToPercent(selectedBlock.bbox_normalized.width)};min-height:${normalizedToPercent(selectedBlock.bbox_normalized.height)};}`
+              const selectedRegionRule = selectedRegionOnPage && selectedRegionClassName && selectedRegion
+                ? `.${selectedRegionClassName}{left:${normalizedToPercent(selectedRegion.bbox.x)};top:${normalizedToPercent(selectedRegion.bbox.y)};width:${normalizedToPercent(selectedRegion.bbox.width)};min-height:${normalizedToPercent(selectedRegion.bbox.height)};}`
                 : "";
 
               return (
@@ -588,7 +737,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                     </span>
                   </div>
 
-                  <style>{`${pageFrameRule}${selectedBlockRule}`}</style>
+                  <style>{`${pageFrameRule}${selectedRegionRule}`}</style>
                   <div
                     className={cn(
                       "relative mx-auto w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm",
@@ -608,30 +757,56 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                     )}
 
                     <div className="absolute inset-0">
-                      {page.blocks.map((block) => (
-                        <OverlayBlock
-                          key={block.id}
-                          block={block}
-                          selected={block.id === selectedBlockId}
-                          onSelect={() => handleBlockSelect(block)}
+                      {page.regions.map((region) => (
+                        <OverlayRegion
+                          key={region.id}
+                          region={region}
+                          block={
+                            page.blocks.find((block) => region.block_ids.includes(block.id)) ?? null
+                          }
+                          selected={region.id === selectedRegionId}
+                          onSelect={() => handleRegionSelect(region)}
                         />
                       ))}
                     </div>
 
-                    {selectedBlockOnPage && selectedBlockClassName ? (
+                    {selectedRegionOnPage && selectedRegionClassName && selectedRegion ? (
                       <div
                         className={cn(
                           "absolute rounded-[18px] border-2 border-sky-500 bg-white/95 p-2 shadow-[0_18px_40px_-28px_rgba(14,165,233,0.6)]",
-                          selectedBlockClassName
+                          selectedRegionClassName
                         )}
                       >
-                        {selectedBlock.type === "avatar" ? (
-                          <div className="space-y-2 text-xs text-slate-500">
-                            <p className="font-semibold text-slate-700">Avatar block</p>
-                            <p>Asset replacement API will attach here once image artifact support is expanded.</p>
+                        {selectedRegion.type === "image" ? (
+                          <div className="space-y-3 text-xs text-slate-600">
+                            <p className="font-semibold text-slate-700">Image region</p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={handleReplaceImage}
+                                disabled={isPending}
+                                className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Replace image
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleClearImage}
+                                disabled={isPending || !selectedBlock?.asset_image_url}
+                                className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-200 px-3 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                Clear replacement
+                              </button>
+                            </div>
+                            <p>
+                              {selectedBlock?.asset_image_url
+                                ? "Replacement image is active for this region."
+                                : "Select the region and replace it with a new image asset."}
+                            </p>
                           </div>
                         ) : (
                           <div
+                            ref={textEditorRef}
                             contentEditable
                             suppressContentEditableWarning
                             spellCheck={false}
@@ -642,6 +817,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                             onInput={(event) => {
                               const text = event.currentTarget.textContent ?? "";
                               setActiveTextDraft(text);
+                              if (!selectedBlock) return;
                               updateBlockTextLocal(selectedBlock.id, text);
                               setPendingBlockSave({
                                 blockId: selectedBlock.id,
@@ -702,7 +878,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">
-                  Selected block
+                  Selected region
                 </p>
                 <h2 className="mt-2 text-xl font-black text-slate-950">Mapping and sync metadata</h2>
               </div>
@@ -712,7 +888,11 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               <div className="mt-5 space-y-3">
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
                   <p className="font-semibold text-slate-900">{selectedBlock.type}</p>
-                  <p className="mt-2 text-xs leading-6 text-slate-500">{blockDisplayText(selectedBlock)}</p>
+                  <p className="mt-2 text-xs leading-6 text-slate-500">
+                    {selectedRegion?.type === "image"
+                      ? "Image region selected. Replace the asset directly on the page preview."
+                      : blockDisplayText(selectedBlock)}
+                  </p>
                 </div>
 
                 {selectedBlock.mappings.map((mapping) => (
@@ -723,10 +903,15 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                     </p>
                   </div>
                 ))}
+                {selectedRegion?.type === "image" && selectedBlock.mappings.length === 0 ? (
+                  <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+                    This image region is exported through its replacement asset rather than JSON mapping.
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="mt-5 rounded-[24px] border border-dashed border-slate-200 px-4 py-8 text-sm text-slate-500">
-                Select a block on the document to inspect its mapping metadata.
+                Select a region on the document to inspect its mapping metadata.
               </div>
             )}
           </div>

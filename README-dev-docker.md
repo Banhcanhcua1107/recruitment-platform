@@ -32,6 +32,9 @@ Then fill in the required secrets such as Supabase, SMTP, Cloudinary, and OCR to
 docker compose up --build
 ```
 
+After the first build, use plain `docker compose up` for normal development.
+You should not need to rebuild or reset the whole stack for regular UI/code changes.
+
 App URLs:
 
 - Frontend: [http://localhost:3000](http://localhost:3000)
@@ -44,6 +47,13 @@ Start in the background:
 
 ```bash
 docker compose up --build -d
+```
+
+Normal day-to-day restart without rebuilding:
+
+```bash
+docker compose up
+docker compose up -d
 ```
 
 Stop the stack:
@@ -82,7 +92,7 @@ docker compose exec celery-worker bash
 docker compose exec redis redis-cli
 ```
 
-Rebuild one service:
+Rebuild one service only when dependencies or Dockerfiles changed:
 
 ```bash
 docker compose build frontend
@@ -96,7 +106,7 @@ docker compose up --build frontend
 docker compose up --build ai-service celery-worker
 ```
 
-Reset frontend dependency caches:
+Reset frontend dependency caches only if dependency state is broken:
 
 ```bash
 docker compose down -v
@@ -122,8 +132,10 @@ Other important vars for Docker dev:
 
 ## Hot Reload Notes
 
-- Frontend uses polling to make file watching reliable on Windows bind mounts.
+- Frontend Docker dev uses `next dev --webpack` plus polling to make file watching reliable on Windows bind mounts.
 - Backend uses Uvicorn reload with polling enabled.
 - Celery worker uses `watchfiles` so task code changes trigger a worker restart.
+- Regular edits in `src/`, `public/`, and other frontend files should appear automatically without rebuilding containers.
+- Rebuild the `frontend` service only when `package.json`, `package-lock.json`, `Dockerfile.frontend`, or base Node dependencies change.
 
 You do not need a local Node install, local Python venv, or local Redis for this workflow.
