@@ -66,7 +66,7 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
         </div>
       </section>
 
-      <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-4">
         <DashboardStatsCard
           title="Tổng tin"
           value={portfolioSummary.totalJobs}

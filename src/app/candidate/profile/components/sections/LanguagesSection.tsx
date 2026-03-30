@@ -69,6 +69,21 @@ export default function LanguagesSection({ sectionId, content, isEditing }: Lang
     return option?.name || level;
   };
 
+  const getLevelWidthClass = (level: Language['level']) => {
+    switch (level) {
+      case 'beginner':
+        return 'w-1/4';
+      case 'intermediate':
+        return 'w-1/2';
+      case 'advanced':
+        return 'w-3/4';
+      case 'native':
+        return 'w-full';
+      default:
+        return 'w-1/2';
+    }
+  };
+
   // View mode
   if (!isEditing) {
     if (content.languages.length === 0) {
@@ -104,8 +119,7 @@ export default function LanguagesSection({ sectionId, content, isEditing }: Lang
             </div>
             <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all duration-500"
-                style={{ width: `${getLevelPercent(lang.level)}%` }}
+                className={`h-full rounded-full bg-primary transition-all duration-500 ${getLevelWidthClass(lang.level)}`}
               />
             </div>
           </div>
@@ -125,6 +139,8 @@ export default function LanguagesSection({ sectionId, content, isEditing }: Lang
               type="text"
               value={lang.name}
               onChange={(e) => updateLanguage(lang.id, { name: e.target.value })}
+                aria-label="Tên ngôn ngữ"
+                title="Tên ngôn ngữ"
               className="text-lg font-bold bg-transparent border-none focus:outline-none text-slate-900"
             />
             <button
@@ -141,6 +157,8 @@ export default function LanguagesSection({ sectionId, content, isEditing }: Lang
               <select
                 value={lang.level}
                 onChange={(e) => updateLanguage(lang.id, { level: e.target.value as Language['level'] })}
+                aria-label="Trình độ ngoại ngữ"
+                title="Trình độ ngoại ngữ"
                 className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {levelOptions.map(opt => (
@@ -164,8 +182,7 @@ export default function LanguagesSection({ sectionId, content, isEditing }: Lang
           <div className="mt-4">
             <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${getLevelPercent(lang.level)}%` }}
+                className={`h-full rounded-full bg-primary transition-all duration-300 ${getLevelWidthClass(lang.level)}`}
               />
             </div>
           </div>
@@ -182,6 +199,8 @@ export default function LanguagesSection({ sectionId, content, isEditing }: Lang
               <select
                 value={newLanguage.name}
                 onChange={(e) => setNewLanguage({ ...newLanguage, name: e.target.value })}
+                aria-label="Chọn ngôn ngữ mới"
+                title="Chọn ngôn ngữ mới"
                 className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="">-- Chọn --</option>
@@ -195,6 +214,8 @@ export default function LanguagesSection({ sectionId, content, isEditing }: Lang
               <select
                 value={newLanguage.level}
                 onChange={(e) => setNewLanguage({ ...newLanguage, level: e.target.value as Language['level'] })}
+                aria-label="Chọn trình độ ngoại ngữ mới"
+                title="Chọn trình độ ngoại ngữ mới"
                 className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 {levelOptions.map(opt => (

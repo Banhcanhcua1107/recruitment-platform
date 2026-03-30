@@ -144,7 +144,7 @@ function OverlayRegion({
         type="button"
         onClick={onSelect}
         className={cn(
-          "absolute overflow-hidden rounded-[16px] border px-1.5 py-1 text-left transition",
+          "absolute overflow-hidden rounded-2xl border px-1.5 py-1 text-left transition",
           blockClassName,
           selected
             ? "border-sky-500 bg-white/90 shadow-[0_0_0_3px_rgba(14,165,233,0.18)]"
@@ -584,7 +584,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
 
   if (!detail) {
     return (
-      <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+      <div className="rounded-4xl border border-slate-200 bg-white p-8 shadow-sm">
         Loading editor...
       </div>
     );
@@ -615,7 +615,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               type="button"
               onClick={undo}
               disabled={history.length === 0 || isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:-translate-y-[1px] hover:bg-slate-50"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:-translate-y-px hover:bg-slate-50"
             >
               <Undo2 className="h-4 w-4" />
               Undo
@@ -624,7 +624,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               type="button"
               onClick={redo}
               disabled={future.length === 0 || isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:-translate-y-[1px] hover:bg-slate-50"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition disabled:cursor-not-allowed disabled:opacity-40 hover:-translate-y-px hover:bg-slate-50"
             >
               <Redo2 className="h-4 w-4" />
               Redo
@@ -633,7 +633,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               type="button"
               onClick={handleSaveVersion}
               disabled={isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:-translate-y-[1px] hover:bg-slate-50"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:-translate-y-px hover:bg-slate-50"
             >
               <Save className="h-4 w-4" />
               Save version
@@ -642,7 +642,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               type="button"
               onClick={handleExport}
               disabled={isPending}
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:-translate-y-[1px] hover:bg-slate-800"
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 text-sm font-semibold text-white transition hover:-translate-y-px hover:bg-slate-800"
             >
               <Download className="h-4 w-4" />
               Export PDF
@@ -651,14 +651,14 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
         </div>
 
         {detail.status === "partial_ready" ? (
-          <div className="mt-5 rounded-[24px] border border-orange-200 bg-orange-50 px-5 py-4 text-sm text-orange-800">
+          <div className="mt-5 rounded-3xl border border-orange-200 bg-orange-50 px-5 py-4 text-sm text-orange-800">
             This editable CV is running in partial review mode. Some JSON or mappings may still be
             incomplete, so locked blocks are especially useful before exporting.
           </div>
         ) : null}
 
         {error ? (
-          <div className="mt-5 rounded-[24px] border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+          <div className="mt-5 rounded-3xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
             {error}
           </div>
         ) : null}
@@ -682,6 +682,8 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
         ref={imageInputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif"
+        aria-label="Upload block image"
+        title="Upload block image"
         className="hidden"
         onChange={handleImageFileChange}
       />
@@ -740,7 +742,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                   <style>{`${pageFrameRule}${selectedRegionRule}`}</style>
                   <div
                     className={cn(
-                      "relative mx-auto w-full overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm",
+                      "relative mx-auto w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm",
                       pageFrameClassName
                     )}
                   >
@@ -812,7 +814,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                             spellCheck={false}
                             role="textbox"
                             aria-label="Selected block text editor"
-                            className="min-h-[48px] whitespace-pre-wrap rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
+                            className="min-h-12 whitespace-pre-wrap rounded-[14px] border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-900 outline-none focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
                             onFocus={handleBlockFocus}
                             onInput={(event) => {
                               const text = event.currentTarget.textContent ?? "";
@@ -853,7 +855,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                 type="button"
                 onClick={handleApplyJson}
                 disabled={isPending}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:-translate-y-[1px] hover:bg-slate-50"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-4 text-sm font-semibold text-slate-700 transition hover:-translate-y-px hover:bg-slate-50"
               >
                 <Sparkles className="h-4 w-4" />
                 Apply JSON
@@ -870,7 +872,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
               spellCheck={false}
               aria-label="JSON working copy editor"
               title="JSON working copy editor"
-              className="mt-5 h-[360px] w-full rounded-[24px] border border-slate-200 bg-slate-950 p-5 font-mono text-xs leading-6 text-slate-100 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
+              className="mt-5 h-90 w-full rounded-3xl border border-slate-200 bg-slate-950 p-5 font-mono text-xs leading-6 text-slate-100 outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-100"
             />
           </div>
 
@@ -886,7 +888,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
 
             {selectedBlock ? (
               <div className="mt-5 space-y-3">
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700">
                   <p className="font-semibold text-slate-900">{selectedBlock.type}</p>
                   <p className="mt-2 text-xs leading-6 text-slate-500">
                     {selectedRegion?.type === "image"
@@ -896,7 +898,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                 </div>
 
                 {selectedBlock.mappings.map((mapping) => (
-                  <div key={`${mapping.json_path}:${mapping.sequence}`} className="rounded-[24px] border border-slate-200 px-4 py-4 text-sm">
+                  <div key={`${mapping.json_path}:${mapping.sequence}`} className="rounded-3xl border border-slate-200 px-4 py-4 text-sm">
                     <p className="font-semibold text-slate-900">{mapping.json_path}</p>
                     <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">
                       {mapping.mapping_role} • {mapping.compose_strategy} • {mapping.parse_strategy}
@@ -904,13 +906,13 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                   </div>
                 ))}
                 {selectedRegion?.type === "image" && selectedBlock.mappings.length === 0 ? (
-                  <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+                  <div className="rounded-3xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
                     This image region is exported through its replacement asset rather than JSON mapping.
                   </div>
                 ) : null}
               </div>
             ) : (
-              <div className="mt-5 rounded-[24px] border border-dashed border-slate-200 px-4 py-8 text-sm text-slate-500">
+              <div className="mt-5 rounded-3xl border border-dashed border-slate-200 px-4 py-8 text-sm text-slate-500">
                 Select a region on the document to inspect its mapping metadata.
               </div>
             )}
@@ -929,7 +931,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
 
             <div className="mt-5 space-y-3">
               {detail.versions.map((version) => (
-                <div key={version.id} className="rounded-[24px] border border-slate-200 px-4 py-4">
+                <div key={version.id} className="rounded-3xl border border-slate-200 px-4 py-4">
                   <div className="flex items-center justify-between gap-4">
                     <div className="space-y-1">
                       <p className="text-sm font-semibold text-slate-900">Version {version.version_number}</p>
@@ -944,7 +946,7 @@ export function EditableCVEditor({ initialData }: EditableCVEditorProps) {
                       type="button"
                       onClick={() => handleRestoreVersion(version.id)}
                       disabled={isPending}
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-[1px] hover:bg-slate-50"
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-slate-200 px-3 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:bg-slate-50"
                     >
                       <RefreshCcw className="h-3.5 w-3.5" />
                       Restore as new

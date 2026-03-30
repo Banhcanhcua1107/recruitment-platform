@@ -166,6 +166,53 @@ function buildJobManagementUrl(jobId: string) {
   return `/hr/jobs/${jobId}`;
 }
 
+function extractFileNameFromSource(source: unknown) {
+  const normalized = safeTrim(source);
+  if (!normalized) {
+    return null;
+  }
+
+  const rawPath = normalized.split("?")[0] || normalized;
+
+  try {
+    const decodedPath = decodeURIComponent(rawPath);
+    const segments = decodedPath.split("/").filter(Boolean);
+    return segments[segments.length - 1] || null;
+  } catch {
+    const segments = rawPath.split("/").filter(Boolean);
+    return segments[segments.length - 1] || null;
+  }
+}
+
+function isGenericResumeName(name: string) {
+  const normalized = name
+    .trim()
+    .toLowerCase()
+    .replace(/\.[a-z0-9]+$/i, "");
+
+  return (
+    normalized === "cv" ||
+    normalized === "resume" ||
+    normalized === "file" ||
+    normalized === "document" ||
+    normalized === "download"
+  );
+}
+
+function getResumeFileName(cvFilePath: unknown, cvFileUrl: unknown) {
+  const fileNameFromPath = extractFileNameFromSource(cvFilePath);
+  if (fileNameFromPath && !isGenericResumeName(fileNameFromPath)) {
+    return fileNameFromPath;
+  }
+
+  const fileNameFromUrl = extractFileNameFromSource(cvFileUrl);
+  if (fileNameFromUrl && !isGenericResumeName(fileNameFromUrl)) {
+    return fileNameFromUrl;
+  }
+
+  return fileNameFromPath || fileNameFromUrl || null;
+}
+
 function buildCandidateCodeFromCreatedAt(createdAt: string, sequence: number) {
   const date = new Date(createdAt);
   const year = Number.isNaN(date.getTime()) ? new Date().getFullYear() : date.getFullYear();
@@ -1415,10 +1462,11 @@ export async function getEmployerCandidateApplicationDetail(
     { data: currentJob, error: currentJobError },
     { data: employerJobs, error: employerJobsError },
     { data: candidateWithCode, error: candidateWithCodeError },
+    { data: candidateProfile, error: candidateProfileError },
   ] = await Promise.all([
     supabase
       .from("jobs")
-      .select("id, title, company_name, employer_id")
+      .select("id, title, company_name, employer_id, description, location")
       .eq("id", application.job_id)
       .eq("employer_id", user.id)
       .maybeSingle(),
@@ -1427,6 +1475,11 @@ export async function getEmployerCandidateApplicationDetail(
       .from("candidates")
       .select("id, candidate_code")
       .eq("id", application.candidate_id)
+      .maybeSingle(),
+    supabase
+      .from("candidate_profiles")
+      .select("work_experience")
+      .eq("user_id", application.candidate_id)
       .maybeSingle(),
   ]);
 
@@ -1467,6 +1520,18 @@ export async function getEmployerCandidateApplicationDetail(
     throw new Error(candidateError.message);
   }
 
+  if (
+    candidateProfileError &&
+    !isApplicationSchemaError(candidateProfileError, [
+      'relation "candidate_profiles" does not exist',
+      "could not find the table 'public.candidate_profiles' in the schema cache",
+      'column "work_experience" does not exist',
+      'column candidate_profiles.work_experience does not exist',
+    ])
+  ) {
+    throw new Error(candidateProfileError.message);
+  }
+
   const fallbackCandidateCodes = shouldFallbackToLegacyCandidateDetailLookup
     ? await buildFallbackCandidateCodeMap([String(application.candidate_id)])
     : new Map<string, string>();
@@ -1498,6 +1563,8 @@ export async function getEmployerCandidateApplicationDetail(
     fullName: safeTrim(application.full_name) || safeTrim(application.email) || "Ung vien",
     email: normalizeOptionalString(application.email),
     phone: normalizeOptionalString(application.phone),
+    coverLetter: normalizeOptionalString(application.cover_letter),
+    candidateExperience: normalizeOptionalString(candidateProfile?.work_experience),
     introduction:
       normalizeOptionalString(application.introduction) ??
       normalizeOptionalString(application.cover_letter),
@@ -1505,6 +1572,7 @@ export async function getEmployerCandidateApplicationDetail(
       application.cv_file_path || application.cv_file_url
         ? buildInternalCvUrl(String(application.id))
         : null,
+    resumeFileName: getResumeFileName(application.cv_file_path, application.cv_file_url),
     appliedAt: String(application.applied_at || application.created_at),
     updatedAt: String(application.updated_at || application.created_at),
     status: normalizeApplicationStatus(application.status),
@@ -1514,6 +1582,8 @@ export async function getEmployerCandidateApplicationDetail(
       title: safeTrim(currentJob.title) || "Chua ro vi tri",
       url: buildJobManagementUrl(String(currentJob.id)),
       companyName: normalizeOptionalString(currentJob.company_name),
+      description: normalizeOptionalString(currentJob.description),
+      location: normalizeOptionalString(currentJob.location),
     },
     relatedApplications: (relatedApplications ?? []).map((row) => ({
       applicationId: String(row.id),

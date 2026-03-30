@@ -126,6 +126,8 @@ export function JobsFilterSidebar({
               <select
                 value={selectedLocation}
                 onChange={(event) => onLocationChange(event.target.value)}
+                aria-label="Lọc theo địa điểm"
+                title="Lọc theo địa điểm"
                 className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-primary/30 focus:ring-2 focus:ring-primary/10"
               >
                 <option value="">Tất cả tỉnh thành</option>
@@ -262,10 +264,9 @@ export function JobsFilterSidebar({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[28px] bg-gradient-to-br from-blue-700 to-primary p-6 text-white shadow-xl shadow-blue-500/20">
+      <div className="overflow-hidden rounded-[28px] bg-linear-to-br from-blue-700 to-primary p-6 text-white shadow-xl shadow-blue-500/20">
         <span
-          className="material-symbols-outlined mb-4 inline-flex rounded-2xl bg-white/20 p-3 text-3xl"
-          style={{ fontVariationSettings: "'FILL' 1" }}
+          className="material-symbols-outlined mb-4 inline-flex rounded-2xl bg-white/20 p-3 text-3xl [font-variation-settings:'FILL'_1]"
         >
           description
         </span>

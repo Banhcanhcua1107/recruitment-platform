@@ -47,7 +47,7 @@ function SidebarContent({
       }`}
     >
       <div
-        className={`rounded-[24px] bg-[linear-gradient(135deg,rgba(15,23,42,0.08),rgba(37,99,235,0.05))] ${
+        className={`rounded-3xl bg-[linear-gradient(135deg,rgba(15,23,42,0.08),rgba(37,99,235,0.05))] ${
           isCompact ? "px-3 py-4" : "px-4 py-5"
         }`}
       >
@@ -259,14 +259,14 @@ export default function HRLayout({
   return (
     <>
       <main className="flex-1">
-        <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex items-start gap-5 lg:gap-8">
+        <div className="mx-auto w-full max-w-460 px-3 py-5 sm:px-5 lg:pl-3 lg:pr-8 xl:pr-10">
+          <div className="flex items-start gap-4 lg:gap-6 xl:gap-7">
             <aside
               className={`hidden shrink-0 md:block ${
-                shouldUseCompactSidebar ? "md:w-[96px]" : "md:w-[280px]"
-              } lg:w-[288px]`}
+                shouldUseCompactSidebar ? "md:w-22" : "md:w-66"
+              } lg:w-68 xl:w-70`}
             >
-              <div className="md:sticky md:top-[108px]">
+              <div className="md:sticky md:top-27">
                 <SidebarContent
                   model={model}
                   isCompact={shouldUseCompactSidebar}
@@ -300,7 +300,7 @@ export default function HRLayout({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed inset-0 z-[70] bg-slate-950/40 backdrop-blur-[2px] md:hidden"
+              className="fixed inset-0 z-70 bg-slate-950/40 backdrop-blur-[2px] md:hidden"
               onClick={() => setIsMobileDrawerOpen(false)}
               aria-label="Close recruiter navigation"
             />
@@ -310,7 +310,7 @@ export default function HRLayout({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ duration: 0.22, ease: "easeOut" }}
-              className="fixed left-0 top-0 z-[80] flex h-full w-full max-w-[320px] flex-col border-r border-slate-200 bg-white p-4 md:hidden"
+              className="fixed left-0 top-0 z-80 flex h-full w-full max-w-[320px] flex-col border-r border-slate-200 bg-white p-4 md:hidden"
             >
               <div className="mb-4 flex items-center justify-between">
                 <div>

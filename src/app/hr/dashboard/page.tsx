@@ -36,7 +36,7 @@ export default async function HRDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.24)]">
+      <section className="rounded-4xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.24)]">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">
@@ -64,7 +64,7 @@ export default async function HRDashboardPage() {
         </div>
       </section>
 
-      <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-4">
         <DashboardStatsCard
           title="Tổng tin tuyển dụng"
           value={portfolioSummary.totalJobs}
@@ -91,69 +91,42 @@ export default async function HRDashboardPage() {
         />
       </section>
 
-      <section className="grid gap-6 2xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+      <section>
         <RecruitmentChart data={trend} />
+      </section>
 
-        <div className="space-y-6">
-          <Card className="rounded-[32px] border-slate-200/80">
-            <CardHeader>
+      <section>
+        <Card className="rounded-4xl border-slate-200/80">
+          <CardHeader className="flex flex-row items-center justify-between gap-4">
+            <div>
               <CardTitle>Pipeline ứng tuyển</CardTitle>
               <CardDescription>
                 Ảnh chụp nhanh toàn bộ trạng thái xử lý ứng viên trong ATS.
               </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {pipeline.map((item) => (
-                <div
-                  key={item.status}
-                  className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <StatusBadge status={item.status} />
-                    <span className="text-sm font-medium text-slate-600">{item.label}</span>
-                  </div>
-                  <span className="text-2xl font-black text-slate-900">{item.count}</span>
+            </div>
+            <Link className={buttonVariants("outline", "sm")} href="/hr/candidates?view=pipeline">
+              Mở ATS
+            </Link>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {pipeline.map((item) => (
+              <div
+                key={item.status}
+                className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3"
+              >
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={item.status} />
+                  <span className="text-sm font-medium text-slate-600">{item.label}</span>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[32px] border-slate-200/80">
-            <CardHeader>
-              <CardTitle>Quick actions</CardTitle>
-              <CardDescription>
-                Những thao tác recruiter thực hiện thường xuyên trong ngày.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              <Link
-                href="/hr/candidates?view=marketplace"
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-700 transition hover:border-primary/20 hover:text-primary"
-              >
-                <span>Tìm hồ sơ công khai mới</span>
-                <span className="material-symbols-outlined text-[18px]">north_east</span>
-              </Link>
-              <Link
-                href="/hr/jobs?status=open"
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-700 transition hover:border-primary/20 hover:text-primary"
-              >
-                <span>Kiểm tra các job đang tuyển</span>
-                <span className="material-symbols-outlined text-[18px]">north_east</span>
-              </Link>
-              <Link
-                href="/hr/company"
-                className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-700 transition hover:border-primary/20 hover:text-primary"
-              >
-                <span>Cập nhật hồ sơ công ty</span>
-                <span className="material-symbols-outlined text-[18px]">north_east</span>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+                <span className="text-2xl font-black text-slate-900">{item.count}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <Card className="rounded-[32px] border-slate-200/80 xl:col-span-1">
+        <Card className="rounded-4xl border-slate-200/80 xl:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
               <CardTitle>Job đang tuyển</CardTitle>
@@ -167,7 +140,7 @@ export default async function HRDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {activeJobs.items.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+              <div className="rounded-3xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
                 Chưa có tin đang mở. Hãy tạo một tin tuyển dụng mới để bắt đầu nguồn ứng viên.
               </div>
             ) : (
@@ -175,7 +148,7 @@ export default async function HRDashboardPage() {
                 <Link
                   key={job.id}
                   href={`/hr/jobs/${job.id}`}
-                  className="block rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-primary/20 hover:bg-white"
+                  className="block rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-primary/20 hover:bg-white"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -200,7 +173,7 @@ export default async function HRDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-[32px] border-slate-200/80 xl:col-span-1">
+        <Card className="rounded-4xl border-slate-200/80 xl:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
               <CardTitle>Ứng viên mới</CardTitle>
@@ -214,7 +187,7 @@ export default async function HRDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {newCandidates.items.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+              <div className="rounded-3xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
                 Chưa có ứng viên mới trong pipeline.
               </div>
             ) : (
@@ -226,7 +199,7 @@ export default async function HRDashboardPage() {
                       ? `/candidate/${candidate.candidateId}?from=hr`
                       : `/hr/candidates?view=pipeline&q=${encodeURIComponent(candidate.candidateCode)}`
                   }
-                  className="block rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-primary/20 hover:bg-white"
+                  className="block rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-primary/20 hover:bg-white"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -256,7 +229,7 @@ export default async function HRDashboardPage() {
       </section>
 
       <section>
-        <Card className="rounded-[32px] border-slate-200/80">
+        <Card className="rounded-4xl border-slate-200/80">
           <CardHeader className="flex flex-row items-center justify-between gap-4">
             <div>
               <CardTitle>Hoạt động gần đây</CardTitle>
@@ -270,7 +243,7 @@ export default async function HRDashboardPage() {
           </CardHeader>
           <CardContent>
             {activityLogs.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
+              <div className="rounded-3xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
                 Chưa có hoạt động nào được ghi nhận.
               </div>
             ) : (
@@ -278,7 +251,7 @@ export default async function HRDashboardPage() {
                 {activityLogs.map((log) => (
                   <div
                     key={log.id}
-                    className="flex flex-col gap-3 rounded-[24px] border border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
+                    className="flex flex-col gap-3 rounded-3xl border border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
                   >
                     <div className="space-y-1">
                       <p className="font-medium text-slate-900">{log.action}</p>

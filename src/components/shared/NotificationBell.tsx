@@ -191,9 +191,9 @@ const NotificationBell: React.FC = () => {
             initial={{ opacity: 0, scale: 0.96, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: -8 }}
-            className="absolute right-0 z-50 mt-4 w-96 overflow-hidden rounded-2xl border border-white/20 bg-white/95 shadow-2xl backdrop-blur-md"
+            className="absolute right-0 z-50 mt-4 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-white/20 bg-white/95 shadow-2xl backdrop-blur-md"
           >
-            <div className="bg-gradient-to-br from-slate-50/60 to-transparent px-6 py-4">
+            <div className="bg-linear-to-br from-slate-50/60 to-transparent px-6 py-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-slate-900">Thông báo</h3>
                 {unreadCount > 0 ? (
@@ -207,7 +207,7 @@ const NotificationBell: React.FC = () => {
               </div>
             </div>
 
-            <div className="max-h-96 overflow-y-auto bg-gradient-to-b from-slate-50/30 to-transparent">
+            <div className="max-h-96 overflow-y-auto bg-linear-to-b from-slate-50/30 to-transparent">
               {notifications.length > 0 ? (
                 notifications.map((notification) => {
                   const content = (

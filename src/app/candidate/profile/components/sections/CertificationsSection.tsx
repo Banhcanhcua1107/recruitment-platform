@@ -190,9 +190,11 @@ export default function CertificationsSection({
                 Ngày cấp
               </label>
               <input
-                type="month"
-                value={item.issueDate?.slice(0, 7) || ''}
-                onChange={(event) => updateItem(item.id, { issueDate: `${event.target.value}-01` })}
+                type="date"
+                value={item.issueDate?.slice(0, 10) || ''}
+                onChange={(event) => updateItem(item.id, { issueDate: event.target.value })}
+                aria-label="Ngày cấp chứng chỉ"
+                title="Ngày cấp chứng chỉ"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
@@ -202,13 +204,15 @@ export default function CertificationsSection({
                 Hết hạn
               </label>
               <input
-                type="month"
-                value={item.expiryDate?.slice(0, 7) || ''}
+                type="date"
+                value={item.expiryDate?.slice(0, 10) || ''}
                 onChange={(event) =>
                   updateItem(item.id, {
-                    expiryDate: event.target.value ? `${event.target.value}-01` : undefined,
+                    expiryDate: event.target.value || undefined,
                   })
                 }
+                aria-label="Ngày hết hạn chứng chỉ"
+                title="Ngày hết hạn chứng chỉ"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
@@ -248,25 +252,29 @@ export default function CertificationsSection({
               className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <input
-              type="month"
-              value={newItem.issueDate?.slice(0, 7) || ''}
+              type="date"
+              value={newItem.issueDate?.slice(0, 10) || ''}
               onChange={(event) =>
                 setNewItem((current) => ({
                   ...current,
-                  issueDate: event.target.value ? `${event.target.value}-01` : '',
+                  issueDate: event.target.value,
                 }))
               }
+              aria-label="Ngày cấp chứng chỉ mới"
+              title="Ngày cấp chứng chỉ mới"
               className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <input
-              type="month"
-              value={newItem.expiryDate?.slice(0, 7) || ''}
+              type="date"
+              value={newItem.expiryDate?.slice(0, 10) || ''}
               onChange={(event) =>
                 setNewItem((current) => ({
                   ...current,
-                  expiryDate: event.target.value ? `${event.target.value}-01` : '',
+                  expiryDate: event.target.value,
                 }))
               }
+              aria-label="Ngày hết hạn chứng chỉ mới"
+              title="Ngày hết hạn chứng chỉ mới"
               className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
             <div className="md:col-span-2">

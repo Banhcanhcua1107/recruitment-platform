@@ -179,7 +179,7 @@ export default function HrHomePage() {
   return (
     <>
       <header className="bg-linear-to-b from-blue-50 to-[#f7f9fb] px-4 pt-24 pb-14 sm:px-6 lg:px-8">
-        <div className="mx-auto w-full max-w-330 text-center">
+        <div className="mx-auto w-full max-w-350 text-center">
           <h1 className="mb-4 text-4xl font-black tracking-tight text-slate-900 md:text-6xl">
             Tìm kiếm ứng viên phù hợp
           </h1>
@@ -259,7 +259,7 @@ export default function HrHomePage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-330 space-y-8 px-4 pb-24 pt-8 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-350 space-y-8 px-4 pb-24 pt-8 sm:px-6 lg:px-8">
         <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
@@ -290,8 +290,8 @@ export default function HrHomePage() {
           ) : null}
         </section>
 
-        <div className="flex flex-col gap-8 lg:flex-row">
-          <aside className="w-full shrink-0 lg:w-80">
+        <div className="grid gap-8 xl:grid-cols-12">
+          <aside className="w-full xl:col-span-3">
             <div className="sticky top-24">
               <CandidateFilterSidebar
                 filters={filters}
@@ -307,7 +307,7 @@ export default function HrHomePage() {
             </div>
           </aside>
 
-          <section className="min-w-0 flex-1 space-y-5">
+          <section className="min-w-0 space-y-5 xl:col-span-9">
             <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
               <p className="text-sm font-semibold text-slate-500">
                 Hiển thị <span className="font-black text-slate-900">{result.total}</span> ứng viên public
@@ -341,7 +341,7 @@ export default function HrHomePage() {
             ) : null}
 
             {loading ? (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid auto-rows-fr gap-4 md:grid-cols-2">
                 {Array.from({ length: 6 }).map((_, index) => (
                   <div key={index} className="h-56 animate-pulse rounded-[28px] bg-slate-100" />
                 ))}
@@ -354,7 +354,7 @@ export default function HrHomePage() {
                 </p>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid auto-rows-fr gap-4 md:grid-cols-2">
                 {result.items.map((candidate) => (
                   <CandidateCard key={candidate.id} candidate={candidate} />
                 ))}

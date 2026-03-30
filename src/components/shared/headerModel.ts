@@ -47,7 +47,7 @@ const PUBLIC_PRIMARY_LINKS: HeaderNavItem[] = [
 
 const HR_PRIMARY_LINKS: HeaderNavItem[] = [
   { label: "Trang chủ", href: "/hr-home" },
-  { label: "Không gian nhà tuyển dụng", href: "/hr/dashboard" },
+  { label: "Workspace tuyển dụng", href: "/hr/dashboard" },
   { label: "Thông báo", href: "/hr/notifications" },
 ];
 

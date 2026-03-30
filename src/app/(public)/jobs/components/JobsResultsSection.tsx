@@ -203,6 +203,8 @@ export function JobsResultsSection({
           <select
             value={sort}
             onChange={(event) => onSortChange(event.target.value as SortKey)}
+            aria-label="Sắp xếp danh sách việc làm"
+            title="Sắp xếp danh sách việc làm"
             className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-primary outline-none transition focus:border-primary/30 focus:ring-2 focus:ring-primary/10"
           >
             {SORT_OPTIONS.map((option) => (
@@ -253,7 +255,7 @@ export function JobsResultsSection({
       </div>
 
       {jobs.length === 0 ? (
-        <div className="rounded-[32px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-sm">
+        <div className="rounded-4xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-sm">
           <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
             <span className="material-symbols-outlined text-3xl">search_off</span>
           </div>

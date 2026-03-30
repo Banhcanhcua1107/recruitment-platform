@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { StatusBadge } from "@/components/recruitment/StatusBadge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import type { RecruitmentCandidate } from "@/types/recruitment";
 
@@ -18,15 +18,10 @@ function formatAppliedAt(value: string) {
 
 interface CandidateRowProps {
   candidate: RecruitmentCandidate;
-  onCandidateClick: (candidate: RecruitmentCandidate) => void;
   onOpenDetail: (candidate: RecruitmentCandidate) => void;
 }
 
-export function CandidateRow({
-  candidate,
-  onCandidateClick,
-  onOpenDetail,
-}: CandidateRowProps) {
+export function CandidateRow({ candidate, onOpenDetail }: CandidateRowProps) {
   return (
     <TableRow className="group">
       <TableCell className="pl-6">
@@ -34,7 +29,7 @@ export function CandidateRow({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => onCandidateClick(candidate)}
+              onClick={() => onOpenDetail(candidate)}
               className="text-left text-base font-medium tracking-tight text-primary transition hover:underline hover:decoration-primary/40 hover:underline-offset-4"
             >
               {candidate.fullName}
@@ -72,9 +67,13 @@ export function CandidateRow({
       <TableCell className="text-sm text-slate-600">{formatAppliedAt(candidate.appliedAt)}</TableCell>
 
       <TableCell className="pr-6 text-right">
-        <Button variant="outline" size="sm" onClick={() => onOpenDetail(candidate)}>
+        <button
+          type="button"
+          onClick={() => onOpenDetail(candidate)}
+          className={buttonVariants("outline", "sm")}
+        >
           Xem chi tiết
-        </Button>
+        </button>
       </TableCell>
     </TableRow>
   );

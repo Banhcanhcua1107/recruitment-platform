@@ -121,8 +121,11 @@ export interface EmployerCandidateApplicationDetail {
   fullName: string;
   email: string | null;
   phone: string | null;
+  coverLetter: string | null;
+  candidateExperience: string | null;
   introduction: string | null;
   resumeUrl: string | null;
+  resumeFileName: string | null;
   appliedAt: string;
   updatedAt: string;
   status: RecruitmentPipelineStatus;
@@ -132,6 +135,8 @@ export interface EmployerCandidateApplicationDetail {
     title: string;
     url: string;
     companyName: string | null;
+    description: string | null;
+    location: string | null;
   };
   relatedApplications: EmployerCandidateRelatedApplication[];
 }

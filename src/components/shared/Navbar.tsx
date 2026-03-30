@@ -363,8 +363,8 @@ export default function Navbar() {
               </p>
             </Link>
 
-            <nav className="hidden flex-1 items-center justify-end md:flex md:pr-6 lg:pr-10 xl:pr-14">
-              <div className="flex items-center gap-8">
+            <nav className="hidden flex-1 items-center justify-end md:flex md:pr-4 lg:pr-8 xl:pr-10">
+              <div className="flex items-center gap-5 lg:gap-7">
                 {model.primaryLinks.map((item) => {
                   const isActive = isPrimaryLinkActive(pathname, item.href);
 

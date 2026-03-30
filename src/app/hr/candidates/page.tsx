@@ -67,7 +67,7 @@ export default async function HRCandidatesPage({
         </div>
       </section>
 
-      <section className="grid gap-5 md:grid-cols-3">
+      <section className="grid auto-rows-fr gap-5 md:grid-cols-3">
         <DashboardStatsCard
           title="Ứng viên trong ATS"
           value={candidates.total}

@@ -14,7 +14,7 @@ export function DashboardStatsCard({
   icon,
 }: DashboardStatsCardProps) {
   return (
-    <Card className="rounded-[28px] border-slate-200/80">
+    <Card className="flex h-full flex-col rounded-[28px] border-slate-200/80">
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
         <div className="space-y-2">
           <p className="text-sm font-semibold uppercase tracking-[0.22em] text-slate-400">
@@ -28,7 +28,7 @@ export function DashboardStatsCard({
           <span className="material-symbols-outlined text-[30px]">{icon}</span>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="mt-auto pt-0">
         <p className="text-sm font-medium text-slate-500">{subtitle}</p>
       </CardContent>
     </Card>

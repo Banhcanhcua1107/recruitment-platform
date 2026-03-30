@@ -21,7 +21,7 @@ interface JobTableProps {
 
 export function JobTable({ data, query }: JobTableProps) {
   return (
-    <Card className="overflow-hidden rounded-[32px] border-slate-200/80 shadow-[0_22px_60px_-36px_rgba(15,23,42,0.18)]">
+    <Card className="overflow-hidden rounded-4xl border-slate-200/80 shadow-[0_22px_60px_-36px_rgba(15,23,42,0.18)]">
       <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.98)_100%)]">
         <div>
           <CardTitle>Danh mục tin tuyển dụng</CardTitle>
@@ -34,7 +34,7 @@ export function JobTable({ data, query }: JobTableProps) {
         </Link>
       </CardHeader>
       <CardContent className="px-0 pb-0">
-        <Table className="min-w-[1080px]">
+        <Table className="min-w-270">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="pl-6">Vị trí</TableHead>
@@ -43,7 +43,7 @@ export function JobTable({ data, query }: JobTableProps) {
               <TableHead>Công khai</TableHead>
               <TableHead>Ngày đăng</TableHead>
               <TableHead>Ứng viên</TableHead>
-              <TableHead className="pr-6 text-right">Thao tác</TableHead>
+              <TableHead className="w-66 pr-6 text-right">Thao tác</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -104,11 +104,11 @@ export function JobTable({ data, query }: JobTableProps) {
                   <TableCell className="font-semibold text-slate-900">
                     {job.candidateCount}
                   </TableCell>
-                  <TableCell className="pr-6">
+                  <TableCell className="w-66 pr-6">
                     <div className="flex justify-end gap-2">
                       <Link
                         href={`/hr/jobs/${job.id}`}
-                        className={buttonVariants("outline", "sm")}
+                        className={`${buttonVariants("outline", "sm")} whitespace-nowrap`}
                       >
                         Chỉnh sửa
                       </Link>
@@ -119,14 +119,14 @@ export function JobTable({ data, query }: JobTableProps) {
                           name="isPublicVisible"
                           value={job.isPublicVisible ? "false" : "true"}
                         />
-                        <Button variant="outline" size="sm" type="submit">
+                        <Button className="whitespace-nowrap" variant="outline" size="sm" type="submit">
                           {job.isPublicVisible ? "Ẩn public" : "Hiện public"}
                         </Button>
                       </form>
                       {job.status !== "closed" ? (
                         <form action={closeJobAction}>
                           <input type="hidden" name="id" value={job.id} />
-                          <Button variant="secondary" size="sm" type="submit">
+                          <Button className="whitespace-nowrap" variant="secondary" size="sm" type="submit">
                             Đóng tin
                           </Button>
                         </form>

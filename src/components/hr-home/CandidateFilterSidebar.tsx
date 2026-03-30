@@ -106,16 +106,19 @@ export default function CandidateFilterSidebar({
           <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Kinh nghiệm</h4>
           <div className="space-y-2">
             {EXPERIENCE_OPTIONS.map((option) => (
-              <label key={option.value} className="flex cursor-pointer items-center gap-3">
+              <label
+                key={option.value}
+                className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-50"
+              >
                 <input
                   type="radio"
                   name="experience"
                   value={option.value}
                   checked={filters.experience === option.value}
                   onChange={() => onFiltersChange({ ...filters, experience: option.value })}
-                  className="size-4 border-slate-300 text-primary focus:ring-primary"
+                  className="size-5 accent-primary"
                 />
-                <span className="text-sm font-semibold text-slate-600">{option.label}</span>
+                <span className="text-sm font-semibold leading-5 text-slate-700">{option.label}</span>
               </label>
             ))}
           </div>
@@ -185,27 +188,27 @@ export default function CandidateFilterSidebar({
 
         <section className="space-y-3 border-t border-slate-200/70 pt-6">
           <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Trạng thái</h4>
-          <label className="flex cursor-pointer items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-50">
             <input
               type="checkbox"
               checked={filters.availableNow}
               onChange={(event) =>
                 onFiltersChange({ ...filters, availableNow: event.target.checked })
               }
-              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+              className="size-5 accent-primary"
             />
-            <span className="text-sm font-semibold text-slate-600">Available ngay</span>
+            <span className="text-sm font-semibold leading-5 text-slate-700">Available ngay</span>
           </label>
-          <label className="flex cursor-pointer items-center gap-3">
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-50">
             <input
               type="checkbox"
               checked={filters.openToWork}
               onChange={(event) =>
                 onFiltersChange({ ...filters, openToWork: event.target.checked })
               }
-              className="size-4 rounded border-slate-300 text-primary focus:ring-primary"
+              className="size-5 accent-primary"
             />
-            <span className="text-sm font-semibold text-slate-600">Open to work</span>
+            <span className="text-sm font-semibold leading-5 text-slate-700">Open to work</span>
           </label>
         </section>
       </div>

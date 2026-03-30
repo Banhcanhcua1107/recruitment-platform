@@ -302,7 +302,7 @@ function CVDashboardPageContent() {
   return (
     <div className="space-y-6 pb-8">
       {templateRedirectLoading ? (
-        <div className="rounded-[24px] border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-900">
+        <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-900">
           <div className="flex items-center gap-3">
             <Loader2 size={18} className="animate-spin" />
             Đang tạo CV từ mẫu bạn vừa chọn...
@@ -311,7 +311,7 @@ function CVDashboardPageContent() {
       ) : null}
 
       {saveNotice ? (
-        <div className="rounded-[24px] border border-sky-200 bg-sky-50 px-5 py-4 text-sm font-semibold text-sky-900">
+        <div className="rounded-3xl border border-sky-200 bg-sky-50 px-5 py-4 text-sm font-semibold text-sky-900">
           {saveNotice}
         </div>
       ) : null}
@@ -335,7 +335,7 @@ function CVDashboardPageContent() {
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,0.85fr)]">
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)]">
+        <section className="rounded-4xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Danh sách CV</p>
@@ -369,9 +369,9 @@ function CVDashboardPageContent() {
           </div>
 
           <div className="mt-6 space-y-3">
-            {loading ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-28 animate-pulse rounded-[24px] bg-slate-100" />) : null}
+            {loading ? Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-28 animate-pulse rounded-3xl bg-slate-100" />) : null}
             {!loading && filteredResumes.map((resume) => (
-              <button key={resume.id} type="button" onClick={() => setSelectedResumeId(resume.id)} className={`w-full rounded-[24px] border px-4 py-4 text-left transition-all ${resume.id === selectedResume?.id ? "border-primary/25 bg-primary/5 shadow-[0_20px_44px_-34px_rgba(37,99,235,0.55)]" : "border-slate-200 bg-white hover:border-primary/20 hover:bg-slate-50"}`}>
+              <button key={resume.id} type="button" onClick={() => setSelectedResumeId(resume.id)} className={`w-full rounded-3xl border px-4 py-4 text-left transition-all ${resume.id === selectedResume?.id ? "border-primary/25 bg-primary/5 shadow-[0_20px_44px_-34px_rgba(37,99,235,0.55)]" : "border-slate-200 bg-white hover:border-primary/20 hover:bg-slate-50"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -392,7 +392,7 @@ function CVDashboardPageContent() {
         </section>
 
         <div className="flex flex-col gap-6">
-          <section className="order-2 rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)]">
+          <section className="order-2 rounded-4xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)]">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Xem trước</p>
@@ -402,8 +402,8 @@ function CVDashboardPageContent() {
               {selectedResume ? <span className={`rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-[0.16em] ${selectedResume.id === defaultResumeId ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{selectedResume.id === defaultResumeId ? "CV mặc định" : "CV phụ"}</span> : null}
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-[28px] border border-slate-200 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.98),_rgba(241,245,249,0.95)_48%,_rgba(226,232,240,0.92))] p-4">
-              <div className="mx-auto max-w-[340px] overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_24px_40px_-28px_rgba(15,23,42,0.45)]">
+            <div className="mt-6 overflow-hidden rounded-[28px] border border-slate-200 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.98),rgba(241,245,249,0.95)_48%,rgba(226,232,240,0.92))] p-4">
+              <div className="mx-auto max-w-85 overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_24px_40px_-28px_rgba(15,23,42,0.45)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={selectedPreviewUrl} alt={selectedResume ? `Preview ${selectedResume.title}` : "Preview CV"} className="h-full w-full bg-white object-contain object-top" />
               </div>
@@ -415,7 +415,7 @@ function CVDashboardPageContent() {
                   <div>
                     <label className="mb-2 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">Tên CV</label>
                     <div className="flex flex-col gap-3 sm:flex-row">
-                      <input type="text" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10" />
+                      <input type="text" value={renameValue} onChange={(event) => setRenameValue(event.target.value)} aria-label="Đổi tên CV" title="Đổi tên CV" placeholder="Nhập tên CV" className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10" />
                       <button type="button" onClick={handleRenameResume} disabled={renamingId === selectedResume.id || !renameValue.trim() || renameValue.trim() === selectedResume.title} className="rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition-colors hover:border-primary hover:text-primary disabled:opacity-50">{renamingId === selectedResume.id ? "Đang lưu..." : "Lưu tên"}</button>
                     </div>
                   </div>
@@ -442,15 +442,15 @@ function CVDashboardPageContent() {
             )}
           </section>
 
-          <section className="order-1 rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)]">
+          <section className="order-1 rounded-4xl border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)]">
             <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Tác vụ nhanh</p>
             <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-950">Tạo mới hoặc nhập CV sẵn có</h3>
             <p className="mt-2 text-sm font-medium leading-6 text-slate-500">Dùng thư viện mẫu để tạo nhanh, hoặc tải CV có sẵn để đưa vào quy trình import và tiếp tục chỉnh sửa.</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <Link href="/candidate/templates" className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-5 transition-colors hover:border-primary/20 hover:bg-white"><div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Plus size={20} /></div><p className="mt-4 text-lg font-black text-slate-950">Tạo CV mới</p><p className="mt-2 text-sm font-medium leading-6 text-slate-500">Chọn một mẫu phù hợp rồi đi thẳng vào trình chỉnh sửa.</p></Link>
-              <button type="button" onClick={() => uploadInputRef.current?.click()} className="rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-5 text-left transition-colors hover:border-primary/20 hover:bg-white"><div className="flex size-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"><UploadCloud size={20} /></div><p className="mt-4 text-lg font-black text-slate-950">Tải CV lên</p><p className="mt-2 text-sm font-medium leading-6 text-slate-500">Hỗ trợ PDF, DOCX và ảnh để tiếp tục pipeline import hiện có.</p></button>
+              <Link href="/candidate/templates" className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5 transition-colors hover:border-primary/20 hover:bg-white"><div className="flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Plus size={20} /></div><p className="mt-4 text-lg font-black text-slate-950">Tạo CV mới</p><p className="mt-2 text-sm font-medium leading-6 text-slate-500">Chọn một mẫu phù hợp rồi đi thẳng vào trình chỉnh sửa.</p></Link>
+              <button type="button" onClick={() => uploadInputRef.current?.click()} className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5 text-left transition-colors hover:border-primary/20 hover:bg-white"><div className="flex size-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700"><UploadCloud size={20} /></div><p className="mt-4 text-lg font-black text-slate-950">Tải CV lên</p><p className="mt-2 text-sm font-medium leading-6 text-slate-500">Hỗ trợ PDF, DOCX và ảnh để tiếp tục pipeline import hiện có.</p></button>
             </div>
-            <div className="mt-4 rounded-[24px] border border-slate-200 bg-slate-50 px-5 py-4">
+            <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-medium leading-6 text-slate-500">Cần kiểm tra tài liệu OCR hoặc xem kết quả import chi tiết?</p>
                 <button type="button" onClick={() => setOcrModalOpen(true)} className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:border-primary hover:text-primary">Mở OCR viewer</button>
@@ -491,7 +491,7 @@ function CVDashboardPageContent() {
 }
 
 function CVDashboardPageFallback() {
-  return <div className="min-h-[320px] rounded-[32px] bg-slate-50" />;
+  return <div className="min-h-80 rounded-4xl bg-slate-50" />;
 }
 
 export default function CVDashboardPage() {
