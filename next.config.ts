@@ -3,7 +3,6 @@ import type { NextConfig } from "next";
 const isDockerDev = process.env.DOCKER_DEV === "true";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["pdfjs-dist", "react-pdf"],
   watchOptions: isDockerDev
     ? {
         pollIntervalMs: 1000,

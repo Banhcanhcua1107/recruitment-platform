@@ -13,6 +13,23 @@ type ReactPdfModule = typeof import("react-pdf");
 type ReactPdfDocumentComponent = ReactPdfModule["Document"];
 type ReactPdfPageComponent = ComponentType<Record<string, unknown>>;
 
+const TRANSIENT_PDF_INIT_ERROR_PATTERN =
+  /Object\.defineProperty called on non-object|Loading chunk|Cannot read properties of undefined/i;
+
+function isTransientPdfInitError(message: string | null | undefined) {
+  if (!message) return false;
+  return TRANSIENT_PDF_INIT_ERROR_PATTERN.test(message);
+}
+
+function toPublicPdfError(message: string | null | undefined, fallback: string) {
+  if (!message) return fallback;
+  if (isTransientPdfInitError(message)) {
+    return "PDF preview is initializing. Please wait a moment.";
+  }
+
+  return fallback;
+}
+
 interface PdfDocumentPreviewProps {
   pages: NormalizedOcrPage[];
   previewSource: DocumentPreviewSource;
@@ -45,7 +62,11 @@ export function PdfDocumentPreview({
   const [pdfPageCount, setPdfPageCount] = useState(0);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [reactPdfModule, setReactPdfModule] = useState<ReactPdfModule | null>(null);
+  const [moduleLoadAttempt, setModuleLoadAttempt] = useState(0);
   const boxRefs = useRef(new Map<string, HTMLButtonElement | null>());
+  const retryTimerRef = useRef<number | null>(null);
+  const pdfFile = typeof previewSource.url === "string" ? previewSource.url.trim() : "";
+  const hasPdfFile = pdfFile.length > 0;
 
   const pagesToRender = useMemo(() => {
     if (pages.length > 0) return pages;
@@ -69,10 +90,22 @@ export function PdfDocumentPreview({
   }, [activeBlockId]);
 
   useEffect(() => {
+    if (!hasPdfFile) {
+      setReactPdfModule(null);
+      return;
+    }
+
     let cancelled = false;
 
     void import("react-pdf")
       .then((module) => {
+        if (!module?.pdfjs?.GlobalWorkerOptions) {
+          if (!cancelled) {
+            setPdfError("Unable to initialize PDF preview.");
+          }
+          return;
+        }
+
         module.pdfjs.GlobalWorkerOptions.workerSrc = new URL(
           "pdfjs-dist/build/pdf.worker.min.mjs",
           import.meta.url,
@@ -83,23 +116,42 @@ export function PdfDocumentPreview({
         }
       })
       .catch((error) => {
-        console.error("react-pdf module load error", error);
         if (!cancelled) {
-          setPdfError(
-            error instanceof Error ? error.message : "Unable to initialize PDF preview.",
-          );
+          const rawErrorMessage =
+            error instanceof Error ? error.message : "Unable to initialize PDF preview.";
+
+          if (isTransientPdfInitError(rawErrorMessage) && moduleLoadAttempt < 2) {
+            retryTimerRef.current = window.setTimeout(() => {
+              setModuleLoadAttempt((current) => current + 1);
+            }, 250);
+            return;
+          }
+
+          setPdfError(toPublicPdfError(rawErrorMessage, "Unable to initialize PDF preview."));
         }
       });
 
     return () => {
       cancelled = true;
+
+      if (retryTimerRef.current !== null) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
     };
-  }, []);
+  }, [hasPdfFile, moduleLoadAttempt]);
 
   useEffect(() => {
     setPdfPageCount(0);
     setPdfError(null);
-  }, [previewSource.url]);
+    setModuleLoadAttempt(0);
+    setReactPdfModule(null);
+
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, [pdfFile]);
 
   const registerBoxRef = (blockId: string, element: HTMLButtonElement | null) => {
     if (element) {
@@ -112,6 +164,16 @@ export function PdfDocumentPreview({
 
   const DocumentComponent = reactPdfModule?.Document as ReactPdfDocumentComponent | undefined;
   const PageComponent = reactPdfModule?.Page as ReactPdfPageComponent | undefined;
+
+  if (!hasPdfFile) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="flex min-h-[420px] items-center justify-center rounded-[30px] border border-dashed border-slate-300 bg-white px-6 text-center text-sm text-slate-500">
+          PDF preview is unavailable because the file is missing.
+        </div>
+      </div>
+    );
+  }
 
   if (!DocumentComponent || !PageComponent) {
     return (
@@ -132,8 +194,8 @@ export function PdfDocumentPreview({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <DocumentComponent
-        key={previewSource.url}
-        file={previewSource.url}
+        key={pdfFile}
+        file={pdfFile}
         loading={
           <div className="flex min-h-[420px] items-center justify-center rounded-[30px] border border-slate-200 bg-white text-sm text-slate-500">
             Loading PDF preview...
@@ -149,8 +211,12 @@ export function PdfDocumentPreview({
           setPdfError(null);
         }}
         onLoadError={(error) => {
-          console.error("react-pdf load error", error);
-          setPdfError(error instanceof Error ? error.message : "Unable to load PDF preview.");
+          setPdfError(
+            toPublicPdfError(
+              error instanceof Error ? error.message : "Unable to load PDF preview.",
+              "Unable to load PDF preview.",
+            ),
+          );
         }}
       >
         <div className={singlePage ? "h-full min-h-0 overflow-auto" : "min-h-0 overflow-y-auto pr-1"}>

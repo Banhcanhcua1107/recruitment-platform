@@ -18,6 +18,8 @@ const CONTENT_EDIT_TOOL = "ContentEditTool";
 const EDIT_TEXT_TOOLBAR_GROUP = "toolbarGroup-EditText";
 const IMAGE_MODE_DISABLED_ELEMENTS = ["addParagraphToolGroupButton", "searchAndReplace"] as const;
 const TEXT_MODE_DISABLED_ELEMENTS = ["addImageContentToolGroupButton"] as const;
+const MIN_TEXT_BBOX_HEIGHT_PX = 10;
+const FLAT_TEXT_BBOX_RATIO = 0.42;
 
 type MinimalWindowLike = {
   fetch?: typeof fetch;
@@ -113,6 +115,13 @@ type PdfRectLike = {
   right: number;
 };
 
+type PdfRectAxisLike = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
 type PdfContentBoxDataLike = {
   id?: string;
   oid?: string;
@@ -124,6 +133,10 @@ type PdfContentBoxDataLike = {
 type PdfContentBoxLike = {
   getBoxData?: () => PdfContentBoxDataLike;
   isEditing?: () => boolean;
+  RefreshTextSearchInfo?: () => Promise<void> | void;
+  refreshTextSearchInfo?: () => Promise<void> | void;
+  UpdateRect?: (rect: PdfRectLike) => Promise<void> | void;
+  updateRect?: (rect: PdfRectLike) => Promise<void> | void;
   startContentEditing?: () => void;
 };
 
@@ -133,6 +146,10 @@ type PdfContentEditManagerLike = {
   endContentEditMode?: () => void;
   getContentBoxById?: (contentBoxId: string) => PdfContentBoxLike | null;
   isInContentEditMode?: () => boolean;
+  RefreshTextSearchInfo?: (contentBoxId?: string) => Promise<void> | void;
+  refreshTextSearchInfo?: (contentBoxId?: string) => Promise<void> | void;
+  UpdateRect?: (contentBoxId: string, rect: PdfRectLike) => Promise<void> | void;
+  updateRect?: (contentBoxId: string, rect: PdfRectLike) => Promise<void> | void;
   startContentEditMode?: () => Promise<void>;
 };
 
@@ -145,14 +162,18 @@ type PdfContentBoxRecord = {
 };
 
 type PdfTightTextBounds = {
+  left: number;
   top: number;
+  width: number;
   height: number;
   lineCount: number;
 };
 
 type PdfTextLineMetric = {
   element: PdfDomElementLike;
+  left: number;
   rawHeight: number;
+  right: number;
   top: number;
 };
 
@@ -165,6 +186,7 @@ type PdfRuntimeState = {
   listeners: Set<(selectedImage: PdfSelectedImage | null) => void>;
   selectedContentBoxId: string | null;
   selectedImage: PdfSelectedImage | null;
+  textBoxRepairSignatures: Map<string, string>;
 };
 
 const pdfRuntimeState = new WeakMap<PdfViewerInstanceLike, PdfRuntimeState>();
@@ -176,6 +198,15 @@ export interface PdfViewerInstanceLike {
         create?: () => Promise<{
           addImage?: (targetRegion: unknown, replacementImage: unknown) => Promise<void>;
           process?: (page: unknown) => Promise<void>;
+        }>;
+      };
+      ElementReader?: {
+        create?: () => Promise<{
+          beginOnPage?: (page: unknown) => Promise<void> | void;
+          next?: () => Promise<{
+            getBBox?: () => Promise<unknown> | unknown;
+          } | null>;
+          end?: () => Promise<void> | void;
         }>;
       };
       Image?: {
@@ -330,7 +361,10 @@ export function initializePdfContentEditBridge(
 
     state.contentBoxes.set(contentBox.id, contentBox);
     queueDomTask(() => {
-      normalizeVisibleContentEditDom(instance);
+      normalizeVisibleContentEditDom(instance, {
+        forceTextBoxRectRepair: true,
+        targetContentBoxId: contentBox.id,
+      });
       syncSelectedImageFromDom(instance);
     });
   };
@@ -341,6 +375,7 @@ export function initializePdfContentEditBridge(
     }
 
     state.contentBoxes.delete(contentBox.id);
+    state.textBoxRepairSignatures.delete(contentBox.id);
     if (state.selectedContentBoxId === contentBox.id) {
       state.selectedContentBoxId = null;
       updateSelectedImage(instance, null);
@@ -348,7 +383,11 @@ export function initializePdfContentEditBridge(
   };
   const handleContentBoxEditStarted = () => {
     queueDomTask(() => {
-      normalizeVisibleContentEditDom(instance, { focusActiveInput: true });
+      normalizeVisibleContentEditDom(instance, {
+        focusActiveInput: true,
+        forceTextBoxRectRepair: true,
+        targetContentBoxId: state.selectedContentBoxId,
+      });
       syncSelectedImageFromDom(instance);
     });
   };
@@ -387,6 +426,10 @@ export function initializePdfContentEditBridge(
 
     queueDomTask(() => {
       startTextBoxEditing(instance, contentBox.id, boxElement);
+      normalizeVisibleContentEditDom(instance, {
+        forceTextBoxRectRepair: true,
+        targetContentBoxId: contentBox.id,
+      });
     });
   };
 
@@ -403,7 +446,7 @@ export function initializePdfContentEditBridge(
 
   if (typeof MutationObserver !== "undefined") {
     const observer = new MutationObserver(() => {
-      normalizeVisibleContentEditDom(instance);
+      normalizeVisibleContentEditDom(instance, { repairTextBoxes: true });
       syncSelectedImageFromDom(instance);
     });
 
@@ -425,10 +468,25 @@ export function initializePdfContentEditBridge(
     state.bridgeCleanup = null;
     state.selectedContentBoxId = null;
     state.contentBoxes.clear();
+    state.textBoxRepairSignatures.clear();
     updateSelectedImage(instance, null);
   };
 
   normalizeVisibleContentEditDom(instance);
+}
+
+export function refreshPdfTextBoundingBoxes(
+  instance: PdfViewerInstanceLike,
+  options: {
+    contentBoxId?: string;
+    force?: boolean;
+  } = {},
+) {
+  normalizeVisibleContentEditDom(instance, {
+    forceTextBoxRectRepair: options.force ?? true,
+    targetContentBoxId: options.contentBoxId ?? null,
+  });
+  syncSelectedImageFromDom(instance);
 }
 
 export function observeSelectedPdfImage(
@@ -693,6 +751,7 @@ function getRuntimeState(instance: PdfViewerInstanceLike) {
     listeners: new Set(),
     selectedContentBoxId: null,
     selectedImage: null,
+    textBoxRepairSignatures: new Map(),
   };
 
   pdfRuntimeState.set(instance, nextState);
@@ -744,6 +803,9 @@ function normalizeVisibleContentEditDom(
   instance: PdfViewerInstanceLike,
   options: {
     focusActiveInput?: boolean;
+    forceTextBoxRectRepair?: boolean;
+    repairTextBoxes?: boolean;
+    targetContentBoxId?: string | null;
   } = {},
 ) {
   const container = getRuntimeState(instance).container;
@@ -751,9 +813,23 @@ function normalizeVisibleContentEditDom(
     return;
   }
 
+  const shouldRepairTextBoxes = options.repairTextBoxes ?? true;
   const boxElements = toArray(container.querySelectorAll(CONTENT_BOX_SELECTOR));
   boxElements.forEach((boxElement) => {
-    normalizeContentBoxElement(boxElement);
+    const contentBoxId = getContentBoxIdFromElement(boxElement);
+    const textLineBounds = normalizeContentBoxElement(boxElement);
+
+    if (
+      shouldRepairTextBoxes
+      && contentBoxId
+      && (!options.targetContentBoxId || options.targetContentBoxId === contentBoxId)
+      && textLineBounds
+    ) {
+      repairFlattenedTextBoundingBox(instance, contentBoxId, boxElement, textLineBounds, {
+        force: options.forceTextBoxRectRepair,
+      });
+    }
+
     const contentInput = findContentEditInput(boxElement);
     if (!contentInput) {
       return;
@@ -765,7 +841,7 @@ function normalizeVisibleContentEditDom(
   });
 }
 
-function normalizeContentBoxElement(boxElement: PdfDomElementLike) {
+function normalizeContentBoxElement(boxElement: PdfDomElementLike): PdfTightTextBounds | null {
   applyElementStyles(boxElement, {
     boxSizing: "border-box",
     overflow: "visible",
@@ -794,16 +870,20 @@ function normalizeContentBoxElement(boxElement: PdfDomElementLike) {
 
   const textLineBounds = tightenTextLineLayout(boxElement);
   if (!contentInput || !textLineBounds) {
-    return;
+    return textLineBounds;
   }
 
   const sharedTop = `${Math.max(0, textLineBounds.top)}px`;
   const sharedHeight = `${Math.max(1, textLineBounds.height)}px`;
+  const sharedLeft = `${Math.max(0, textLineBounds.left)}px`;
+  const sharedWidth = `${Math.max(1, textLineBounds.width)}px`;
   const translateY = textLineBounds.top > 0 ? "translateY(-1px)" : "translateY(0)";
 
   if (contentCanvas) {
     applyElementStyles(contentCanvas, {
       height: sharedHeight,
+      left: sharedLeft,
+      width: sharedWidth,
       top: sharedTop,
       transform: translateY,
     });
@@ -811,9 +891,13 @@ function normalizeContentBoxElement(boxElement: PdfDomElementLike) {
 
   applyElementStyles(contentInput, {
     height: `${Math.max(1, textLineBounds.height + 1)}px`,
+    left: sharedLeft,
+    width: sharedWidth,
     top: `${Math.max(0, textLineBounds.top - 1)}px`,
     transform: translateY,
   });
+
+  return textLineBounds;
 }
 
 function tightenTextLineLayout(boxElement: PdfDomElementLike): PdfTightTextBounds | null {
@@ -865,6 +949,8 @@ function tightenTextLineLayout(boxElement: PdfDomElementLike): PdfTightTextBound
 
   let top = Number.POSITIVE_INFINITY;
   let bottom = Number.NEGATIVE_INFINITY;
+  let left = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
 
   lineMetrics.forEach((lineMetric, index) => {
     const nextLineMetric = lineMetrics[index + 1];
@@ -883,17 +969,29 @@ function tightenTextLineLayout(boxElement: PdfDomElementLike): PdfTightTextBound
 
     top = Math.min(top, lineMetric.top);
     bottom = Math.max(bottom, lineMetric.top + effectiveHeight);
+    left = Math.min(left, lineMetric.left);
+    right = Math.max(right, lineMetric.right);
   });
 
-  if (!Number.isFinite(top) || !Number.isFinite(bottom) || bottom <= top) {
+  if (
+    !Number.isFinite(top)
+    || !Number.isFinite(bottom)
+    || !Number.isFinite(left)
+    || !Number.isFinite(right)
+    || bottom <= top
+    || right <= left
+  ) {
     return null;
   }
 
   const topInset = clampNumber(resolvedLineHeight * 0.04, 0, 1.5);
   const bottomInset = clampNumber(resolvedLineHeight * 0.08, 0.5, 2);
+  const horizontalInset = clampNumber(resolvedLineHeight * 0.05, 0.5, 2);
 
   return {
+    left: Math.max(0, left - horizontalInset),
     top: Math.max(0, top - topInset),
+    width: right - left + horizontalInset * 2,
     height: bottom - top + topInset + bottomInset,
     lineCount: lineMetrics.length,
   };
@@ -916,6 +1014,9 @@ function measureTextLineMetric(lineElement: PdfDomElementLike): PdfTextLineMetri
   const spanElements = lineElement.querySelectorAll
     ? toArray(lineElement.querySelectorAll("[data-xpos]"))
     : [];
+  let minSpanLeft = Number.POSITIVE_INFINITY;
+  let maxSpanRight = Number.NEGATIVE_INFINITY;
+
   spanElements.forEach((spanElement) => {
     const expectedLeft = readNumericAttribute(spanElement, "data-xpos");
     const expectedWidth = readNumericAttribute(spanElement, "data-width");
@@ -933,13 +1034,317 @@ function measureTextLineMetric(lineElement: PdfDomElementLike): PdfTextLineMetri
     applyElementStyles(spanElement, {
       marginLeft: `${expectedLeft - currentLeft - widthOffset}px`,
     });
+
+    const resolvedLeft = Number.isFinite(expectedLeft) ? expectedLeft : currentLeft;
+    const resolvedWidth = Number.isFinite(expectedWidth) && expectedWidth > 0
+      ? expectedWidth
+      : currentWidth;
+
+    if (Number.isFinite(resolvedLeft) && Number.isFinite(resolvedWidth) && resolvedWidth > 0) {
+      minSpanLeft = Math.min(minSpanLeft, resolvedLeft);
+      maxSpanRight = Math.max(maxSpanRight, resolvedLeft + resolvedWidth);
+    }
   });
+
+  const fallbackLeft = typeof lineElement.offsetLeft === "number" ? lineElement.offsetLeft : 0;
+  const fallbackWidth = typeof lineElement.offsetWidth === "number" ? lineElement.offsetWidth : 0;
+  const lineLeft = Number.isFinite(minSpanLeft) ? minSpanLeft : fallbackLeft;
+  const lineRight = Number.isFinite(maxSpanRight)
+    ? maxSpanRight
+    : lineLeft + Math.max(1, fallbackWidth);
 
   return {
     element: lineElement,
+    left: lineLeft,
     rawHeight: typeof lineElement.offsetHeight === "number" ? lineElement.offsetHeight : 0,
+    right: Math.max(lineRight, lineLeft + 1),
     top: resolvedTop,
   };
+}
+
+function repairFlattenedTextBoundingBox(
+  instance: PdfViewerInstanceLike,
+  contentBoxId: string,
+  boxElement: PdfDomElementLike,
+  textBounds: PdfTightTextBounds,
+  options: {
+    force?: boolean;
+  } = {},
+) {
+  const record = getOrHydrateContentBoxRecord(instance, contentBoxId);
+  if (!record || record.kind !== "text" || !record.position) {
+    return;
+  }
+
+  const visualWidth = typeof boxElement.offsetWidth === "number" ? boxElement.offsetWidth : 0;
+  const visualHeight = typeof boxElement.offsetHeight === "number" ? boxElement.offsetHeight : 0;
+  if (visualWidth <= 0 || visualHeight <= 0) {
+    return;
+  }
+
+  const repairedRect = buildRepairedTextRect(
+    record.position,
+    textBounds,
+    {
+      width: visualWidth,
+      height: visualHeight,
+    },
+    options.force === true,
+  );
+  if (!repairedRect) {
+    return;
+  }
+
+  const state = getRuntimeState(instance);
+  const nextSignature = buildRectSignature(repairedRect);
+  if (!options.force && state.textBoxRepairSignatures.get(contentBoxId) === nextSignature) {
+    return;
+  }
+
+  const contentEditManager = instance?.Core?.documentViewer?.getContentEditManager?.();
+  const contentBox = contentEditManager?.getContentBoxById?.(contentBoxId);
+  const didUpdateRect =
+    invokeOptionalMethod(contentBox, ["UpdateRect", "updateRect"], [repairedRect])
+    || invokeOptionalMethod(contentEditManager, ["UpdateRect", "updateRect"], [contentBoxId, repairedRect]);
+
+  if (!didUpdateRect) {
+    return;
+  }
+
+  state.contentBoxes.set(contentBoxId, {
+    ...record,
+    position: repairedRect,
+  });
+  state.textBoxRepairSignatures.set(contentBoxId, nextSignature);
+
+  refreshTextSearchCache(instance, contentBoxId, record.pageNumber, contentBox, contentEditManager);
+
+  const documentViewer = instance?.Core?.documentViewer;
+  const targetPage = Number.isFinite(record.pageNumber) && record.pageNumber > 0
+    ? record.pageNumber
+    : documentViewer?.getCurrentPage?.();
+
+  if (typeof targetPage === "number" && Number.isFinite(targetPage)) {
+    documentViewer?.refreshPage?.(targetPage);
+    documentViewer?.updateView?.([targetPage], documentViewer?.getCurrentPage?.());
+  }
+}
+
+function buildRepairedTextRect(
+  currentRect: PdfRectLike,
+  textBounds: PdfTightTextBounds,
+  visualBox: {
+    width: number;
+    height: number;
+  },
+  forceRepair: boolean,
+): PdfRectLike | null {
+  const currentAxis = toRectAxis(currentRect);
+  if (!currentAxis) {
+    return null;
+  }
+
+  const currentWidth = Math.max(1, currentAxis.maxX - currentAxis.minX);
+  const currentHeight = Math.max(0, currentAxis.maxY - currentAxis.minY);
+  const expectedAspectRatio = textBounds.height / Math.max(1, textBounds.width);
+  const currentAspectRatio = currentHeight / Math.max(1, currentWidth);
+  const isFlatRect =
+    currentHeight <= 1
+    || currentAspectRatio < Math.max(0.01, expectedAspectRatio * FLAT_TEXT_BBOX_RATIO);
+
+  if (!forceRepair && !isFlatRect) {
+    return null;
+  }
+
+  const pxToUnitScaleX = currentWidth / Math.max(1, visualBox.width);
+  const expectedHeightUnits = pxToUnitScaleX * Math.max(textBounds.height, MIN_TEXT_BBOX_HEIGHT_PX);
+  const expandedFullHeight = Math.max(currentHeight, expectedHeightUnits);
+
+  const leftRatio = clampNumber(textBounds.left / Math.max(1, visualBox.width), 0, 1);
+  const rightRatio = clampNumber((textBounds.left + textBounds.width) / Math.max(1, visualBox.width), leftRatio, 1);
+  const topRatio = clampNumber(textBounds.top / Math.max(1, visualBox.height), 0, 1);
+  const bottomRatio = clampNumber((textBounds.top + textBounds.height) / Math.max(1, visualBox.height), topRatio, 1);
+
+  const expandedFullMinY =
+    (currentAxis.minY + currentAxis.maxY) / 2 - expandedFullHeight / 2;
+  const axis: PdfRectAxisLike = {
+    minX: currentAxis.minX + currentWidth * leftRatio,
+    maxX: currentAxis.minX + currentWidth * rightRatio,
+    minY: expandedFullMinY + expandedFullHeight * topRatio,
+    maxY: expandedFullMinY + expandedFullHeight * bottomRatio,
+  };
+
+  const minWidth = pxToUnitScaleX * 8;
+  const minHeight = pxToUnitScaleX * Math.max(MIN_TEXT_BBOX_HEIGHT_PX, textBounds.lineCount * 8);
+  const stabilizedAxis = enforceMinRectSize(axis, {
+    minWidth,
+    minHeight,
+  });
+
+  return orientRectToMatch(currentRect, stabilizedAxis);
+}
+
+function toRectAxis(rect: PdfRectLike): PdfRectAxisLike | null {
+  const minX = Math.min(rect.left, rect.right);
+  const maxX = Math.max(rect.left, rect.right);
+  const minY = Math.min(rect.top, rect.bottom);
+  const maxY = Math.max(rect.top, rect.bottom);
+
+  if (![minX, maxX, minY, maxY].every(Number.isFinite) || maxX <= minX) {
+    return null;
+  }
+
+  return {
+    minX,
+    maxX,
+    minY,
+    maxY,
+  };
+}
+
+function orientRectToMatch(template: PdfRectLike, axis: PdfRectAxisLike): PdfRectLike {
+  const useAscendingX = template.left <= template.right;
+  const useAscendingY = template.top <= template.bottom;
+
+  return {
+    left: useAscendingX ? axis.minX : axis.maxX,
+    right: useAscendingX ? axis.maxX : axis.minX,
+    top: useAscendingY ? axis.minY : axis.maxY,
+    bottom: useAscendingY ? axis.maxY : axis.minY,
+  };
+}
+
+function enforceMinRectSize(
+  axis: PdfRectAxisLike,
+  minimums: {
+    minWidth: number;
+    minHeight: number;
+  },
+): PdfRectAxisLike {
+  let nextMinX = axis.minX;
+  let nextMaxX = axis.maxX;
+  let nextMinY = axis.minY;
+  let nextMaxY = axis.maxY;
+
+  const currentWidth = nextMaxX - nextMinX;
+  const currentHeight = nextMaxY - nextMinY;
+  if (currentWidth < minimums.minWidth) {
+    const centerX = (nextMinX + nextMaxX) / 2;
+    const halfWidth = minimums.minWidth / 2;
+    nextMinX = centerX - halfWidth;
+    nextMaxX = centerX + halfWidth;
+  }
+
+  if (currentHeight < minimums.minHeight) {
+    const centerY = (nextMinY + nextMaxY) / 2;
+    const halfHeight = minimums.minHeight / 2;
+    nextMinY = centerY - halfHeight;
+    nextMaxY = centerY + halfHeight;
+  }
+
+  return {
+    minX: nextMinX,
+    maxX: nextMaxX,
+    minY: nextMinY,
+    maxY: nextMaxY,
+  };
+}
+
+function buildRectSignature(rect: PdfRectLike) {
+  const normalizedValues = [rect.left, rect.top, rect.right, rect.bottom]
+    .map((value) => Math.round(value * 1000) / 1000)
+    .join("|");
+
+  return normalizedValues;
+}
+
+function invokeOptionalMethod(target: unknown, methodNames: string[], args: unknown[]) {
+  if (!target || typeof target !== "object") {
+    return false;
+  }
+
+  const targetRecord = target as Record<string, unknown>;
+  for (const methodName of methodNames) {
+    const methodCandidate = targetRecord[methodName];
+    if (typeof methodCandidate !== "function") {
+      continue;
+    }
+
+    try {
+      const result = (methodCandidate as (...methodArgs: unknown[]) => unknown).apply(target, args);
+      void Promise.resolve(result).catch(() => undefined);
+      return true;
+    } catch {
+      continue;
+    }
+  }
+
+  return false;
+}
+
+function refreshTextSearchCache(
+  instance: PdfViewerInstanceLike,
+  contentBoxId: string,
+  pageNumber: number,
+  contentBox: PdfContentBoxLike | null | undefined,
+  contentEditManager: PdfContentEditManagerLike | null | undefined,
+) {
+  const didRefreshFromApi =
+    invokeOptionalMethod(contentBox, ["RefreshTextSearchInfo", "refreshTextSearchInfo"], [])
+    || invokeOptionalMethod(contentEditManager, ["RefreshTextSearchInfo", "refreshTextSearchInfo"], [contentBoxId]);
+
+  if (didRefreshFromApi) {
+    return;
+  }
+
+  refreshTextSearchCacheWithElementReader(instance, pageNumber);
+}
+
+function refreshTextSearchCacheWithElementReader(instance: PdfViewerInstanceLike, pageNumber: number) {
+  const documentViewer = instance?.Core?.documentViewer;
+  const document = documentViewer?.getDocument?.();
+  const createElementReader = instance?.Core?.PDFNet?.ElementReader?.create;
+
+  if (!createElementReader || !document?.getPDFDoc || !Number.isFinite(pageNumber) || pageNumber <= 0) {
+    document?.refreshTextData?.();
+    return;
+  }
+
+  void (async () => {
+    let reader: {
+      beginOnPage?: (page: unknown) => Promise<void> | void;
+      next?: () => Promise<{
+        getBBox?: () => Promise<unknown> | unknown;
+      } | null>;
+      end?: () => Promise<void> | void;
+    } | null = null;
+
+    try {
+      const pdfDoc = await document.getPDFDoc?.();
+      const page = await pdfDoc?.getPage?.(pageNumber);
+      if (!page) {
+        return;
+      }
+
+      reader = await createElementReader();
+      await Promise.resolve(reader.beginOnPage?.(page));
+
+      while (true) {
+        const element = await Promise.resolve(reader.next?.());
+        if (!element) {
+          break;
+        }
+
+        await Promise.resolve(element.getBBox?.());
+      }
+    } catch {
+      // Ignore optional PDFNet fallback failures.
+    } finally {
+      await Promise.resolve(reader?.end?.()).catch(() => undefined);
+      document.refreshTextData?.();
+      documentViewer?.refreshPage?.(pageNumber);
+    }
+  })();
 }
 
 function startTextBoxEditing(
