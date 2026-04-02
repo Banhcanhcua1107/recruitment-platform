@@ -1,17 +1,13 @@
 import Link from "next/link";
-import { getEmployerCandidates, getEmployerPipelineMetrics } from "@/lib/applications";
-import { DashboardStatsCard } from "@/components/recruitment/DashboardStatsCard";
-import { RecruitmentChart } from "@/components/recruitment/RecruitmentChart";
-import { StatusBadge } from "@/components/recruitment/StatusBadge";
-import { RecruiterSavedCandidatesPanel } from "@/components/hr/RecruiterSavedCandidatesPanel";
-import { buttonVariants } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  ActionButton,
+  DashboardCard,
+  EmptyState,
+  PanelCard,
+} from "@/components/app-shell";
+import { RecruitmentChart } from "@/components/recruitment/RecruitmentChart";
+import { StatusBadge as RecruitmentStatusBadge } from "@/components/recruitment/StatusBadge";
+import { RecruiterSavedCandidatesPanel } from "@/components/hr/RecruiterSavedCandidatesPanel";
 import {
   getActivityLogs,
   getApplicationsTrend,
@@ -20,6 +16,7 @@ import {
   getJobPortfolioSummary,
   getJobs,
 } from "@/lib/recruitment";
+import { getEmployerCandidates, getEmployerPipelineMetrics } from "@/lib/applications";
 
 export default async function HRDashboardPage() {
   const [stats, trend, pipeline, activityLogs, companyProfile, portfolioSummary, activeJobs, newCandidates] =
@@ -35,163 +32,169 @@ export default async function HRDashboardPage() {
     ]);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-4xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.24)]">
+    <div className="space-y-6 pb-8">
+      <PanelCard
+        className="bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.1),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))]"
+        contentClassName="px-6 py-6 sm:px-7 sm:py-7"
+      >
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-3">
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">
-              Recruitment command center
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.28em] text-slate-400">
+              Recruiter workspace
             </p>
-            <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-              Điều phối tuyển dụng cho {companyProfile.companyName || "workspace của bạn"}
+            <h1 className="font-headline text-3xl font-extrabold tracking-tight text-slate-950 sm:text-[2.6rem]">
+              Dieu phoi tuyen dung cho {companyProfile.companyName || "workspace cua ban"}
             </h1>
-            <p className="max-w-3xl text-sm leading-7 text-slate-500 sm:text-base">
-              Theo dõi các KPI chính, job đang tuyển, hồ sơ mới và các hành động tiếp theo trong
-              cùng một màn hình vận hành dành cho recruiter.
+            <p className="max-w-3xl text-sm font-medium leading-7 text-slate-500 sm:text-base">
+              Cung mot he shell voi Candidate va CV, nhung giu nguyen dashboard van hanh,
+              pipeline ATS va job control center danh cho recruiter.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Link className={buttonVariants("outline", "lg")} href="/hr/candidates">
-              <span className="material-symbols-outlined text-[18px]">groups</span>
-              Kho ứng viên
-            </Link>
-            <Link className={buttonVariants("default", "lg")} href="/hr/jobs/create">
-              <span className="material-symbols-outlined text-[18px]">add_circle</span>
-              Tạo tin tuyển dụng
-            </Link>
+            <ActionButton
+              href="/hr/candidates"
+              variant="secondary"
+              icon={<span className="material-symbols-outlined text-[18px]">groups</span>}
+            >
+              Kho ung vien
+            </ActionButton>
+            <ActionButton
+              href="/hr/jobs/create"
+              variant="primary"
+              icon={<span className="material-symbols-outlined text-[18px]">add_circle</span>}
+            >
+              Tao tin tuyen dung
+            </ActionButton>
           </div>
         </div>
-      </section>
+      </PanelCard>
 
-      <section className="grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <DashboardStatsCard
-          title="Tổng tin tuyển dụng"
+      <section className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <DashboardCard
+          label="Tong tin tuyen dung"
           value={portfolioSummary.totalJobs}
-          subtitle="Toàn bộ tin đang thuộc recruiter workspace hiện tại"
-          icon="work"
+          hint="Toan bo tin dang thuoc recruiter workspace hien tai"
+          icon={<span className="material-symbols-outlined text-[21px]">work</span>}
         />
-        <DashboardStatsCard
-          title="Tin đang tuyển"
+        <DashboardCard
+          label="Tin dang tuyen"
           value={portfolioSummary.openJobs}
-          subtitle="Số job đang mở nhận hồ sơ trên hệ thống"
-          icon="campaign"
+          hint="So job dang mo nhan ho so tren he thong"
+          toneClassName="bg-emerald-50 text-emerald-700"
+          icon={<span className="material-symbols-outlined text-[21px]">campaign</span>}
         />
-        <DashboardStatsCard
-          title="Ứng viên mới hôm nay"
+        <DashboardCard
+          label="Ung vien moi hom nay"
           value={stats.candidatesToday}
-          subtitle="Số hồ sơ vừa được ghi nhận trong ngày"
-          icon="person_add"
+          hint="So ho so vua duoc ghi nhan trong ngay"
+          toneClassName="bg-amber-50 text-amber-700"
+          icon={<span className="material-symbols-outlined text-[21px]">person_add</span>}
         />
-        <DashboardStatsCard
-          title="Tổng lượt ứng tuyển"
+        <DashboardCard
+          label="Tong luot ung tuyen"
           value={portfolioSummary.totalApplicants}
-          subtitle="Tổng số hồ sơ đã đi qua các tin trong workspace"
-          icon="monitoring"
+          hint="Tong so ho so da di qua cac tin trong workspace"
+          toneClassName="bg-violet-50 text-violet-700"
+          icon={<span className="material-symbols-outlined text-[21px]">monitoring</span>}
         />
       </section>
 
-      <section>
-        <RecruitmentChart data={trend} />
-      </section>
+      <RecruitmentChart data={trend} />
 
-      <section>
-        <Card className="rounded-4xl border-slate-200/80">
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle>Pipeline ứng tuyển</CardTitle>
-              <CardDescription>
-                Ảnh chụp nhanh toàn bộ trạng thái xử lý ứng viên trong ATS.
-              </CardDescription>
-            </div>
-            <Link className={buttonVariants("outline", "sm")} href="/hr/candidates?view=pipeline">
-              Mở ATS
-            </Link>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {pipeline.map((item) => (
-              <div
-                key={item.status}
-                className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={item.status} />
-                  <span className="text-sm font-medium text-slate-600">{item.label}</span>
-                </div>
-                <span className="text-2xl font-black text-slate-900">{item.count}</span>
+      <PanelCard
+        eyebrow="Pipeline ATS"
+        title="Anh chup nhanh trang thai ung vien"
+        description="Toan bo stage duoc giu nguyen logic, chi doi shell va card de dong bo voi dashboard moi."
+        actions={
+          <ActionButton href="/hr/candidates?view=pipeline" size="sm" variant="secondary">
+            Mo ATS
+          </ActionButton>
+        }
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {pipeline.map((item) => (
+            <div
+              key={item.status}
+              className="flex items-center justify-between rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4"
+            >
+              <div className="flex items-center gap-3">
+                <RecruitmentStatusBadge status={item.status} />
+                <span className="text-sm font-semibold text-slate-600">{item.label}</span>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      </section>
+              <span className="font-headline text-3xl font-extrabold tracking-tight text-slate-950">
+                {item.count}
+              </span>
+            </div>
+          ))}
+        </div>
+      </PanelCard>
 
       <section className="grid gap-6 xl:grid-cols-3">
-        <Card className="rounded-4xl border-slate-200/80 xl:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle>Job đang tuyển</CardTitle>
-              <CardDescription>
-                Các vị trí cần recruiter theo dõi sát trong hôm nay.
-              </CardDescription>
-            </div>
-            <Link className={buttonVariants("outline", "sm")} href="/hr/jobs?status=open">
-              Xem tất cả
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {activeJobs.items.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                Chưa có tin đang mở. Hãy tạo một tin tuyển dụng mới để bắt đầu nguồn ứng viên.
-              </div>
-            ) : (
-              activeJobs.items.map((job) => (
+        <PanelCard
+          eyebrow="Jobs dang tuyen"
+          title="Nhung vi tri can recruiter theo sat"
+          description="Danh sach job van giu nguyen route va action cu."
+          actions={
+            <ActionButton href="/hr/jobs?status=open" size="sm" variant="secondary">
+              Xem tat ca
+            </ActionButton>
+          }
+        >
+          {activeJobs.items.length === 0 ? (
+            <EmptyState
+              title="Chua co tin dang mo"
+              description="Hay tao mot tin tuyen dung moi de bat dau nguon ung vien."
+            />
+          ) : (
+            <div className="space-y-3">
+              {activeJobs.items.map((job) => (
                 <Link
                   key={job.id}
                   href={`/hr/jobs/${job.id}`}
-                  className="block rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-primary/20 hover:bg-white"
+                  className="block rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4 transition hover:border-sky-200 hover:bg-white"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-base font-black text-slate-950">{job.title}</p>
+                      <p className="truncate text-base font-bold text-slate-950">{job.title}</p>
                       <p className="mt-1 text-sm text-slate-500">
-                        {job.location || "Linh hoạt địa điểm"}
+                        {job.location || "Linh hoat dia diem"}
                       </p>
                     </div>
-                    <StatusBadge status={job.status} />
+                    <RecruitmentStatusBadge status={job.status} />
                   </div>
                   <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
-                    <span>{job.candidateCount} hồ sơ</span>
+                    <span>{job.candidateCount} ho so</span>
                     <span>
                       {job.postedAt
                         ? new Date(job.postedAt).toLocaleDateString("vi-VN")
-                        : "Chưa đăng"}
+                        : "Chua dang"}
                     </span>
                   </div>
                 </Link>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-4xl border-slate-200/80 xl:col-span-1">
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle>Ứng viên mới</CardTitle>
-              <CardDescription>
-                Các hồ sơ vừa đi vào pipeline tuyển dụng của recruiter.
-              </CardDescription>
+              ))}
             </div>
-            <Link className={buttonVariants("outline", "sm")} href="/hr/candidates?view=pipeline">
-              Mở ATS
-            </Link>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {newCandidates.items.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                Chưa có ứng viên mới trong pipeline.
-              </div>
-            ) : (
-              newCandidates.items.map((candidate) => (
+          )}
+        </PanelCard>
+
+        <PanelCard
+          eyebrow="Ung vien moi"
+          title="Ho so vua vao pipeline"
+          description="Theo doi nhanh cac ung vien moi nhat trong ATS."
+          actions={
+            <ActionButton href="/hr/candidates?view=pipeline" size="sm" variant="secondary">
+              Mo ATS
+            </ActionButton>
+          }
+        >
+          {newCandidates.items.length === 0 ? (
+            <EmptyState
+              title="Chua co ung vien moi"
+              description="Pipeline hien chua co ho so moi duoc dua vao."
+            />
+          ) : (
+            <div className="space-y-3">
+              {newCandidates.items.map((candidate) => (
                 <Link
                   key={candidate.applicationId}
                   href={
@@ -199,76 +202,71 @@ export default async function HRDashboardPage() {
                       ? `/candidate/${candidate.candidateId}?from=hr`
                       : `/hr/candidates?view=pipeline&q=${encodeURIComponent(candidate.candidateCode)}`
                   }
-                  className="block rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-primary/20 hover:bg-white"
+                  className="block rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4 transition hover:border-sky-200 hover:bg-white"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="truncate text-base font-black text-slate-950">
+                      <p className="truncate text-base font-bold text-slate-950">
                         {candidate.fullName}
                       </p>
                       <p className="mt-1 text-sm text-slate-500">{candidate.appliedPosition}</p>
                     </div>
-                    <StatusBadge status={candidate.status} />
+                    <RecruitmentStatusBadge status={candidate.status} />
                   </div>
                   <div className="mt-3 flex items-center justify-between text-sm text-slate-500">
                     <span>{candidate.candidateCode}</span>
                     <span>{new Date(candidate.appliedAt).toLocaleDateString("vi-VN")}</span>
                   </div>
                 </Link>
-              ))
-            )}
-          </CardContent>
-        </Card>
+              ))}
+            </div>
+          )}
+        </PanelCard>
 
         <div className="xl:col-span-1">
           <RecruiterSavedCandidatesPanel
-            description="Nguồn hồ sơ công khai bạn đã đánh dấu để quay lại liên hệ nhanh."
+            description="Nguon ho so cong khai ban da danh dau de quay lai lien he nhanh."
             limit={4}
           />
         </div>
       </section>
 
-      <section>
-        <Card className="rounded-4xl border-slate-200/80">
-          <CardHeader className="flex flex-row items-center justify-between gap-4">
-            <div>
-              <CardTitle>Hoạt động gần đây</CardTitle>
-              <CardDescription>
-                Các thao tác quan trọng đã diễn ra trong recruiter workspace.
-              </CardDescription>
-            </div>
-            <Link className={buttonVariants("outline", "sm")} href="/hr/jobs">
-              Quản lý tin tuyển dụng
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {activityLogs.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-500">
-                Chưa có hoạt động nào được ghi nhận.
+      <PanelCard
+        eyebrow="Hoat dong gan day"
+        title="Nhat ky thao tac recruiter workspace"
+        description="Van la du lieu cu, nhung duoc dua vao panel giong ngon ngu thiet ke moi."
+        actions={
+          <ActionButton href="/hr/jobs" size="sm" variant="secondary">
+            Quan ly tin tuyen dung
+          </ActionButton>
+        }
+      >
+        {activityLogs.length === 0 ? (
+          <EmptyState
+            title="Chua co hoat dong nao duoc ghi nhan"
+            description="Dashboard se hien cac thao tac quan trong ngay khi recruiter bat dau xu ly."
+          />
+        ) : (
+          <div className="space-y-3">
+            {activityLogs.map((log) => (
+              <div
+                key={log.id}
+                className="flex flex-col gap-3 rounded-[22px] border border-slate-200 bg-slate-50/80 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
+              >
+                <div className="space-y-1">
+                  <p className="font-semibold text-slate-900">{log.action}</p>
+                  <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-slate-400">
+                    Nguoi dung {log.userId}
+                  </p>
+                </div>
+                <span className="text-sm font-medium text-slate-500">
+                  {new Date(log.createdAt).toLocaleString("vi-VN")}
+                </span>
               </div>
-            ) : (
-              <div className="space-y-3">
-                {activityLogs.map((log) => (
-                  <div
-                    key={log.id}
-                    className="flex flex-col gap-3 rounded-3xl border border-slate-100 px-4 py-4 lg:flex-row lg:items-center lg:justify-between"
-                  >
-                    <div className="space-y-1">
-                      <p className="font-medium text-slate-900">{log.action}</p>
-                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                        Người dùng {log.userId}
-                      </p>
-                    </div>
-                    <span className="text-sm font-medium text-slate-500">
-                      {new Date(log.createdAt).toLocaleString("vi-VN")}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+            ))}
+          </div>
+        )}
+      </PanelCard>
     </div>
   );
 }

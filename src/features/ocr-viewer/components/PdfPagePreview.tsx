@@ -22,6 +22,8 @@ interface PdfPagePreviewProps {
   registerBoxRef?: (blockId: string, element: HTMLButtonElement | null) => void;
 }
 
+const PAGE_RENDER_WARNING_MS = 12_000;
+
 function resolveScale({
   mode,
   zoom,
@@ -65,8 +67,10 @@ export function PdfPagePreview({
 }: PdfPagePreviewProps) {
   const [pdfOriginalWidth, setPdfOriginalWidth] = useState(page.originalWidth);
   const [pdfOriginalHeight, setPdfOriginalHeight] = useState(page.originalHeight);
+  const [isRenderSlow, setIsRenderSlow] = useState(false);
   const [canvasDisplaySize, setCanvasDisplaySize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const renderWatchdogRef = useRef<number | null>(null);
   const effectiveOriginalWidth = Math.max(1, pdfOriginalWidth || page.originalWidth || 1);
   const effectiveOriginalHeight = Math.max(1, pdfOriginalHeight || page.originalHeight || 1);
   const contentWidth = Math.max(340, frameWidth - 8);
@@ -85,6 +89,23 @@ export function PdfPagePreview({
 
       return { width: nextWidth, height: nextHeight };
     });
+  }, []);
+
+  const resetRenderWatchdog = useCallback(() => {
+    if (renderWatchdogRef.current != null) {
+      window.clearTimeout(renderWatchdogRef.current);
+      renderWatchdogRef.current = null;
+    }
+    renderWatchdogRef.current = window.setTimeout(() => {
+      setIsRenderSlow(true);
+    }, PAGE_RENDER_WARNING_MS);
+  }, []);
+
+  const clearRenderWatchdog = useCallback(() => {
+    if (renderWatchdogRef.current != null) {
+      window.clearTimeout(renderWatchdogRef.current);
+      renderWatchdogRef.current = null;
+    }
   }, []);
 
   const scale = useMemo(
@@ -117,6 +138,14 @@ export function PdfPagePreview({
     };
   }, [page.pageIndex, renderedWidth, updateCanvasDisplaySize]);
 
+  useEffect(() => {
+    resetRenderWatchdog();
+
+    return () => {
+      clearRenderWatchdog();
+    };
+  }, [clearRenderWatchdog, page.pageIndex, resetRenderWatchdog]);
+
   return (
     <section
       className={cn(
@@ -147,14 +176,28 @@ export function PdfPagePreview({
               renderAnnotationLayer={false}
               renderTextLayer={false}
               loading={
-                <div className="flex min-h-[260px] w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
-                  Rendering page {page.pageIndex + 1}...
+                <div className="flex min-h-65 w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
+                  {isRenderSlow
+                    ? `Rendering is taking longer than expected for page ${page.pageIndex + 1}...`
+                    : `Rendering page ${page.pageIndex + 1}...`}
                 </div>
               }
               onRenderSuccess={(pdfPage: { originalHeight?: number; originalWidth?: number }) => {
-                setPdfOriginalWidth(pdfPage.originalWidth || page.originalWidth);
-                setPdfOriginalHeight(pdfPage.originalHeight || page.originalHeight);
+                setIsRenderSlow(false);
+                clearRenderWatchdog();
+                setPdfOriginalWidth((current) => {
+                  const nextWidth = pdfPage.originalWidth || page.originalWidth;
+                  return Math.abs(current - nextWidth) < 0.5 ? current : nextWidth;
+                });
+                setPdfOriginalHeight((current) => {
+                  const nextHeight = pdfPage.originalHeight || page.originalHeight;
+                  return Math.abs(current - nextHeight) < 0.5 ? current : nextHeight;
+                });
                 updateCanvasDisplaySize();
+              }}
+              onRenderError={() => {
+                clearRenderWatchdog();
+                setIsRenderSlow(true);
               }}
             />
 

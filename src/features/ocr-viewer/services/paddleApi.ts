@@ -14,6 +14,78 @@ export class PaddleApiError extends Error {
   }
 }
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+const SYNC_PARSE_TIMEOUT_MS = 75_000;
+const ASYNC_SUBMIT_TIMEOUT_MS = 20_000;
+const ASYNC_STATUS_TIMEOUT_MS = 12_000;
+const RESULT_DOWNLOAD_TIMEOUT_MS = 25_000;
+
+function createTimeoutController(timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => {
+    controller.abort(new DOMException("Request timeout", "TimeoutError"));
+  }, timeoutMs);
+
+  return {
+    controller,
+    clear: () => window.clearTimeout(timer),
+  };
+}
+
+function bindAbortSignal(target: AbortController, source?: AbortSignal) {
+  if (!source) {
+    return () => {};
+  }
+
+  if (source.aborted) {
+    target.abort(source.reason);
+    return () => {};
+  }
+
+  const onAbort = () => target.abort(source.reason);
+  source.addEventListener("abort", onAbort, { once: true });
+  return () => source.removeEventListener("abort", onAbort);
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  options?: { timeoutMs?: number; timeoutMessage?: string },
+) {
+  const timeoutMs =
+    typeof options?.timeoutMs === "number" && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+      ? Math.floor(options.timeoutMs)
+      : DEFAULT_REQUEST_TIMEOUT_MS;
+  const timeoutController = createTimeoutController(timeoutMs);
+  const unbindAbort = bindAbortSignal(timeoutController.controller, init.signal);
+  const startedAt = Date.now();
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: timeoutController.controller.signal,
+    });
+  } catch (error) {
+    const timeoutExceeded = Date.now() - startedAt >= timeoutMs;
+    const timeoutAbort =
+      error instanceof DOMException &&
+      (error.name === "TimeoutError" || error.name === "AbortError") &&
+      timeoutExceeded;
+
+    if (timeoutAbort) {
+      throw new PaddleApiError(
+        options?.timeoutMessage || `Request timed out after ${timeoutMs}ms.`,
+        504,
+      );
+    }
+
+    throw error;
+  } finally {
+    timeoutController.clear();
+    unbindAbort();
+  }
+}
+
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;
@@ -74,14 +146,21 @@ export async function parseSync(file: File, signal?: AbortSignal) {
     useChartRecognition: false,
   };
 
-  const response = await fetch("/api/paddle-ocr/sync", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetchWithTimeout(
+    "/api/paddle-ocr/sync",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal,
     },
-    body: JSON.stringify(payload),
-    signal,
-  });
+    {
+      timeoutMs: SYNC_PARSE_TIMEOUT_MS,
+      timeoutMessage: "Sync OCR is taking too long. Please try again.",
+    },
+  );
 
   return parseJsonResponse<Record<string, unknown>>(response);
 }
@@ -96,32 +175,53 @@ export async function createAsyncJob(fileOrUrl: File | string, signal?: AbortSig
           fileMimeType: fileOrUrl.type || "application/octet-stream",
         };
 
-  const response = await fetch("/api/paddle-ocr/async/jobs", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetchWithTimeout(
+    "/api/paddle-ocr/async/jobs",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal,
     },
-    body: JSON.stringify(payload),
-    signal,
-  });
+    {
+      timeoutMs: ASYNC_SUBMIT_TIMEOUT_MS,
+      timeoutMessage: "Async OCR submit timed out. Please retry.",
+    },
+  );
 
   return parseJsonResponse<Record<string, unknown>>(response);
 }
 
 export async function getJobStatus(jobId: string, signal?: AbortSignal) {
-  const response = await fetch(`/api/paddle-ocr/async/jobs/${encodeURIComponent(jobId)}`, {
-    cache: "no-store",
-    signal,
-  });
+  const response = await fetchWithTimeout(
+    `/api/paddle-ocr/async/jobs/${encodeURIComponent(jobId)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+    {
+      timeoutMs: ASYNC_STATUS_TIMEOUT_MS,
+      timeoutMessage: "Timed out while checking OCR job status.",
+    },
+  );
 
   return parseJsonResponse<Record<string, unknown>>(response);
 }
 
 export async function fetchJsonlResult(url: string, signal?: AbortSignal) {
-  const response = await fetch(`/api/paddle-ocr/result?url=${encodeURIComponent(url)}`, {
-    cache: "no-store",
-    signal,
-  });
+  const response = await fetchWithTimeout(
+    `/api/paddle-ocr/result?url=${encodeURIComponent(url)}`,
+    {
+      cache: "no-store",
+      signal,
+    },
+    {
+      timeoutMs: RESULT_DOWNLOAD_TIMEOUT_MS,
+      timeoutMessage: "Timed out while downloading OCR result.",
+    },
+  );
 
   if (!response.ok) {
     throw new PaddleApiError(`Failed to download OCR result (${response.status}).`, response.status);

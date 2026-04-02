@@ -10,7 +10,7 @@ export default function RecruiterRouteLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-[#f6f7f8]">
+    <div className="flex min-h-screen flex-col bg-transparent">
       <Navbar />
       <HRLayoutShell>{children}</HRLayoutShell>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Job } from "@/types/job";
 import { toSlug } from "@/lib/slug";
 import type { SortKey } from "../jobs-page.types";
@@ -52,6 +53,8 @@ function buildJobTags(job: Job) {
 }
 
 function JobResultItem({ job }: { job: Job }) {
+  const router = useRouter();
+  const jobHref = `/jobs/${job.id}`;
   const companySlug = toSlug(job.company_name?.trim() ?? "");
   const tags = buildJobTags(job);
   const postedLabel = job.posted_date
@@ -65,8 +68,24 @@ function JobResultItem({ job }: { job: Job }) {
     !job.logo_url.includes("placeholder");
   const initial = job.company_name?.charAt(0) ?? "?";
 
+  const openJobDetail = () => {
+    router.push(jobHref);
+  };
+
   return (
-    <article className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-primary/20 hover:shadow-lg">
+    <article
+      role="link"
+      tabIndex={0}
+      aria-label={`Xem chi tiết việc làm ${job.title}`}
+      onClick={openJobDetail}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openJobDetail();
+        }
+      }}
+      className="cursor-pointer rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-primary/20 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+    >
       <div className="flex flex-col gap-5 md:flex-row">
         <div className="flex size-16 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
           {hasLogo ? (
@@ -85,7 +104,8 @@ function JobResultItem({ job }: { job: Job }) {
           <div className="mb-2 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
               <Link
-                href={`/jobs/${job.id}`}
+                href={jobHref}
+                onClick={(event) => event.stopPropagation()}
                 className="line-clamp-2 text-lg font-black leading-snug text-slate-900 transition hover:text-primary"
               >
                 {job.title}
@@ -94,6 +114,7 @@ function JobResultItem({ job }: { job: Job }) {
                 {companySlug ? (
                   <Link
                     href={`/companies/${companySlug}`}
+                    onClick={(event) => event.stopPropagation()}
                     className="transition hover:text-primary"
                   >
                     {job.company_name}
@@ -140,13 +161,15 @@ function JobResultItem({ job }: { job: Job }) {
 
         <div className="flex items-center gap-3">
           <Link
-            href={`/jobs/${job.id}`}
+            href={jobHref}
+            onClick={(event) => event.stopPropagation()}
             className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 px-5 text-sm font-black text-slate-700 transition hover:border-primary/30 hover:text-primary"
           >
             Xem chi tiết
           </Link>
           <Link
-            href={`/jobs/${job.id}`}
+            href={jobHref}
+            onClick={(event) => event.stopPropagation()}
             className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-black text-white transition hover:bg-blue-700"
           >
             Ứng tuyển ngay

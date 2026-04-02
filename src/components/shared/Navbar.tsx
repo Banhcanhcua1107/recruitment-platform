@@ -372,7 +372,7 @@ export default function Navbar() {
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`border-b-2 pb-1 text-base font-semibold transition-colors ${
+                      className={`border-b-2 pb-1.5 text-[1.08rem] font-semibold transition-colors ${
                         isActive
                           ? 'border-primary text-primary'
                           : 'border-transparent text-slate-600 hover:text-primary'
@@ -472,13 +472,13 @@ export default function Navbar() {
                 <div className="flex items-center gap-2">
                   <Link
                     href="/login"
-                    className="rounded-full border border-primary/20 px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/5 sm:px-5"
+                    className="rounded-full border border-primary/20 px-5 py-2.5 text-base font-bold text-primary transition-colors hover:bg-primary/5 sm:px-6"
                   >
                     Đăng nhập
                   </Link>
                   <Link
                     href="/register"
-                    className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.8)] transition-colors hover:bg-primary/90 sm:px-5"
+                    className="rounded-full bg-primary px-5 py-2.5 text-base font-bold text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.8)] transition-colors hover:bg-primary/90 sm:px-6"
                   >
                     Đăng ký
                   </Link>

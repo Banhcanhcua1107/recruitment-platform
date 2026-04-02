@@ -62,8 +62,8 @@ const INITIAL_TEMPLATE_SECTIONS: CVSection[] = [
     isVisible: true, 
     containerId: 'main-column', 
     data: { 
-      fullName: 'Nguyễn Văn A', 
-      title: 'Lập trình viên Fullstack', 
+      fullName: 'Nguyen Van A', 
+      title: 'Fullstack Developer', 
       avatarUrl: '/avatars/default-avatar.png'
     } 
   },
@@ -75,172 +75,127 @@ const INITIAL_TEMPLATE_SECTIONS: CVSection[] = [
     data: { 
       email: 'nguyenvana@gmail.com', 
       phone: '+84 1234567890', 
-      address: 'Hà Nội, Việt Nam', 
+      address: 'Ha Noi, Viet Nam', 
       dob: '01/01/2000' 
     } 
   },
   { 
     id: '3', 
     type: 'summary', 
-    title: 'Tổng quan',
+    title: 'Overview',
     isVisible: true, 
     containerId: 'main-column', 
     data: { 
-      text: '- Hơn 2 năm kinh nghiệm lập trình với kỹ năng giao tiếp tốt và khả năng học hỏi nhanh\n- Thế mạnh: Phát triển Front-end và Back-end ứng dụng web\n- Thành thạo HTML, CSS, JavaScript\n- Nắm vững JavaScript, bao gồm thao tác DOM và mô hình đối tượng JavaScript\n- Hiểu sâu về React.js và các nguyên tắc cốt lõi\n- Có kinh nghiệm với các luồng công việc React.js phổ biến (như Flux hoặc Redux)\n- Quen thuộc với các đặc tả mới của EcmaScript\n- Có kinh nghiệm với các thư viện cấu trúc dữ liệu\n- Quen thuộc với RESTful APIs\n- Kinh nghiệm mạnh về: PHP, JavaScript (ReactJS, React-native), MySQL, NoSQL, GraphQL, Redis, JSON, API, Docker, Kubernetes, Rancher, dịch vụ AWS\n- Sử dụng thành thạo các công cụ quản lý mã nguồn: SVN, GIT\n- Thành thạo hệ điều hành: Linux (Ubuntu, OSX), Windows\n- Khả năng học hỏi và áp dụng công nghệ mới nhanh chóng\n- Địa điểm làm việc hiện tại: Hà Nội, Việt Nam' 
+      text: 'Fullstack Developer with over 2 years of experience building and maintaining web applications across frontend and backend systems. Strong foundation in HTML, CSS, JavaScript, ReactJS, PHP, and RESTful APIs, with practical experience in MySQL, NoSQL, Docker, Redis, and AWS services. Comfortable working in fast-paced environments, learning new technologies quickly, and collaborating to deliver scalable and maintainable solutions.' 
     } 
   },
   { 
     id: '4', 
+    type: 'skill_list', 
+    title: 'Skills',
+    isVisible: true, 
+    containerId: 'main-column', 
+    data: { 
+      items: [
+        { id: 'skill-1', name: 'Frontend: HTML, CSS, JavaScript, ReactJS, React Native, DOM manipulation', level: 90 },
+        { id: 'skill-2', name: 'Backend: PHP, RESTful APIs, GraphQL, JSON API integration', level: 88 },
+        { id: 'skill-3', name: 'Database: MySQL, NoSQL, Redis', level: 82 },
+        { id: 'skill-4', name: 'DevOps: Docker, Kubernetes, Rancher, AWS services', level: 80 },
+        { id: 'skill-5', name: 'Tools: Git, SVN', level: 78 },
+        { id: 'skill-6', name: 'Other: Good understanding of ReactJS principles and workflows', level: 76 },
+        { id: 'skill-7', name: 'Other: Familiar with EcmaScript specifications', level: 74 },
+        { id: 'skill-8', name: 'Other: Experience with data structure libraries', level: 72 },
+        { id: 'skill-9', name: 'Other: Able to learn and apply new technologies quickly', level: 78 },
+        { id: 'skill-10', name: 'Other: Comfortable working on Linux, OSX, and Windows', level: 75 }
+      ] 
+    } 
+  },
+  { 
+    id: '5', 
     type: 'experience_list', 
-    title: 'Kinh nghiệm làm việc',
+    title: 'Work Experience',
     isVisible: true, 
     containerId: 'main-column', 
     data: { 
       items: [
         { 
           id: 'exp-1', 
-          company: 'CÔNG TY CỔ PHẦN GIÁO DỤC CÔNG NGHỆ F8', 
-          position: 'Lập trình viên Fullstack', 
+          company: 'F8 TECHNOLOGY EDUCATION.,JSC', 
+          position: 'Fullstack Developer', 
           startDate: '01/2018', 
-          endDate: 'Hiện tại', 
-          description: '- Lập trình các dự án outsourcing\n- Xây dựng khung mã nguồn và thiết kế cơ sở dữ liệu dựa trên mô tả dự án' 
+          endDate: 'Present', 
+          description: '- Participated in outsourcing software projects for different business domains.\n- Developed frontend and backend features based on project requirements.\n- Designed coding structures and database schemas from project descriptions.\n- Worked on application maintenance, feature enhancement, and system optimization.' 
         },
         { 
           id: 'exp-2', 
-          company: 'CÔNG TY CỔ PHẦN AI&T', 
-          position: 'Lập trình viên Fullstack', 
+          company: 'AI&T JSC', 
+          position: 'Fullstack Developer', 
           startDate: '07/2015', 
           endDate: '03/2018', 
-          description: '- Lập trình các dự án outsourcing\n- Xây dựng khung mã nguồn và thiết kế cơ sở dữ liệu dựa trên mô tả dự án' 
+          description: '- Worked on outsourcing software projects.\n- Developed web application modules for both frontend and backend.\n- Created coding frameworks and database designs based on project requirements.' 
         },
-        { 
-          id: 'exp-3', 
-          company: 'LÀM VIỆC TỰ DO', 
-          position: 'Lập trình viên Fullstack', 
-          startDate: '01/2015', 
-          endDate: '07/2015', 
-          description: '- Phát triển module web cho các dự án được giao.' 
+        {
+          id: 'exp-3',
+          company: 'FREELANCER',
+          position: 'Fullstack Developer',
+          startDate: '01/2015',
+          endDate: '07/2015',
+          description: '- Developed web modules for client and personal projects.\n- Implemented frontend and backend features according to project needs.'
         }
       ] 
     } 
   },
-  { 
-    id: '5', 
-    type: 'education_list', 
-    title: 'Học vấn',
-    isVisible: true, 
-    containerId: 'main-column', 
-    data: { 
-      items: [
-        { 
-          id: 'edu-1', 
-          institution: 'Cao đẳng FPT Polytechnic', 
-          degree: 'Chuyên ngành - Lập trình Web, Di động', 
-          startDate: '10/2011', 
-          endDate: '09/2014' 
-        }
-      ] 
-    } 
-  },
-  { 
-    id: '6', 
-    type: 'skill_list', 
-    title: 'Kỹ năng',
-    isVisible: true, 
-    containerId: 'main-column', 
-    data: { 
-      items: [
-        { id: 'skill-1', name: 'HTML, CSS, JavaScript (ReactJS, React-Native, Lit)', level: 95 },
-        { id: 'skill-2', name: 'PHP (Laravel, Symfony, Codeigniter, Yii)', level: 90 },
-        { id: 'skill-3', name: 'Node (ExpressJS)', level: 85 },
-        { id: 'skill-4', name: 'RESTful API, GraphQL', level: 85 },
-        { id: 'skill-5', name: 'MySQL, PostgreSQL, NoSQL (MongoDB)', level: 80 },
-        { id: 'skill-6', name: 'Server (Apache, Nginx, Redis, Memcached, Queue, Log, Cronjob...), Rancher, K8S, Docker', level: 80 },
-        { id: 'skill-7', name: 'AWS (Load balancing, EC2, ECS, Router 53, RDS, S3)', level: 75 },
-        { id: 'skill-8', name: 'Ruby (Ruby on Rails)', level: 60 },
-        { id: 'skill-9', name: 'SVN, Git', level: 85 },
-        { id: 'skill-10', name: 'Python (Selenium kiểm thử tự động, crawler)', level: 60 },
-        { id: 'skill-11', name: 'Elasticsearch', level: 60 },
-        { id: 'skill-12', name: 'Tensorflow', level: 40 }
-      ] 
-    } 
-  },
   {
-    id: '7',
-    type: 'award_list',
-    title: 'Giải thưởng',
-    isVisible: true,
-    containerId: 'main-column',
-    data: {
-      items: [
-        { id: 'aw-1', title: 'Cuộc thi Sáng tạo Poly 2016', date: '06/2016', issuer: 'Cuộc thi Sáng tạo Poly 2016', description: 'Giải nhất trong 2 cuộc thi "Sáng tạo POLY & FE Bắc - Trung - Nam". Giải Nhất.' },
-        { id: 'aw-2', title: 'Cuộc thi Sáng tạo FE 2016', date: '08/2016', issuer: 'Cuộc thi Sáng tạo FE 2016', description: 'Cuộc thi sáng tạo FE' },
-        { id: 'aw-3', title: 'Nhân viên xuất sắc AI&T JSC', date: '02/2016', issuer: 'AI&T JSC', description: 'Giải thưởng Nhân viên xuất sắc' }
-      ]
-    }
-  },
-  {
-    id: '8',
+    id: '6',
     type: 'project_list',
-    title: 'Dự án',
+    title: 'Projects',
     isVisible: true,
     containerId: 'main-column',
     data: {
       items: [
         { 
           id: 'proj-1', 
-          name: 'FULLSTACK.EDU.VN', 
-          role: 'Chủ sản phẩm, BA, Lập trình viên, Tester, Biên tập video', 
-          startDate: '01/2019', 
-          endDate: 'Hiện tại', 
-          customer: 'CÔNG TY CỔ PHẦN GIÁO DỤC CÔNG NGHỆ F8',
+          name: 'MYCV.VN', 
+          role: 'Developer', 
+          startDate: '06/2018', 
+          endDate: 'Present', 
+          customer: 'MyCV JSC',
           teamSize: 1,
-          technologies: 'Frontend: ReactJS\nBackend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, Mongodb, MariaDB, Redis, Docker, AWS EC2, AWS S3\nKiến trúc: Microservice - Event driven (triển khai với K8S), Websocket, SSO',
-          description: 'Học lập trình trực tuyến (https://f8.edu.vn)' 
+          technologies: 'ReactJS, PHP (Laravel, Lumen), NodeJS, Apache Kafka, WebSocket, MongoDB, MariaDB, Redis, Docker, AWS EC2, AWS S3, Microservice architecture, Event-driven architecture, SSO, K8S',
+          description: 'Standard CV writing application with free PDF download support. Responsibilities: Developer, Solution architect.' 
         },
         { 
           id: 'proj-2', 
-          name: 'MYCV.VN', 
-          role: 'Lập trình viên', 
-          startDate: '06/2018', 
-          endDate: 'Hiện tại', 
-          customer: 'Công ty MyCV.',
+          name: 'BOTAYRA.FULLSTACK.EDU.VN', 
+          role: 'Developer', 
+          startDate: '05/2020', 
+          endDate: '06/2020', 
+          customer: 'MyCV JSC',
           teamSize: 1,
-          technologies: 'Frontend: ReactJS\nBackend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, Mongodb, MariaDB, Redis, Docker, AWS EC2, AWS S3\nKiến trúc: Microservice - Event driven (triển khai với K8S), Websocket, SSO',
-          description: 'Ứng dụng viết CV chuẩn, luôn hỗ trợ tải PDF miễn phí (https://mycv.vn)' 
+          technologies: 'ReactJS, TensorFlow',
+          description: 'A machine learning based application that helps users avoid touching their face using webcam tracking. Responsibilities: Developer.' 
         },
         { 
           id: 'proj-3', 
-          name: 'BOTAYRA.FULLSTACK.EDU.VN', 
-          role: 'Lập trình viên', 
-          startDate: '05/2020', 
-          endDate: '06/2020', 
-          customer: 'Công ty MyCV.',
-          teamSize: 1,
-          technologies: 'Frontend: ReactJS, Tensorflow',
-          description: 'Công cụ giúp bạn tránh chạm tay lên mặt sử dụng webcam và machine learning.' 
-        },
-        { 
-          id: 'proj-4', 
           name: 'FOODHUB.VN', 
-          role: 'Lập trình viên Fullstack', 
+          role: 'Fullstack Developer', 
           startDate: '10/2017', 
           endDate: '01/2018', 
           customer: "O'Green Food",
           teamSize: 2,
-          technologies: 'Frontend: Web + App (React-Native)\nBackend: PHP - Codeigniter, MariaDB, Memcached',
-          description: 'Ứng dụng kết nối chuỗi cửa hàng thực phẩm sạch (https://www.foodhub.vn/)' 
+          technologies: 'React Native, PHP, CodeIgniter, MariaDB, Memcached',
+          description: 'Application for connecting organic food store chains. Responsibilities: Built frontend, Built backend.' 
         },
-        { 
-          id: 'proj-5', 
-          name: 'GAME SIÊU ĐẠO CHÍCH', 
-          role: 'Lập trình viên', 
-          startDate: '09/2016', 
-          endDate: '12/2016', 
-          customer: 'Dự án cá nhân',
+        {
+          id: 'proj-4',
+          name: 'SIEU-DAO-CHICH GAME',
+          role: 'Developer',
+          startDate: '09/2016',
+          endDate: '12/2016',
+          customer: 'Personal project',
           teamSize: 1,
-          technologies: 'Frontend: HTML, CSS, Jquery\nBackend: PHP - Symfony, MariaDB, Memcached\nKhác: Raspberry Pi 2, 6 camera IP & các cảm biến, thiết bị phần cứng khác',
-          description: 'Game điều khiển từ xa trực tuyến qua máy tính sử dụng IoT' 
+          technologies: 'HTML, CSS, jQuery, PHP, Symfony, MariaDB, Memcached, Raspberry Pi 2, IP Camera, Sensors',
+          description: 'Remote control online game via computer using IoT. Responsibilities: Built frontend, Built backend, Built hardware integration.'
         }
       ]
     }

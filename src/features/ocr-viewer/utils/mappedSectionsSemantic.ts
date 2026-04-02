@@ -17,7 +17,7 @@ import type {
   SemanticSourceTrace,
 } from "@/features/ocr-viewer/semantic-types";
 
-function withTrace<T extends object>(value: T): T & SemanticSourceTrace {
+function withTrace<const T extends object>(value: T): T & SemanticSourceTrace {
   return {
     ...value,
     sourceBlockIds: [],
@@ -164,7 +164,7 @@ export function buildSemanticJsonFromMappedSections(input: unknown): SemanticCvJ
   const skillItems: SemanticSkillGroupItem[] = skillSections
     .map(([groupName, skills]) =>
       withTrace({
-        type: "skill_group",
+        type: "skill_group" as const,
         groupName,
         skills: skills.map((skill) => skill.trim()).filter(Boolean),
       }),

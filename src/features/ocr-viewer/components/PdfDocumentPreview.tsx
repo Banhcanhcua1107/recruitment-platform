@@ -206,11 +206,11 @@ export function PdfDocumentPreview({
             {pdfError || "Unable to render PDF preview."}
           </div>
         }
-        onLoadSuccess={({ numPages }) => {
+        onLoadSuccess={({ numPages }: { numPages?: number }) => {
           setPdfPageCount(numPages || 0);
           setPdfError(null);
         }}
-        onLoadError={(error) => {
+        onLoadError={(error: unknown) => {
           setPdfError(
             toPublicPdfError(
               error instanceof Error ? error.message : "Unable to load PDF preview.",

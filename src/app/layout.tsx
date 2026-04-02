@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-page-custom-font */
 import type { Metadata } from "next";
-import { Manrope } from "next/font/google";
+import { Manrope, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -9,6 +9,14 @@ const manrope = Manrope({
   preload: false,
   display: "swap",
   variable: "--font-sans",
+});
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ["latin", "vietnamese"],
+  weight: ["500", "600", "700", "800"],
+  preload: false,
+  display: "swap",
+  variable: "--font-headline",
 });
 
 export const metadata: Metadata = {
@@ -25,7 +33,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
       </head>
-      <body className={`${manrope.variable} font-sans antialiased`} suppressHydrationWarning>
+      <body
+        className={`${manrope.variable} ${plusJakartaSans.variable} font-sans antialiased`}
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>

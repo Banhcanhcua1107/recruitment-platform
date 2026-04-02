@@ -3,9 +3,11 @@ import {
   isSectionEmpty,
   type EducationContent,
   type ExperienceContent,
+  type PersonalInfoContent,
   type ProfileDocument,
   type Section,
   type SkillsContent,
+  type SummaryContent,
 } from "../app/candidate/profile/types/profile";
 import type {
   CandidateEducation,
@@ -41,13 +43,7 @@ type LegacyProfilePatch = {
   education: string | null;
 };
 
-type PersonalInfoSection = Section<{
-  fullName?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  avatarUrl?: string;
-}>;
+type PersonalInfoSection = Section<PersonalInfoContent>;
 
 export type PublicProfileViewModel = {
   document: ProfileDocument;
@@ -219,7 +215,7 @@ export function buildProfileDocumentFromLegacyProfile(input: LegacyProfileLike):
 
   if (fullName || email || phone || location) {
     sections.push(
-      createSection("personal_info", order++, {
+      createSection<PersonalInfoContent>("personal_info", order++, {
         fullName,
         email,
         phone,
@@ -232,7 +228,7 @@ export function buildProfileDocumentFromLegacyProfile(input: LegacyProfileLike):
 
   if (introduction) {
     sections.push(
-      createSection("summary", order++, {
+      createSection<SummaryContent>("summary", order++, {
         content: introduction,
       }),
     );
@@ -240,7 +236,7 @@ export function buildProfileDocumentFromLegacyProfile(input: LegacyProfileLike):
 
   if (skills.length > 0) {
     sections.push(
-      createSection("skills", order++, {
+      createSection<SkillsContent>("skills", order++, {
         skills: skills.map((skill, index) => ({
           id: `legacy-skill-${index}`,
           name: skill,
@@ -251,7 +247,7 @@ export function buildProfileDocumentFromLegacyProfile(input: LegacyProfileLike):
 
   if (workExperiences.length > 0) {
     sections.push(
-      createSection("experience", order++, {
+      createSection<ExperienceContent>("experience", order++, {
         items: workExperiences.map((item, index) => ({
           id: item.id || `legacy-experience-${index}`,
           title: item.title,
@@ -268,13 +264,13 @@ export function buildProfileDocumentFromLegacyProfile(input: LegacyProfileLike):
 
   if (educations.length > 0) {
     sections.push(
-      createSection("education", order++, {
+      createSection<EducationContent>("education", order++, {
         items: educations.map((item, index) => ({
           id: item.id || `legacy-education-${index}`,
           school: item.school,
           major: item.description || "",
           degree: item.degree,
-          startYear: parseYear(item.startDate),
+          startYear: parseYear(item.startDate) ?? parseYear(item.endDate) ?? new Date().getFullYear(),
           endYear: parseYear(item.endDate),
           gpa: "",
         })),

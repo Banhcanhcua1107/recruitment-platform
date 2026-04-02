@@ -1,18 +1,20 @@
 import Link from "next/link";
 import { JobTable } from "@/components/recruitment/JobTable";
+import { JobDetailsPanel } from "@/components/recruitment/JobDetailsPanel";
 import { RecruiterWorkspaceTabs } from "@/components/hr/RecruiterWorkspaceTabs";
 import { DashboardStatsCard } from "@/components/recruitment/DashboardStatsCard";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { getJobPortfolioSummary, getJobs } from "@/lib/recruitment";
+import { getJobById, getJobPortfolioSummary, getJobs } from "@/lib/recruitment";
 
 interface JobsPageProps {
   searchParams: Promise<{
     q?: string;
     status?: string;
     page?: string;
+    view?: string;
   }>;
 }
 
@@ -21,8 +23,9 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
   const q = params.q ?? "";
   const status = params.status ?? "all";
   const page = params.page ?? "1";
+  const view = params.view ?? "";
 
-  const [jobs, portfolioSummary] = await Promise.all([
+  const [jobs, portfolioSummary, selectedJob] = await Promise.all([
     getJobs({
       q,
       status: status as "all" | "open" | "closed" | "draft",
@@ -30,11 +33,19 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
       limit: 8,
     }),
     getJobPortfolioSummary(),
+    view ? getJobById(view) : Promise.resolve(null),
   ]);
+
+  const tableQuery = {
+    q: q || undefined,
+    status: status === "all" ? undefined : status,
+    page: page === "1" ? undefined : page,
+    view: selectedJob?.id ?? undefined,
+  };
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.24)]">
+      <section className="rounded-3xl border border-slate-200/90 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_20px_42px_-32px_rgba(15,23,42,0.28)]">
         <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="space-y-3">
             <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">
@@ -50,7 +61,7 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
           </div>
 
           <div className="flex items-start gap-4">
-            <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4 shadow-[0_16px_30px_-24px_rgba(15,23,42,0.24)]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                 Tổng ứng viên
               </p>
@@ -66,7 +77,7 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
         </div>
       </section>
 
-      <section className="grid auto-rows-fr gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DashboardStatsCard
           title="Tổng tin"
           value={portfolioSummary.totalJobs}
@@ -103,7 +114,7 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
         ]}
       />
 
-      <Card className="rounded-[32px] border-slate-200/80">
+      <Card className="rounded-3xl border-slate-200/85 bg-white/95 shadow-[0_18px_35px_-28px_rgba(15,23,42,0.2)]">
         <CardHeader>
           <CardTitle>Bộ lọc danh mục tin</CardTitle>
         </CardHeader>
@@ -129,11 +140,11 @@ export default async function HRJobsPage({ searchParams }: JobsPageProps) {
 
       <JobTable
         data={jobs}
-        query={{
-          q: q || undefined,
-          status: status === "all" ? undefined : status,
-        }}
+        query={tableQuery}
+        selectedJobId={selectedJob?.id ?? null}
       />
+
+      {selectedJob ? <JobDetailsPanel job={selectedJob} query={tableQuery} /> : null}
     </div>
   );
 }

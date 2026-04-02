@@ -13,6 +13,8 @@ function formatAppliedAt(value: string) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh",
   }).format(new Date(value));
 }
 

@@ -47,7 +47,7 @@ export default function CandidateSavedJobsPanel({
 
   if (items.length === 0) {
     return (
-      <section className="rounded-[32px] border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-sm sm:px-8">
+      <section className="rounded-[26px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-[0_18px_35px_-30px_rgba(15,23,42,0.2)] sm:px-8">
         <div className="mx-auto max-w-2xl">
           <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-slate-100 text-slate-400">
             <span className="material-symbols-outlined text-[28px]">bookmark</span>
@@ -76,8 +76,8 @@ export default function CandidateSavedJobsPanel({
   }
 
   return (
-    <section className="space-y-5">
-      <div className="rounded-[30px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.25)]">
+    <section className="space-y-4">
+      <div className="rounded-3xl border border-slate-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.95))] p-4 shadow-[0_18px_35px_-28px_rgba(15,23,42,0.22)] sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
@@ -100,8 +100,8 @@ export default function CandidateSavedJobsPanel({
                   onClick={() => setFilter(item.id)}
                   className={`rounded-full px-4 py-2 text-sm font-bold transition-all ${
                     filter === item.id
-                      ? "bg-primary text-white shadow-lg shadow-primary/20"
-                      : "border border-slate-200 text-slate-500 hover:border-primary hover:text-primary"
+                      ? "bg-primary text-white shadow-[0_14px_30px_-22px_rgba(37,99,235,0.58)]"
+                      : "bg-white text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   {item.label}
@@ -109,7 +109,7 @@ export default function CandidateSavedJobsPanel({
               ))}
             </div>
 
-            <div className="relative min-w-[260px]">
+            <div className="relative min-w-65">
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
                 search
               </span>
@@ -118,7 +118,7 @@ export default function CandidateSavedJobsPanel({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Tìm theo vị trí, công ty, địa điểm"
-                className="w-full rounded-[20px] border border-slate-200 bg-slate-50 py-3 pl-12 pr-4 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
+                className="w-full rounded-[18px] border border-slate-200 bg-white py-3 pl-12 pr-4 text-sm font-semibold text-slate-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/10"
               />
             </div>
           </div>
@@ -126,7 +126,7 @@ export default function CandidateSavedJobsPanel({
       </div>
 
       {filteredItems.length === 0 ? (
-        <div className="rounded-[32px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-sm">
+        <div className="rounded-[26px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center shadow-[0_18px_35px_-30px_rgba(15,23,42,0.2)]">
           <p className="text-lg font-black text-slate-900">Không tìm thấy việc đã lưu phù hợp.</p>
           <p className="mt-2 text-sm font-medium text-slate-500">
             Hãy thử đổi bộ lọc hoặc từ khóa để xem lại các tin đã lưu.
@@ -137,7 +137,7 @@ export default function CandidateSavedJobsPanel({
           {filteredItems.map((item) => (
             <article
               key={`${item.job.id}-${item.savedAt}`}
-              className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.25)]"
+              className="rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[0_18px_35px_-28px_rgba(15,23,42,0.24)]"
             >
               <div className="flex items-start gap-4">
                 {item.job.logo_url ? (
@@ -163,7 +163,7 @@ export default function CandidateSavedJobsPanel({
                         {item.job.title}
                       </h2>
                     </div>
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-700">
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-emerald-700">
                       {item.job.salary || "Thỏa thuận"}
                     </span>
                   </div>

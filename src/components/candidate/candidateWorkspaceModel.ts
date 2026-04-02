@@ -42,7 +42,6 @@ type CandidateWorkspaceRouteConfig = {
   description?: string | null;
   breadcrumbs: CandidateWorkspaceBreadcrumb[];
   activeItemId?: string | null;
-  activeGroupId?: string | null;
   matches: (pathname: string) => boolean;
 };
 
@@ -55,41 +54,19 @@ function createLinkItem(
   id: string,
   label: string,
   href: string,
-  icon: string
+  icon: string,
 ): CandidateWorkspaceLinkItem {
   return { id, label, href, icon };
 }
 
-const SIDEBAR_ITEMS: Array<CandidateWorkspaceLinkItem | CandidateWorkspaceGroupItem> = [
+const SIDEBAR_ITEMS: CandidateWorkspaceLinkItem[] = [
   createLinkItem("dashboard", "Tổng quan", "/candidate/dashboard", "dashboard"),
   createLinkItem("profile", "Hồ sơ cá nhân", "/candidate/profile", "person"),
   createLinkItem("cv", "CV của tôi", "/candidate/cv-builder", "description"),
-  {
-    id: "jobs",
-    label: "Việc của tôi",
-    icon: "work_history",
-    href: "/candidate/jobs/applied",
-    children: [
-      createLinkItem("jobs-applied", "Việc đã ứng tuyển", "/candidate/jobs/applied", "task"),
-      createLinkItem("jobs-saved", "Việc đã lưu", "/candidate/jobs/saved", "bookmark"),
-      createLinkItem("jobs-recommended", "Việc phù hợp", "/candidate/jobs/recommended", "auto_awesome"),
-    ],
-  },
-  {
-    id: "settings",
-    label: "Cài đặt",
-    icon: "settings",
-    href: "/candidate/settings/notifications",
-    children: [
-      createLinkItem(
-        "settings-notifications",
-        "Thông báo",
-        "/candidate/settings/notifications",
-        "notifications"
-      ),
-      createLinkItem("settings-security", "Bảo mật", "/candidate/settings/security", "shield_lock"),
-    ],
-  },
+  createLinkItem("jobs-applied", "Việc đã ứng tuyển", "/candidate/jobs/applied", "history"),
+  createLinkItem("jobs-saved", "Việc đã lưu", "/candidate/jobs/saved", "bookmark"),
+  createLinkItem("jobs-recommended", "Việc phù hợp", "/candidate/jobs/recommended", "auto_awesome"),
+  createLinkItem("settings", "Cài đặt", "/candidate/settings/notifications", "settings"),
 ];
 
 function normalizePathname(pathname: string | null | undefined) {
@@ -178,10 +155,8 @@ const ROUTES: CandidateWorkspaceRouteConfig[] = [
     description: "Theo dõi tiến độ những đơn bạn đã nộp.",
     breadcrumbs: [
       WORKSPACE_HOME,
-      { label: "Việc của tôi", href: "/candidate/jobs/applied" },
       { label: "Việc đã ứng tuyển" },
     ],
-    activeGroupId: "jobs",
     activeItemId: "jobs-applied",
     matches: (pathname) =>
       isExact(pathname, "/candidate/applications") ||
@@ -196,11 +171,9 @@ const ROUTES: CandidateWorkspaceRouteConfig[] = [
     description: null,
     breadcrumbs: [
       WORKSPACE_HOME,
-      { label: "Việc của tôi", href: "/candidate/jobs/applied" },
       { label: "Việc đã ứng tuyển", href: "/candidate/jobs/applied" },
       { label: "Chi tiết ứng tuyển" },
     ],
-    activeGroupId: "jobs",
     activeItemId: "jobs-applied",
     matches: (pathname) => matchesRegex(pathname, /^\/candidate\/applications\/[^/]+$/),
   },
@@ -210,12 +183,7 @@ const ROUTES: CandidateWorkspaceRouteConfig[] = [
     showTitleInHeader: true,
     title: "Việc đã lưu",
     description: "Xem lại các tin tuyển dụng bạn đã đánh dấu để quay lại sau.",
-    breadcrumbs: [
-      WORKSPACE_HOME,
-      { label: "Việc của tôi", href: "/candidate/jobs/applied" },
-      { label: "Việc đã lưu" },
-    ],
-    activeGroupId: "jobs",
+    breadcrumbs: [WORKSPACE_HOME, { label: "Việc đã lưu" }],
     activeItemId: "jobs-saved",
     matches: (pathname) => isExact(pathname, "/candidate/jobs/saved"),
   },
@@ -225,12 +193,7 @@ const ROUTES: CandidateWorkspaceRouteConfig[] = [
     showTitleInHeader: true,
     title: "Việc phù hợp",
     description: "Tập trung các gợi ý việc làm cá nhân hóa và danh sách dự phòng mới nhất.",
-    breadcrumbs: [
-      WORKSPACE_HOME,
-      { label: "Việc của tôi", href: "/candidate/jobs/applied" },
-      { label: "Việc phù hợp" },
-    ],
-    activeGroupId: "jobs",
+    breadcrumbs: [WORKSPACE_HOME, { label: "Việc phù hợp" }],
     activeItemId: "jobs-recommended",
     matches: (pathname) => isExact(pathname, "/candidate/jobs/recommended"),
   },
@@ -245,8 +208,7 @@ const ROUTES: CandidateWorkspaceRouteConfig[] = [
       { label: "Cài đặt", href: "/candidate/settings/notifications" },
       { label: "Thông báo" },
     ],
-    activeGroupId: "settings",
-    activeItemId: "settings-notifications",
+    activeItemId: "settings",
     matches: (pathname) =>
       isExact(pathname, "/candidate/settings") ||
       isExact(pathname, "/candidate/settings/notifications"),
@@ -262,8 +224,7 @@ const ROUTES: CandidateWorkspaceRouteConfig[] = [
       { label: "Cài đặt", href: "/candidate/settings/notifications" },
       { label: "Bảo mật" },
     ],
-    activeGroupId: "settings",
-    activeItemId: "settings-security",
+    activeItemId: "settings",
     matches: (pathname) => isExact(pathname, "/candidate/settings/security"),
   },
   {
@@ -286,34 +247,17 @@ function getDefaultWorkspaceModel(): CandidateWorkspaceRouteConfig {
   };
 }
 
-function cloneSidebarItems(
-  activeItemId: string | null,
-  activeGroupId: string | null
-): Array<CandidateWorkspaceLinkItem | CandidateWorkspaceGroupItem> {
-  return SIDEBAR_ITEMS.map((item) => {
-    if ("children" in item) {
-      return {
-        ...item,
-        isActive: item.id === activeGroupId,
-        children: item.children.map((child) => ({
-          ...child,
-          isActive: child.id === activeItemId,
-        })),
-      };
-    }
-
-    return {
-      ...item,
-      isActive: item.id === activeItemId,
-    };
-  });
+function cloneSidebarItems(activeItemId: string | null): CandidateWorkspaceLinkItem[] {
+  return SIDEBAR_ITEMS.map((item) => ({
+    ...item,
+    isActive: item.id === activeItemId,
+  }));
 }
 
 export function getCandidateWorkspaceModel(pathname: string | null | undefined): CandidateWorkspaceModel {
   const nextPathname = normalizePathname(pathname);
   const route = ROUTES.find((candidateRoute) => candidateRoute.matches(nextPathname)) || getDefaultWorkspaceModel();
   const activeItemId = route.activeItemId ?? null;
-  const activeGroupId = route.activeGroupId ?? null;
 
   return {
     pathname: nextPathname,
@@ -325,7 +269,7 @@ export function getCandidateWorkspaceModel(pathname: string | null | undefined):
     description: route.description ?? null,
     breadcrumbs: route.breadcrumbs,
     activeItemId,
-    activeGroupId,
-    sidebarItems: cloneSidebarItems(activeItemId, activeGroupId),
+    activeGroupId: null,
+    sidebarItems: cloneSidebarItems(activeItemId),
   };
 }

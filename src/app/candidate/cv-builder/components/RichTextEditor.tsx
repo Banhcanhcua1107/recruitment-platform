@@ -29,7 +29,7 @@ export function RichTextEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit.configure({ bulletList: { keepMarks: true } }),
+      StarterKit,
       Underline,
     ],
     content,

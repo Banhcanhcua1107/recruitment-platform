@@ -1,5 +1,6 @@
 export function shouldLoadResumeList(templateId: string | null) {
-  return !templateId;
+  void templateId;
+  return true;
 }
 
 export function shouldStartTemplateCreation(input: {
@@ -7,17 +8,21 @@ export function shouldStartTemplateCreation(input: {
   isCreating: boolean;
   startedTemplateId: string | null;
 }) {
-  const { templateId, isCreating, startedTemplateId } = input;
+  void input;
+  return false;
+}
+
+export function shouldCreateResumeFromTemplateSelection(input: {
+  templateId: string | null;
+  creatingTemplateId: string | null;
+}) {
+  const { templateId, creatingTemplateId } = input;
 
   if (!templateId) {
     return false;
   }
 
-  if (isCreating) {
-    return false;
-  }
-
-  if (startedTemplateId === templateId) {
+  if (creatingTemplateId) {
     return false;
   }
 

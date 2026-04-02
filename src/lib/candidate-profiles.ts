@@ -33,11 +33,30 @@ import type {
 } from "@/types/candidate-profile";
 
 const APPLICATION_BUCKET = "cv_uploads";
+const PUBLIC_CANDIDATE_SEARCH_CACHE_TTL_MS = Math.max(
+  1_000,
+  Number(process.env.PUBLIC_CANDIDATE_SEARCH_CACHE_TTL_MS || 30_000)
+);
+const PUBLIC_CANDIDATE_SEARCH_CACHE_MAX_ENTRIES = Math.max(
+  10,
+  Number(process.env.PUBLIC_CANDIDATE_SEARCH_CACHE_MAX_ENTRIES || 80)
+);
+const PUBLIC_CANDIDATE_SEARCH_FETCH_LIMIT = Math.max(
+  30,
+  Number(process.env.PUBLIC_CANDIDATE_SEARCH_FETCH_LIMIT || 120)
+);
 const ALLOWED_CV_CONTENT_TYPES = new Set([
   "application/pdf",
   "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
+
+type PublicCandidateSearchCacheEntry = {
+  expiresAt: number;
+  items: PublicCandidateSearchResult[];
+};
+
+const PUBLIC_CANDIDATE_SEARCH_CACHE = new Map<string, PublicCandidateSearchCacheEntry>();
 
 const PROFILE_SELECT = [
   "id",
@@ -106,6 +125,36 @@ function normalizeString(value: unknown) {
   }
 
   return String(value).trim();
+}
+
+function escapeIlikePattern(value: string) {
+  return value.replace(/[%_]+/g, " ").trim();
+}
+
+function buildPublicCandidateSearchCacheKey(filters: PublicCandidateSearchFilters) {
+  return JSON.stringify({
+    name: normalizeString(filters.name).toLowerCase(),
+    skills: normalizeString(filters.skills).toLowerCase(),
+    headline: normalizeString(filters.headline).toLowerCase(),
+    experience: normalizeString(filters.experience).toLowerCase(),
+    keywords: normalizeString(filters.keywords).toLowerCase(),
+  });
+}
+
+function sweepPublicCandidateSearchCache(now = Date.now()) {
+  for (const [key, entry] of PUBLIC_CANDIDATE_SEARCH_CACHE.entries()) {
+    if (entry.expiresAt <= now) {
+      PUBLIC_CANDIDATE_SEARCH_CACHE.delete(key);
+    }
+  }
+
+  while (PUBLIC_CANDIDATE_SEARCH_CACHE.size > PUBLIC_CANDIDATE_SEARCH_CACHE_MAX_ENTRIES) {
+    const firstKey = PUBLIC_CANDIDATE_SEARCH_CACHE.keys().next().value;
+    if (!firstKey) {
+      break;
+    }
+    PUBLIC_CANDIDATE_SEARCH_CACHE.delete(firstKey);
+  }
 }
 
 function getDisplayName(user: User, authProfile?: AuthProfileRow | null) {
@@ -589,21 +638,10 @@ export async function searchPublicCandidateProfiles(
   filters: PublicCandidateSearchFilters
 ): Promise<PublicCandidateSearchResult[]> {
   const { supabase } = await getAuthenticatedContext("hr");
-  const { data, error } = await supabase
-    .from("candidate_profiles")
-    .select(PROFILE_SELECT)
-    .eq("profile_visibility", "public")
-    .order("updated_at", { ascending: false })
-    .limit(100);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const rows = (data ?? []) as unknown as CandidateProfileRow[];
   const nameFilter = normalizeString(filters.name).toLowerCase();
   const headlineFilter = normalizeString(filters.headline).toLowerCase();
   const experienceFilter = normalizeString(filters.experience).toLowerCase();
+  const keywordFilter = normalizeString(filters.keywords).toLowerCase();
   const keywordTokens = normalizeString(filters.keywords)
     .toLowerCase()
     .split(/\s+/)
@@ -613,51 +651,122 @@ export async function searchPublicCandidateProfiles(
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 
-  return rows
-    .map((row) => toPublicCandidateSearchResult(row))
-    .filter((profile) => {
-      const haystack = [
-        profile.fullName,
-        profile.headline,
-        profile.location,
-        profile.introduction,
-        profile.workExperience,
-        profile.education,
-        profile.workExperiences
-          .map((item) => [item.title, item.company, item.description].filter(Boolean).join(" "))
-          .join(" "),
-        profile.skills.join(" "),
-      ]
-        .join(" ")
-        .toLowerCase();
+  const cacheKey = buildPublicCandidateSearchCacheKey(filters);
+  const now = Date.now();
+  const cachedEntry = PUBLIC_CANDIDATE_SEARCH_CACHE.get(cacheKey);
+  if (cachedEntry && cachedEntry.expiresAt > now) {
+    return cachedEntry.items;
+  }
 
-      if (nameFilter && !profile.fullName.toLowerCase().includes(nameFilter)) {
+  sweepPublicCandidateSearchCache(now);
+
+  let query = supabase
+    .from("candidate_profiles")
+    .select(PROFILE_SELECT)
+    .eq("profile_visibility", "public")
+    .order("updated_at", { ascending: false })
+    .limit(PUBLIC_CANDIDATE_SEARCH_FETCH_LIMIT);
+
+  if (nameFilter) {
+    query = query.ilike("full_name", `%${escapeIlikePattern(nameFilter)}%`);
+  }
+
+  if (headlineFilter) {
+    query = query.ilike("headline", `%${escapeIlikePattern(headlineFilter)}%`);
+  }
+
+  if (experienceFilter) {
+    query = query.ilike("work_experience", `%${escapeIlikePattern(experienceFilter)}%`);
+  }
+
+  if (keywordFilter) {
+    const escapedKeyword = escapeIlikePattern(keywordFilter);
+    query = query.or(
+      [
+        `full_name.ilike.%${escapedKeyword}%`,
+        `headline.ilike.%${escapedKeyword}%`,
+        `location.ilike.%${escapedKeyword}%`,
+        `introduction.ilike.%${escapedKeyword}%`,
+        `work_experience.ilike.%${escapedKeyword}%`,
+        `education.ilike.%${escapedKeyword}%`,
+      ].join(",")
+    );
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const rows = (data ?? []) as unknown as CandidateProfileRow[];
+  const normalizedRows = rows.map((row) => {
+    const profile = toPublicCandidateSearchResult(row);
+    const lowerFullName = profile.fullName.toLowerCase();
+    const lowerHeadline = profile.headline.toLowerCase();
+    const lowerWorkExperience = profile.workExperience.toLowerCase();
+    const lowerSkills = profile.skills.map((skill) => skill.toLowerCase());
+    const haystack = [
+      profile.fullName,
+      profile.headline,
+      profile.location,
+      profile.introduction,
+      profile.workExperience,
+      profile.education,
+      profile.workExperiences
+        .map((item) => [item.title, item.company, item.description].filter(Boolean).join(" "))
+        .join(" "),
+      profile.skills.join(" "),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return {
+      profile,
+      lowerFullName,
+      lowerHeadline,
+      lowerWorkExperience,
+      lowerSkills,
+      haystack,
+    };
+  });
+
+  const filtered = normalizedRows
+    .filter((entry) => {
+      if (nameFilter && !entry.lowerFullName.includes(nameFilter)) {
         return false;
       }
 
-      if (headlineFilter && !profile.headline.toLowerCase().includes(headlineFilter)) {
+      if (headlineFilter && !entry.lowerHeadline.includes(headlineFilter)) {
         return false;
       }
 
-      if (experienceFilter && !profile.workExperience.toLowerCase().includes(experienceFilter)) {
+      if (experienceFilter && !entry.lowerWorkExperience.includes(experienceFilter)) {
         return false;
       }
 
       if (
         skillTokens.length > 0 &&
-        !skillTokens.every((token) =>
-          profile.skills.some((skill) => skill.toLowerCase().includes(token))
-        )
+        !skillTokens.every((token) => entry.lowerSkills.some((skill) => skill.includes(token)))
       ) {
         return false;
       }
 
-      if (keywordTokens.length > 0 && !keywordTokens.every((token) => haystack.includes(token))) {
+      if (keywordTokens.length > 0 && !keywordTokens.every((token) => entry.haystack.includes(token))) {
         return false;
       }
 
       return true;
-    });
+    })
+    .map((entry) => entry.profile);
+
+  PUBLIC_CANDIDATE_SEARCH_CACHE.set(cacheKey, {
+    expiresAt: now + PUBLIC_CANDIDATE_SEARCH_CACHE_TTL_MS,
+    items: filtered,
+  });
+  sweepPublicCandidateSearchCache(now);
+
+  return filtered;
 }
 
 export async function getRecruiterCandidateProfile(

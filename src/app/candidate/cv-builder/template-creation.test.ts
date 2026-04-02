@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const {
+  shouldCreateResumeFromTemplateSelection,
   shouldLoadResumeList,
   shouldStartTemplateCreation,
 } = require(path.join(
@@ -15,7 +16,7 @@ const {
 ));
 
 assert.equal(shouldLoadResumeList(null), true);
-assert.equal(shouldLoadResumeList("template-1"), false);
+assert.equal(shouldLoadResumeList("template-1"), true);
 
 assert.equal(
   shouldStartTemplateCreation({
@@ -23,7 +24,7 @@ assert.equal(
     isCreating: false,
     startedTemplateId: null,
   }),
-  true,
+  false,
 );
 
 assert.equal(
@@ -49,6 +50,38 @@ assert.equal(
     templateId: null,
     isCreating: false,
     startedTemplateId: null,
+  }),
+  false,
+);
+
+assert.equal(
+  shouldCreateResumeFromTemplateSelection({
+    templateId: "template-1",
+    creatingTemplateId: null,
+  }),
+  true,
+);
+
+assert.equal(
+  shouldCreateResumeFromTemplateSelection({
+    templateId: "template-1",
+    creatingTemplateId: "template-1",
+  }),
+  false,
+);
+
+assert.equal(
+  shouldCreateResumeFromTemplateSelection({
+    templateId: "template-1",
+    creatingTemplateId: "template-2",
+  }),
+  false,
+);
+
+assert.equal(
+  shouldCreateResumeFromTemplateSelection({
+    templateId: null,
+    creatingTemplateId: null,
   }),
   false,
 );

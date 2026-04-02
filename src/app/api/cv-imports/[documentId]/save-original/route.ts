@@ -87,7 +87,13 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json({
       cvUrl: saved.cvUrl,
       filePath: saved.filePath,
+      fileName: saved.fileName,
       message: "Đã lưu CV để dùng khi ứng tuyển nhà tuyển dụng.",
+      links: {
+        profile: "/candidate/profile",
+        cvDownload: saved.cvUrl,
+        cvBuilder: "/candidate/cv-builder",
+      },
     });
   } catch (error) {
     const message =

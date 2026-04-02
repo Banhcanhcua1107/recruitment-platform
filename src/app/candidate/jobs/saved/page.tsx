@@ -6,7 +6,7 @@ export default async function CandidateSavedJobsPage() {
   const savedJobs = await getCandidateSavedJobs();
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <CandidateJobsTabs activeTab="saved" />
       <CandidateSavedJobsPanel items={savedJobs} />
     </div>

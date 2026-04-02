@@ -22,15 +22,15 @@ export default async function CandidateRecommendedJobsPage() {
   const jobs = publicJobs.map((job) => toDashboardJob(job));
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <CandidateJobsTabs activeTab="recommended" />
-      <section className="rounded-[30px] border border-slate-200 bg-white px-5 py-5 shadow-[0_24px_60px_-42px_rgba(15,23,42,0.25)] sm:px-6">
+      <section className="rounded-3xl border border-slate-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.95))] px-5 py-5 shadow-[0_18px_35px_-28px_rgba(15,23,42,0.22)] sm:px-6">
         <p className="text-sm font-semibold leading-7 text-slate-500">
           Gợi ý việc làm tiếp tục dùng cùng nguồn dữ liệu và nút phân tích AI hiện có của candidate dashboard.
           Khi bạn làm mới phân tích, kết quả mới nhất cũng sẽ được dùng lại tại trang này.
         </p>
       </section>
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.28)]">
+      <section className="rounded-[26px] border border-slate-200/90 bg-white p-5 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.26)] sm:p-6">
         <RecommendedJobs jobs={jobs} />
       </section>
     </div>

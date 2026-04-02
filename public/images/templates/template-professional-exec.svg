@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 860" role="img" aria-labelledby="titleE descE">
+  <title id="titleE">Professional Executive CV Preview</title>
+  <desc id="descE">A professional executive CV template preview.</desc>
+  <rect width="620" height="860" fill="#edf2f7"/>
+  <rect x="36" y="30" width="548" height="800" rx="16" fill="#ffffff" stroke="#d8e1ea"/>
+  <rect x="36" y="30" width="548" height="126" rx="16" fill="#0f172a"/>
+  <rect x="64" y="62" width="280" height="30" rx="6" fill="#ffffff"/>
+  <rect x="64" y="102" width="210" height="12" rx="4" fill="#cbd5e1"/>
+  <rect x="64" y="182" width="160" height="16" rx="5" fill="#0f172a"/>
+  <rect x="64" y="208" width="492" height="11" rx="4" fill="#e2e8f0"/>
+  <rect x="64" y="225" width="478" height="11" rx="4" fill="#e2e8f0"/>
+  <rect x="64" y="242" width="488" height="11" rx="4" fill="#e2e8f0"/>
+  <rect x="64" y="278" width="180" height="16" rx="5" fill="#0f172a"/>
+  <rect x="64" y="304" width="492" height="11" rx="4" fill="#dbeafe"/>
+  <rect x="64" y="321" width="492" height="11" rx="4" fill="#dbeafe"/>
+  <rect x="64" y="338" width="492" height="11" rx="4" fill="#dbeafe"/>
+  <rect x="64" y="374" width="130" height="16" rx="5" fill="#0f172a"/>
+  <rect x="64" y="402" width="232" height="154" rx="10" fill="#f8fafc" stroke="#d8e1ea"/>
+  <rect x="324" y="402" width="232" height="154" rx="10" fill="#f8fafc" stroke="#d8e1ea"/>
+  <rect x="64" y="584" width="492" height="210" rx="12" fill="#f8fafc" stroke="#d8e1ea"/>
+</svg>

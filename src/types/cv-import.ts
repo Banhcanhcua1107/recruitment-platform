@@ -636,7 +636,13 @@ export interface SaveEditableCVResponse {
 export interface SaveOriginalCVResponse {
   cvUrl: string;
   filePath: string;
+  fileName?: string;
   message: string;
+  links?: {
+    profile: string;
+    cvDownload: string;
+    cvBuilder: string;
+  };
 }
 
 export interface UpdateEditableBlockRequest {

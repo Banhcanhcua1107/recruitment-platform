@@ -10,7 +10,7 @@ export default function CandidateRouteLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-[#f6f7f8]">
+    <div className="flex min-h-screen flex-col bg-transparent">
       <Navbar />
       <CandidateLayoutShell>{children}</CandidateLayoutShell>
     </div>

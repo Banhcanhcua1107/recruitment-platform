@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { CandidateApplicationDetailModal } from "@/components/candidate/CandidateApplicationDetailModal";
+import { StatusBadge } from "@/components/recruitment/StatusBadge";
+import { buttonVariants } from "@/components/ui/button";
 import { useCandidateApplications } from "@/hooks/useCandidateApplications";
 import type { Application, ApplicationStatus } from "@/types/dashboard";
+import type { RecruitmentPipelineStatus } from "@/types/recruitment";
 
 const FILTERS = [
   { value: "all", label: "Tất cả" },
@@ -15,30 +19,43 @@ const FILTERS = [
   { value: "rejected", label: "Từ chối" },
 ] as const;
 
-const STATUS_BADGES: Record<ApplicationStatus, { label: string; className: string }> = {
-  pending: { label: "Đã nộp", className: "bg-sky-50 text-sky-700 border-sky-200" },
-  viewed: { label: "Đang xem xét", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  interviewing: { label: "Phỏng vấn", className: "bg-violet-50 text-violet-700 border-violet-200" },
-  offered: { label: "Đề nghị", className: "bg-orange-50 text-orange-700 border-orange-200" },
-  rejected: { label: "Từ chối", className: "bg-rose-50 text-rose-700 border-rose-200" },
-  new: { label: "Đã nộp", className: "bg-sky-50 text-sky-700 border-sky-200" },
-  applied: { label: "Đã nộp", className: "bg-sky-50 text-sky-700 border-sky-200" },
-  reviewing: { label: "Đang xem xét", className: "bg-amber-50 text-amber-700 border-amber-200" },
-  interview: { label: "Phỏng vấn", className: "bg-violet-50 text-violet-700 border-violet-200" },
-  offer: { label: "Đề nghị", className: "bg-orange-50 text-orange-700 border-orange-200" },
-  hired: { label: "Đã tuyển", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-};
+function normalizeApplicationStatus(status: ApplicationStatus): RecruitmentPipelineStatus {
+  switch (status) {
+    case "pending":
+    case "new":
+    case "applied":
+      return "applied";
+    case "viewed":
+    case "reviewing":
+      return "reviewing";
+    case "interviewing":
+    case "interview":
+      return "interview";
+    case "offered":
+    case "offer":
+      return "offer";
+    case "hired":
+      return "hired";
+    case "rejected":
+    default:
+      return "rejected";
+  }
+}
 
 export default function CandidateApplicationsPage() {
   const { applications, isLoading, error } = useCandidateApplications();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["value"]>("all");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const itemsPerPage = 8;
 
   const filteredApplications = useMemo(() => {
     return applications.filter((application) => {
-      if (filter !== "all" && application.status !== filter) {
+      if (
+        filter !== "all" &&
+        normalizeApplicationStatus(application.status) !== filter
+      ) {
         return false;
       }
 
@@ -61,16 +78,17 @@ export default function CandidateApplicationsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1360px] space-y-10 px-6 py-10 lg:px-10">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-black text-slate-900 lg:text-4xl">Việc đã ứng tuyển</h1>
-        <p className="text-lg font-medium text-slate-500">
+    <div className="w-full space-y-7 pb-2 pt-1">
+      <div className="space-y-2 rounded-3xl border border-slate-200/90 bg-white/90 px-5 py-5 shadow-[0_18px_34px_-26px_rgba(15,23,42,0.2)]">
+        <h1 className="text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">Việc đã ứng tuyển</h1>
+        <p className="text-sm font-medium leading-7 text-slate-500 sm:text-base">
           Theo dõi trạng thái hồ sơ theo thời gian thực và mở chi tiết từng đơn ứng tuyển.
         </p>
       </div>
 
-      <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-center">
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="rounded-3xl border border-slate-200/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,252,0.95))] p-4 shadow-[0_18px_35px_-28px_rgba(15,23,42,0.22)] sm:p-5">
+        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+          <div className="flex flex-wrap items-center gap-2.5">
           {FILTERS.map((item) => (
             <button
               key={item.value}
@@ -79,63 +97,64 @@ export default function CandidateApplicationsPage() {
                 setCurrentPage(1);
               }}
               className={[
-                "rounded-full px-6 py-2.5 text-base font-black transition-all",
+                "rounded-full px-4 py-2.5 text-sm font-bold transition-all",
                 filter === item.value
-                  ? "bg-primary text-white shadow-lg shadow-primary/20"
-                  : "border border-slate-200 bg-white text-slate-500 hover:border-primary hover:text-primary",
+                  ? "bg-primary text-white shadow-[0_14px_30px_-22px_rgba(37,99,235,0.58)]"
+                  : "bg-white text-slate-600 hover:text-slate-900",
               ].join(" ")}
             >
               {item.label}
             </button>
           ))}
-        </div>
+          </div>
 
-        <div className="relative w-full lg:max-w-md">
-          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-2xl text-slate-400">
-            search
-          </span>
-          <input
-            type="text"
-            placeholder="Tìm tên công việc hoặc công ty"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full rounded-[20px] border border-slate-200 bg-white py-4 pl-12 pr-6 text-lg font-bold outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10"
-          />
+          <div className="relative w-full lg:max-w-md">
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[22px] text-slate-400">
+              search
+            </span>
+            <input
+              type="text"
+              placeholder="Tìm tên công việc hoặc công ty"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full rounded-[18px] border border-slate-200 bg-white py-3.5 pl-12 pr-5 text-base font-semibold text-slate-900 outline-none transition-all focus:border-primary focus:ring-4 focus:ring-primary/10"
+            />
+          </div>
         </div>
       </div>
 
       {isLoading ? (
         <div className="space-y-4">
           {[1, 2, 3, 4].map((item) => (
-            <div key={item} className="h-24 animate-pulse rounded-[32px] bg-slate-50" />
+            <div key={item} className="h-24 animate-pulse rounded-4xl bg-slate-50" />
           ))}
         </div>
       ) : error ? (
-        <div className="rounded-[24px] border border-rose-200 bg-rose-50 p-6 text-center font-semibold text-rose-700">
+        <div className="rounded-3xl border border-rose-200 bg-rose-50 p-6 text-center font-semibold text-rose-700">
           {error}
         </div>
       ) : (
-        <div className="min-h-[400px] overflow-hidden rounded-[32px] border border-slate-100 bg-white shadow-[0_20px_50px_rgba(0,0,0,0.04)]">
+        <div className="min-h-100 overflow-hidden rounded-[26px] border border-slate-200/85 bg-white shadow-[0_20px_40px_-30px_rgba(15,23,42,0.28)]">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="px-8 py-6 text-sm font-black uppercase tracking-widest text-slate-400">
+                  <th className="px-6 py-5 text-xs font-black uppercase tracking-[0.2em] text-slate-400 sm:px-8">
                     Tên việc làm
                   </th>
-                  <th className="px-8 py-6 text-sm font-black uppercase tracking-widest text-slate-400">
+                  <th className="px-6 py-5 text-xs font-black uppercase tracking-[0.2em] text-slate-400 sm:px-8">
                     Công ty
                   </th>
-                  <th className="px-8 py-6 text-sm font-black uppercase tracking-widest text-slate-400">
+                  <th className="px-6 py-5 text-xs font-black uppercase tracking-[0.2em] text-slate-400 sm:px-8">
                     Ngày nộp
                   </th>
-                  <th className="px-8 py-6 text-sm font-black uppercase tracking-widest text-slate-400">
+                  <th className="px-6 py-5 text-xs font-black uppercase tracking-[0.2em] text-slate-400 sm:px-8">
                     Trạng thái
                   </th>
-                  <th className="px-8 py-6 text-right text-sm font-black uppercase tracking-widest text-slate-400">
+                  <th className="px-6 py-5 text-right text-xs font-black uppercase tracking-[0.2em] text-slate-400 sm:px-8">
                     Hành động
                   </th>
                 </tr>
@@ -156,7 +175,11 @@ export default function CandidateApplicationsPage() {
                   </tr>
                 ) : (
                   paginatedApplications.map((application) => (
-                    <ApplicationRow key={application.id} application={application} />
+                    <ApplicationRow
+                      key={application.id}
+                      application={application}
+                      onOpenDetail={setSelectedApplication}
+                    />
                   ))
                 )}
               </tbody>
@@ -165,12 +188,18 @@ export default function CandidateApplicationsPage() {
         </div>
       )}
 
+      <CandidateApplicationDetailModal
+        isOpen={Boolean(selectedApplication)}
+        application={selectedApplication}
+        onClose={() => setSelectedApplication(null)}
+      />
+
       {filteredApplications.length > itemsPerPage ? (
-        <div className="flex flex-col items-center justify-between gap-6 pt-4 sm:flex-row">
-          <p className="text-lg font-bold italic text-slate-400">
+        <div className="flex flex-col items-center justify-between gap-4 pt-1 sm:flex-row">
+          <p className="text-sm font-semibold text-slate-500 sm:text-base">
             Hiển thị{" "}
-            <span className="font-black text-slate-900">{paginatedApplications.length}</span>{" "}
-            trên tổng số{" "}
+            <span className="font-black text-slate-900">{paginatedApplications.length}</span>
+            {" "}trên tổng số{" "}
             <span className="font-black text-slate-900">{filteredApplications.length}</span>{" "}
             đơn
           </p>
@@ -200,8 +229,14 @@ export default function CandidateApplicationsPage() {
   );
 }
 
-function ApplicationRow({ application }: { application: Application }) {
-  const badge = STATUS_BADGES[application.status] ?? STATUS_BADGES.applied;
+function ApplicationRow({
+  application,
+  onOpenDetail,
+}: {
+  application: Application;
+  onOpenDetail: (application: Application) => void;
+}) {
+  const normalizedStatus = normalizeApplicationStatus(application.status);
 
   return (
     <tr className="group transition-colors hover:bg-slate-50/80">
@@ -242,19 +277,29 @@ function ApplicationRow({ application }: { application: Application }) {
         {new Date(application.created_at).toLocaleDateString("vi-VN")}
       </td>
       <td className="px-8 py-6">
-        <span className={`inline-flex rounded-xl border px-4 py-1.5 text-xs font-black uppercase tracking-widest ${badge.className}`}>
-          {badge.label}
-        </span>
+        <StatusBadge status={normalizedStatus} />
       </td>
       <td className="px-8 py-6 text-right">
-        <Link href={`/candidate/applications/${application.id}`}>
-          <button className="group/btn inline-flex cursor-pointer items-center gap-1 text-base font-black text-primary hover:text-primary-dark">
+        <div className="inline-flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenDetail(application)}
+            className={buttonVariants("outline", "sm")}
+          >
+            <span className="material-symbols-outlined text-[18px]">manage_search</span>
             Xem chi tiết
-            <span className="material-symbols-outlined text-xl transition-transform group-hover/btn:translate-x-1">
-              chevron_right
-            </span>
           </button>
-        </Link>
+
+          <a
+            href={`/api/applications/${application.id}/cv`}
+            target="_blank"
+            rel="noreferrer"
+            className={buttonVariants("default", "sm")}
+          >
+            <span className="material-symbols-outlined text-[18px]">description</span>
+            Xem CV
+          </a>
+        </div>
       </td>
     </tr>
   );

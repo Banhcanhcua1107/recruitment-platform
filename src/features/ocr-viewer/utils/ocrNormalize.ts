@@ -375,7 +375,7 @@ function mappedText(value: unknown) {
   return toStringValue(value);
 }
 
-function mappedList(value: unknown) {
+function mappedList(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value.flatMap((item) => mappedList(item));
   }
@@ -715,7 +715,7 @@ function normalizePersistedResult(raw: Record<string, unknown>): NormalizedOcrRe
       })
     : [];
 
-  let blocks = sourceBlocks.flatMap((candidate, blockIndex) => {
+  let blocks: NormalizedOcrBlock[] = sourceBlocks.flatMap((candidate, blockIndex) => {
     if (!objectWithKeys(candidate)) return [];
     const pageIndex = inferPageIndex(candidate.page ?? candidate.pageIndex ?? candidate.page_num, 0);
     const polygon = inferPolygonFromNode(candidate);

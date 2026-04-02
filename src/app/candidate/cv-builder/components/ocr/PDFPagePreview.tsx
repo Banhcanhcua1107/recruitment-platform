@@ -180,7 +180,7 @@ export const PDFPagePreview = memo(function PDFPagePreview({
                   setPdfError(null);
                   setPdfTotalPages(numPages || 0);
                 }}
-                onLoadError={(error) => {
+                onLoadError={(error: unknown) => {
                   setPdfError(
                     toPublicPdfError(
                       error instanceof Error ? error.message : "Không thể tải preview PDF.",

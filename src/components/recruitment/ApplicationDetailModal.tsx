@@ -103,6 +103,18 @@ function mapIncomingStatus(status: string): RecruitmentPipelineStatus {
   }
 }
 
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(new Date(value));
+}
+
 async function requestApplicationDetail(
   applicationId: string,
   signal?: AbortSignal
@@ -414,82 +426,77 @@ export function ApplicationDetailModal({
                   {error}
                 </div>
               ) : (
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
-                  <div className="space-y-4">
-                    <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <h3 className="text-base font-bold text-slate-900">Thông tin ứng viên</h3>
-                      <div className="space-y-2 text-sm text-slate-600">
-                        <p>
-                          <span className="font-semibold text-slate-900">Họ tên:</span> {candidateName}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-slate-900">Email:</span>{" "}
-                          {candidateEmail || "Chưa có email"}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-slate-900">Số điện thoại:</span>{" "}
-                          {candidatePhone || "Chưa có số điện thoại"}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-slate-900">Kinh nghiệm:</span>{" "}
-                          <span className="wrap-anywhere">
-                            {candidateExperience}
-                          </span>
-                        </p>
-                      </div>
-                    </section>
-
-                    <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <h3 className="text-base font-bold text-slate-900">Tin nhắn ứng viên</h3>
-                      <p className="overflow-x-hidden whitespace-pre-wrap wrap-anywhere text-sm leading-6 text-slate-600">
+                <div className="space-y-4">
+                  <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="text-base font-bold text-slate-900">Thông tin ứng viên đã gửi</h3>
+                    <div className="space-y-2 text-sm text-slate-600">
+                      <p>
+                        <span className="font-semibold text-slate-900">Họ tên:</span> {candidateName}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-slate-900">Email:</span>{" "}
+                        {candidateEmail || "Chưa có email"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-slate-900">Số điện thoại:</span>{" "}
+                        {candidatePhone || "Chưa có số điện thoại"}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-slate-900">Kinh nghiệm:</span>{" "}
+                        <span className="wrap-anywhere">{candidateExperience}</span>
+                      </p>
+                      <p className="overflow-x-hidden whitespace-pre-wrap wrap-anywhere">
+                        <span className="font-semibold text-slate-900">Giới thiệu:</span>{" "}
                         {candidateMessage}
                       </p>
-                    </section>
+                    </div>
+                  </section>
 
-                    <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <h3 className="text-base font-bold text-slate-900">Tệp CV</h3>
-                      {resumeUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => window.open(resumeUrl, "_blank", "noopener,noreferrer")}
-                          className="flex w-full items-center gap-2 rounded-lg border border-slate-200 p-3 text-left transition hover:bg-slate-50"
-                        >
-                          <span className="material-symbols-outlined text-[18px] text-primary">
-                            description
-                          </span>
-                          <span className="font-medium text-primary underline underline-offset-4">
-                            {resumeFileName}
-                          </span>
-                        </button>
-                      ) : (
-                        <p className="text-sm text-slate-500">Ứng viên chưa đính kèm CV cho đơn này.</p>
-                      )}
-                    </section>
-                  </div>
+                  <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="text-base font-bold text-slate-900">Tệp CV đã nộp</h3>
+                    {resumeUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => window.open(resumeUrl, "_blank", "noopener,noreferrer")}
+                        className="flex w-full items-center gap-2 rounded-lg border border-slate-200 p-3 text-left transition hover:bg-slate-50"
+                      >
+                        <span className="material-symbols-outlined text-[18px] text-primary">
+                          description
+                        </span>
+                        <span className="font-medium text-primary underline underline-offset-4">
+                          {resumeFileName}
+                        </span>
+                      </button>
+                    ) : (
+                      <p className="text-sm text-slate-500">Ứng viên chưa đính kèm CV cho đơn này.</p>
+                    )}
+                  </section>
 
-                  <div className="space-y-4">
-                    <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <h3 className="text-base font-bold text-slate-900">Thông tin công việc ứng tuyển</h3>
-                      <div className="space-y-2 text-sm text-slate-600">
-                        <p>
-                          <span className="font-semibold text-slate-900">Vị trí:</span> {jobTitle}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-slate-900">Công ty:</span> {companyName}
-                        </p>
-                        <p>
-                          <span className="font-semibold text-slate-900">Địa điểm:</span> {location}
-                        </p>
-                      </div>
-                    </section>
+                  <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="text-base font-bold text-slate-900">Thông tin công việc đã ứng tuyển</h3>
+                    <div className="space-y-2 text-sm text-slate-600">
+                      <p>
+                        <span className="font-semibold text-slate-900">Vị trí:</span> {jobTitle}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-slate-900">Công ty:</span> {companyName}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-slate-900">Địa điểm:</span> {location}
+                      </p>
+                      <p>
+                        <span className="font-semibold text-slate-900">Ngày nộp:</span>{" "}
+                        {formatDateTime(detail?.appliedAt || application.appliedAt)}
+                      </p>
+                    </div>
 
-                    <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <h3 className="text-base font-bold text-slate-900">Mô tả công việc</h3>
-                      <div className="max-h-50 overflow-y-auto whitespace-pre-wrap wrap-anywhere pr-1 text-sm text-slate-600">
+                    <div className="space-y-2 border-t border-slate-200 pt-3">
+                      <p className="text-sm font-semibold text-slate-900">Nội dung công việc</p>
+                      <p className="overflow-x-hidden whitespace-pre-wrap wrap-anywhere text-sm leading-6 text-slate-600">
                         {detail?.job.description || "Chưa có mô tả công việc."}
-                      </div>
-                    </section>
-                  </div>
+                      </p>
+                    </div>
+                  </section>
                 </div>
               )}
             </div>

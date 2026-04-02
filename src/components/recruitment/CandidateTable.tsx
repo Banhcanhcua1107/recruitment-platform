@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ApplicationDetailModal } from "@/components/recruitment/ApplicationDetailModal";
 import { CandidateRow } from "@/components/recruitment/CandidateRow";
 import { PaginationBar } from "@/components/recruitment/PaginationBar";
@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type {
+  EmployerCandidateApplicationDetail,
   PaginatedResult,
   RecruitmentCandidate,
   RecruitmentPipelineStatus,
@@ -22,17 +23,38 @@ import type {
 interface CandidateTableProps {
   data: PaginatedResult<RecruitmentCandidate>;
   query: Record<string, string | undefined>;
+  focusApplicationId?: string;
 }
 
-export function CandidateTable({ data, query }: CandidateTableProps) {
-  const [items, setItems] = useState(data.items);
+export function CandidateTable({
+  data,
+  query,
+  focusApplicationId,
+}: CandidateTableProps) {
+  const [statusOverrides, setStatusOverrides] = useState<
+    Record<string, RecruitmentPipelineStatus>
+  >({});
   const [selectedApplication, setSelectedApplication] =
     useState<RecruitmentCandidate | null>(null);
   const [openDetail, setOpenDetail] = useState(false);
+  const [hasOpenedFocusApplication, setHasOpenedFocusApplication] = useState(false);
 
-  useEffect(() => {
-    setItems(data.items);
-  }, [data.items]);
+  const items = useMemo(
+    () =>
+      data.items.map((item) => {
+        const overriddenStatus = statusOverrides[item.applicationId];
+
+        if (!overriddenStatus) {
+          return item;
+        }
+
+        return {
+          ...item,
+          status: overriddenStatus,
+        };
+      }),
+    [data.items, statusOverrides],
+  );
 
   const handleOpenDetail = (candidate: RecruitmentCandidate) => {
     setSelectedApplication(candidate);
@@ -43,11 +65,10 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
     applicationId: string,
     status: RecruitmentPipelineStatus
   ) => {
-    setItems((current) =>
-      current.map((item) =>
-        item.applicationId === applicationId ? { ...item, status } : item
-      )
-    );
+    setStatusOverrides((current) => ({
+      ...current,
+      [applicationId]: status,
+    }));
 
     setSelectedApplication((current) =>
       current && current.applicationId === applicationId
@@ -56,9 +77,85 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
     );
   };
 
+  useEffect(() => {
+    setHasOpenedFocusApplication(false);
+  }, [focusApplicationId]);
+
+  useEffect(() => {
+    if (!focusApplicationId || hasOpenedFocusApplication) {
+      return;
+    }
+
+    const matchedApplication = items.find(
+      (item) => item.applicationId === focusApplicationId
+    );
+
+    if (matchedApplication) {
+      setSelectedApplication(matchedApplication);
+      setOpenDetail(true);
+      setHasOpenedFocusApplication(true);
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/applications/${encodeURIComponent(focusApplicationId)}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        const result = (await response.json()) as {
+          detail?: EmployerCandidateApplicationDetail;
+          error?: string;
+        };
+
+        if (!response.ok || !result.detail || !active) {
+          return;
+        }
+
+        const detail = result.detail;
+        const fallbackApplication: RecruitmentCandidate = {
+          applicationId: detail.applicationId,
+          candidateId: detail.candidateId,
+          candidateCode: detail.candidateCode,
+          fullName: detail.fullName,
+          email: detail.email,
+          phone: detail.phone,
+          resumeUrl: detail.resumeUrl,
+          introduction: detail.introduction,
+          coverLetter: detail.coverLetter,
+          appliedPosition: detail.job.title,
+          jobId: detail.job.id,
+          jobUrl: detail.job.url,
+          status: detail.status,
+          rawStatus: detail.rawStatus,
+          appliedAt: detail.appliedAt,
+          hasPublicProfile: false,
+        };
+
+        setSelectedApplication(fallbackApplication);
+        setOpenDetail(true);
+      } catch {
+        // Keep page usable even if deep-link lookup fails.
+      } finally {
+        if (active) {
+          setHasOpenedFocusApplication(true);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [focusApplicationId, hasOpenedFocusApplication, items]);
+
   return (
     <>
-      <Card className="overflow-hidden rounded-[36px] border-slate-200/80 shadow-[0_22px_60px_-36px_rgba(15,23,42,0.26)]">
+      <Card className="overflow-hidden rounded-[26px] border-slate-200/85 bg-white/95 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.24)]">
         <CardHeader className="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.98)_100%)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-2">
@@ -73,7 +170,7 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                   Tổng đơn
                 </p>
@@ -81,7 +178,7 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
                   {data.total}
                 </p>
               </div>
-              <div className="rounded-3xl border border-slate-200 bg-white px-4 py-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                   Mã ứng viên
                 </p>

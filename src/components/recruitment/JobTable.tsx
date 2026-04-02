@@ -17,11 +17,35 @@ import type { PaginatedResult, RecruitmentJob } from "@/types/recruitment";
 interface JobTableProps {
   data: PaginatedResult<RecruitmentJob>;
   query: Record<string, string | undefined>;
+  selectedJobId?: string | null;
 }
 
-export function JobTable({ data, query }: JobTableProps) {
+function buildJobsHref(query: Record<string, string | undefined>, nextViewJobId?: string) {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(query)) {
+    if (!value) {
+      continue;
+    }
+
+    if (key === "view") {
+      continue;
+    }
+
+    params.set(key, value);
+  }
+
+  if (nextViewJobId) {
+    params.set("view", nextViewJobId);
+  }
+
+  const queryString = params.toString();
+  return queryString ? `/hr/jobs?${queryString}` : "/hr/jobs";
+}
+
+export function JobTable({ data, query, selectedJobId }: JobTableProps) {
   return (
-    <Card className="overflow-hidden rounded-4xl border-slate-200/80 shadow-[0_22px_60px_-36px_rgba(15,23,42,0.18)]">
+    <Card className="overflow-hidden rounded-[26px] border-slate-200/85 bg-white/95 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.22)]">
       <CardHeader className="flex flex-row items-center justify-between gap-4 border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.98)_100%)]">
         <div>
           <CardTitle>Danh mục tin tuyển dụng</CardTitle>
@@ -72,7 +96,7 @@ export function JobTable({ data, query }: JobTableProps) {
                   <TableCell className="pl-6">
                     <div className="space-y-1">
                       <Link
-                        href={`/hr/jobs/${job.id}`}
+                        href={buildJobsHref(query, job.id)}
                         className="font-semibold text-slate-900 transition-colors hover:text-primary"
                       >
                         {job.title}
@@ -107,10 +131,10 @@ export function JobTable({ data, query }: JobTableProps) {
                   <TableCell className="w-66 pr-6">
                     <div className="flex justify-end gap-2">
                       <Link
-                        href={`/hr/jobs/${job.id}`}
-                        className={`${buttonVariants("outline", "sm")} whitespace-nowrap`}
+                        href={buildJobsHref(query, job.id)}
+                        className={`${buttonVariants(selectedJobId === job.id ? "default" : "outline", "sm")} whitespace-nowrap`}
                       >
-                        Chỉnh sửa
+                        Xem tin
                       </Link>
                       <form action={toggleJobPublicVisibilityAction}>
                         <input type="hidden" name="id" value={job.id} />

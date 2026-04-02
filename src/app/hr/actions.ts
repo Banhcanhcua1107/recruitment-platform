@@ -39,6 +39,21 @@ function parseList(raw: FormDataEntryValue | null) {
     .filter(Boolean);
 }
 
+function parsePositiveInteger(raw: FormDataEntryValue | null) {
+  if (!raw || typeof raw !== "string") {
+    return null;
+  }
+
+  const numeric = Number(raw.trim());
+
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  const normalized = Math.trunc(numeric);
+  return normalized > 0 ? normalized : null;
+}
+
 function parseJobInput(formData: FormData) {
   return {
     title: String(formData.get("title") ?? "").trim(),
@@ -59,6 +74,7 @@ function parseJobInput(formData: FormData) {
     ageRange: String(formData.get("ageRange") ?? "").trim() || null,
     fullAddress: String(formData.get("fullAddress") ?? "").trim() || null,
     sourceUrl: String(formData.get("sourceUrl") ?? "").trim() || null,
+    targetApplications: parsePositiveInteger(formData.get("targetApplications")),
   };
 }
 

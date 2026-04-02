@@ -15,6 +15,7 @@ interface CandidatesPageProps {
     position?: string;
     status?: string;
     page?: string;
+    applicationId?: string;
   }>;
 }
 
@@ -27,6 +28,7 @@ export default async function HRCandidatesPage({
   const position = params.position ?? "";
   const status = params.status ?? "all";
   const page = params.page ?? "1";
+  const applicationId = params.applicationId?.trim() ?? "";
 
   const [candidates, positions, pipeline] = await Promise.all([
     getEmployerCandidates({
@@ -52,7 +54,7 @@ export default async function HRCandidatesPage({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.24)]">
+      <section className="rounded-3xl border border-slate-200/90 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.12),transparent_30%),linear-gradient(135deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_20px_42px_-32px_rgba(15,23,42,0.28)]">
         <div className="space-y-3">
           <p className="text-sm font-semibold uppercase tracking-[0.3em] text-primary">
             Candidate operations
@@ -67,7 +69,7 @@ export default async function HRCandidatesPage({
         </div>
       </section>
 
-      <section className="grid auto-rows-fr gap-5 md:grid-cols-3">
+      <section className="grid auto-rows-fr gap-4 md:grid-cols-3">
         <DashboardStatsCard
           title="Ứng viên trong ATS"
           value={candidates.total}
@@ -107,7 +109,7 @@ export default async function HRCandidatesPage({
 
       {view === "pipeline" ? (
         <div className="space-y-6">
-          <Card className="rounded-[32px] border-slate-200/80 shadow-[0_22px_60px_-36px_rgba(15,23,42,0.18)]">
+          <Card className="rounded-3xl border-slate-200/85 bg-white/95 shadow-[0_18px_35px_-28px_rgba(15,23,42,0.2)]">
             <CardHeader className="border-b border-slate-200/80">
               <CardTitle>Bộ lọc ATS</CardTitle>
             </CardHeader>
@@ -139,7 +141,7 @@ export default async function HRCandidatesPage({
                 </Select>
 
                 <button
-                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:-translate-y-[1px] hover:border-primary/30 hover:bg-slate-50 active:translate-y-0"
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:-translate-y-px hover:border-primary/30 hover:bg-slate-50 active:translate-y-0"
                   type="submit"
                 >
                   Áp dụng
@@ -150,6 +152,7 @@ export default async function HRCandidatesPage({
 
           <CandidateTable
             data={candidates}
+            focusApplicationId={applicationId || undefined}
             query={{
               view,
               q: q || undefined,

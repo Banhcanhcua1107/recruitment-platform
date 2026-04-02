@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 860" role="img" aria-labelledby="titleC descC">
+  <title id="titleC">Minimal Grid CV Preview</title>
+  <desc id="descC">A minimalist CV template preview.</desc>
+  <rect width="620" height="860" fill="#f2f4f7"/>
+  <rect x="42" y="34" width="536" height="792" rx="14" fill="#ffffff" stroke="#d9dee7"/>
+  <rect x="72" y="70" width="250" height="28" rx="4" fill="#334155"/>
+  <rect x="72" y="108" width="200" height="12" rx="4" fill="#cbd5e1"/>
+  <rect x="72" y="142" width="476" height="1" fill="#d9dee7"/>
+  <rect x="72" y="168" width="120" height="14" rx="4" fill="#475569"/>
+  <rect x="72" y="190" width="476" height="10" rx="3" fill="#e2e8f0"/>
+  <rect x="72" y="206" width="476" height="10" rx="3" fill="#e2e8f0"/>
+  <rect x="72" y="222" width="450" height="10" rx="3" fill="#e2e8f0"/>
+  <rect x="72" y="258" width="150" height="14" rx="4" fill="#475569"/>
+  <rect x="72" y="280" width="476" height="10" rx="3" fill="#e2e8f0"/>
+  <rect x="72" y="296" width="476" height="10" rx="3" fill="#e2e8f0"/>
+  <rect x="72" y="312" width="430" height="10" rx="3" fill="#e2e8f0"/>
+  <rect x="72" y="350" width="120" height="14" rx="4" fill="#475569"/>
+  <rect x="72" y="374" width="226" height="170" rx="8" fill="#f8fafc" stroke="#d9dee7"/>
+  <rect x="322" y="374" width="226" height="170" rx="8" fill="#f8fafc" stroke="#d9dee7"/>
+  <rect x="72" y="570" width="476" height="220" rx="8" fill="#f8fafc" stroke="#d9dee7"/>
+</svg>

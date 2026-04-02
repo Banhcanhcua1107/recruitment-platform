@@ -121,6 +121,76 @@ async function createSignedUrl(bucket: string, path: string | null) {
   return data.signedUrl;
 }
 
+function buildSignedUrlLookupKey(bucket: string, path: string) {
+  return `${bucket}::${path}`;
+}
+
+async function createSignedUrlLookup(
+  requests: Array<{ bucket: string; path: string }>,
+) {
+  const deduped = new Map<string, { bucket: string; path: string }>();
+
+  for (const request of requests) {
+    if (!request.bucket || !request.path) continue;
+    deduped.set(buildSignedUrlLookupKey(request.bucket, request.path), request);
+  }
+
+  if (!deduped.size) {
+    return new Map<string, string>();
+  }
+
+  const groupedPaths = new Map<string, string[]>();
+  for (const request of deduped.values()) {
+    const list = groupedPaths.get(request.bucket);
+    if (list) {
+      list.push(request.path);
+      continue;
+    }
+    groupedPaths.set(request.bucket, [request.path]);
+  }
+
+  const admin = createAdminClient();
+  const lookup = new Map<string, string>();
+
+  await Promise.all(
+    Array.from(groupedPaths.entries()).map(async ([bucket, paths]) => {
+      const { data, error } = await admin.storage
+        .from(bucket)
+        .createSignedUrls(paths, DEFAULT_SIGNED_URL_SECONDS);
+
+      if (error) {
+        logger.warn("cv-imports.signed-urls.batch-failed", {
+          bucket,
+          error: error.message,
+          count: paths.length,
+        });
+        return;
+      }
+
+      for (const entry of data ?? []) {
+        if (!entry.path || !entry.signedUrl || entry.error) continue;
+        lookup.set(buildSignedUrlLookupKey(bucket, entry.path), entry.signedUrl);
+      }
+    }),
+  );
+
+  return lookup;
+}
+
+async function resolveSignedUrlFromLookup(
+  lookup: Map<string, string>,
+  bucket: string,
+  path: string | null,
+) {
+  if (!bucket || !path) return null;
+
+  const lookupKey = buildSignedUrlLookupKey(bucket, path);
+  const existing = lookup.get(lookupKey);
+  if (existing) return existing;
+
+  return createSignedUrl(bucket, path);
+}
+
 async function getArtifactMapByIds(artifactIds: string[]) {
   if (artifactIds.length === 0) return new Map<string, CVArtifactRecord>();
   const admin = createAdminClient();
@@ -319,6 +389,40 @@ export async function getCVDocumentDetailForUser(
     pages.flatMap((page) => [page.background_artifact_id, page.thumbnail_artifact_id]).filter(Boolean) as string[]
   );
 
+  const signedUrlRequests: Array<{ bucket: string; path: string }> = [];
+  for (const page of pages) {
+    const backgroundArtifact = page.background_artifact_id
+      ? artifactById.get(page.background_artifact_id)
+      : null;
+    const thumbnailArtifact = page.thumbnail_artifact_id
+      ? artifactById.get(page.thumbnail_artifact_id)
+      : null;
+
+    if (backgroundArtifact?.storage_bucket && backgroundArtifact.storage_path) {
+      signedUrlRequests.push({
+        bucket: backgroundArtifact.storage_bucket,
+        path: backgroundArtifact.storage_path,
+      });
+    }
+
+    if (thumbnailArtifact?.storage_bucket && thumbnailArtifact.storage_path) {
+      signedUrlRequests.push({
+        bucket: thumbnailArtifact.storage_bucket,
+        path: thumbnailArtifact.storage_path,
+      });
+    }
+  }
+
+  for (const artifact of artifacts) {
+    if (!artifact.storage_bucket || !artifact.storage_path) continue;
+    signedUrlRequests.push({
+      bucket: artifact.storage_bucket,
+      path: artifact.storage_path,
+    });
+  }
+
+  const signedUrlLookup = await createSignedUrlLookup(signedUrlRequests);
+
   const pageViews: CVDocumentPageView[] = await Promise.all(
     pages.map(async (page) => {
       const backgroundArtifact = page.background_artifact_id
@@ -331,11 +435,13 @@ export async function getCVDocumentDetailForUser(
         page_number: page.page_number,
         canonical_width_px: page.canonical_width_px,
         canonical_height_px: page.canonical_height_px,
-        background_url: await createSignedUrl(
+        background_url: await resolveSignedUrlFromLookup(
+          signedUrlLookup,
           backgroundArtifact?.storage_bucket ?? "",
           backgroundArtifact?.storage_path ?? null
         ),
-        thumbnail_url: await createSignedUrl(
+        thumbnail_url: await resolveSignedUrlFromLookup(
+          signedUrlLookup,
           thumbnailArtifact?.storage_bucket ?? "",
           thumbnailArtifact?.storage_path ?? null
         ),
@@ -349,7 +455,11 @@ export async function getCVDocumentDetailForUser(
       kind: artifact.kind,
       page_number: artifact.page_number,
       status: artifact.status,
-      download_url: await createSignedUrl(artifact.storage_bucket, artifact.storage_path),
+      download_url: await resolveSignedUrlFromLookup(
+        signedUrlLookup,
+        artifact.storage_bucket,
+        artifact.storage_path,
+      ),
     }))
   );
 

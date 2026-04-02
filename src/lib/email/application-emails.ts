@@ -5,6 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { sendEmail } from "@/lib/email/mail-service";
 
 interface ApplicationSubmittedEmailInput {
+  applicationId: string;
   hrEmail: string;
   candidateEmail: string | null;
   candidateName: string;
@@ -87,6 +88,87 @@ function buildEmailShell(title: string, subtitle: string, body: string) {
   `;
 }
 
+function buildRecruiterApplicationEmailHtml(input: {
+  candidateName: string;
+  candidateEmail: string;
+  candidatePhone: string;
+  jobTitle: string;
+  companyName: string;
+  jobId: string;
+  appliedAt: string;
+  introduction: string;
+  atsApplicationUrl: string;
+  cvReviewUrl: string;
+  hasAttachment: boolean;
+}) {
+  const safeCandidateName = escapeHtml(input.candidateName || "Ứng viên");
+  const safeCandidateEmail = input.candidateEmail
+    ? escapeHtml(input.candidateEmail)
+    : "Chưa có email";
+  const safeCandidatePhone = input.candidatePhone
+    ? escapeHtml(input.candidatePhone)
+    : "Chưa có số điện thoại";
+  const safeJobTitle = escapeHtml(input.jobTitle);
+  const safeCompanyName = escapeHtml(input.companyName);
+  const safeJobId = escapeHtml(input.jobId);
+  const safeAppliedAt = escapeHtml(input.appliedAt);
+  const safeIntroduction = escapeHtml(input.introduction || "Ứng viên không để lại lời nhắn.").replace(
+    /\n/g,
+    "<br/>"
+  );
+  const safeAtsUrl = escapeHtml(input.atsApplicationUrl);
+  const safeCvUrl = escapeHtml(input.cvReviewUrl);
+
+  return `
+    <div style="margin:0;padding:32px;background:#f4f7fb;font-family:Arial,sans-serif;color:#0f172a;">
+      <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #dbe4f0;border-radius:20px;overflow:hidden;">
+        <div style="padding:28px 32px;background:linear-gradient(135deg,#0f172a,#1d4ed8);color:#ffffff;">
+          <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.8;">TalentFlow</p>
+          <h1 style="margin:0;font-size:32px;line-height:1.2;">Có Ứng Viên Mới</h1>
+          <p style="margin:10px 0 0;font-size:15px;line-height:1.6;opacity:0.92;">${safeCandidateName} vừa nộp hồ sơ cho vị trí ${safeJobTitle}.</p>
+        </div>
+
+        <div style="padding:30px 32px;">
+          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+            <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;width:180px;">Vị trí ứng tuyển</td><td style="padding:8px 0;color:#334155;">${safeJobTitle}</td></tr>
+            <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Tên công ty</td><td style="padding:8px 0;color:#334155;">${safeCompanyName}</td></tr>
+            <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Mã tin tuyển dụng</td><td style="padding:8px 0;color:#334155;">${safeJobId}</td></tr>
+            <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Thời gian ứng tuyển</td><td style="padding:8px 0;color:#334155;">${safeAppliedAt}</td></tr>
+          </table>
+
+          <div style="border:1px solid #dbe4f0;border-radius:16px;padding:18px;margin-bottom:22px;background:#f8fbff;">
+            <p style="margin:0 0 10px;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Thông tin ứng viên</p>
+            <p style="margin:0 0 8px;"><strong>Họ và tên:</strong> ${safeCandidateName}</p>
+            <p style="margin:0 0 8px;"><strong>Email:</strong> ${safeCandidateEmail}</p>
+            <p style="margin:0 0 8px;"><strong>Số điện thoại:</strong> ${safeCandidatePhone}</p>
+            <p style="margin:0;"><strong>Giới thiệu:</strong><br/>${safeIntroduction}</p>
+          </div>
+
+          <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#475569;">
+            Bấm vào nút bên dưới để mở thẳng ATS tại đơn ứng tuyển này.
+          </p>
+
+          <p style="margin:0 0 12px;">
+            <a href="${safeAtsUrl}" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:700;">Mở ứng viên trong ATS</a>
+          </p>
+
+          <p style="margin:0;">
+            <a href="${safeCvUrl}" style="display:inline-block;padding:11px 18px;border-radius:12px;border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8;text-decoration:none;font-weight:700;">Mở CV ứng viên</a>
+          </p>
+
+          <p style="margin:14px 0 0;font-size:13px;line-height:1.7;color:#64748b;">
+            ${
+              input.hasAttachment
+                ? "CV của ứng viên cũng đã được đính kèm trong email để recruiter xem nhanh."
+                : "Không thể tự động đính kèm CV, vui lòng dùng nút mở CV để xem từ hệ thống."
+            }
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function toAbsoluteUrl(pathOrUrl: string) {
   const trimmed = pathOrUrl.trim();
   if (!trimmed) {
@@ -132,39 +214,28 @@ async function getCvAttachmentFromStorage(filePath: string): Promise<Attachment 
 export async function sendApplicationSubmittedEmails(input: ApplicationSubmittedEmailInput) {
   const attachment = await getCvAttachmentFromStorage(input.cvFilePath);
   const cvReviewUrl = toAbsoluteUrl(input.cvDownloadUrl);
+  const recruiterApplicationsUrl = toAbsoluteUrl(
+    `/hr/candidates?view=pipeline&applicationId=${encodeURIComponent(input.applicationId)}`
+  );
   const safeCandidateName = input.candidateName || "Ứng viên";
   const safeCandidateEmail = input.candidateEmail?.trim() || "";
   const safeCandidatePhone = input.candidatePhone?.trim() || "";
   const safeAppliedAt = formatTimestamp(input.appliedAt);
   const safeIntroduction = input.introduction.trim();
 
-  const recruiterHtml = buildEmailShell(
-    "Có Ứng Viên Mới",
-    `${escapeHtml(safeCandidateName)} đã ứng tuyển vị trí ${escapeHtml(input.jobTitle)}.`,
-    `
-      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Vị trí ứng tuyển</td><td style="padding:8px 0;color:#334155;">${escapeHtml(input.jobTitle)}</td></tr>
-        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Tên công ty</td><td style="padding:8px 0;color:#334155;">${escapeHtml(input.companyName)}</td></tr>
-        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Mã tin tuyển dụng</td><td style="padding:8px 0;color:#334155;">${escapeHtml(input.jobId)}</td></tr>
-        <tr><td style="padding:8px 0;font-weight:700;color:#1e293b;">Thời gian ứng tuyển</td><td style="padding:8px 0;color:#334155;">${escapeHtml(safeAppliedAt)}</td></tr>
-      </table>
-      <div style="border:1px solid #dbe4f0;border-radius:16px;padding:20px;margin-bottom:24px;background:#f8fbff;">
-        <p style="margin:0 0 12px;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Thông tin ứng viên</p>
-        <p style="margin:0 0 8px;"><strong>Họ và tên:</strong> ${escapeHtml(safeCandidateName)}</p>
-        ${safeCandidateEmail ? `<p style="margin:0 0 8px;"><strong>Email:</strong> ${escapeHtml(safeCandidateEmail)}</p>` : ""}
-        ${safeCandidatePhone ? `<p style="margin:0 0 8px;"><strong>Số điện thoại:</strong> ${escapeHtml(safeCandidatePhone)}</p>` : ""}
-        <p style="margin:0;"><strong>Giới thiệu:</strong><br/>${escapeHtml(safeIntroduction).replace(/\n/g, "<br/>")}</p>
-      </div>
-      <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#475569;">
-        ${
-          attachment
-            ? "CV của ứng viên đã được đính kèm trong email để bạn xem xét."
-            : "Không thể tự động đính kèm CV. Vui lòng dùng liên kết bảo mật bên dưới để xem trên TalentFlow."
-        }
-      </p>
-      <p style="margin:0;"><a href="${escapeHtml(cvReviewUrl)}" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:700;">Mở CV ứng viên</a></p>
-    `
-  );
+  const recruiterHtml = buildRecruiterApplicationEmailHtml({
+    candidateName: safeCandidateName,
+    candidateEmail: safeCandidateEmail,
+    candidatePhone: safeCandidatePhone,
+    jobTitle: input.jobTitle,
+    companyName: input.companyName,
+    jobId: input.jobId,
+    appliedAt: safeAppliedAt,
+    introduction: safeIntroduction,
+    atsApplicationUrl: recruiterApplicationsUrl,
+    cvReviewUrl,
+    hasAttachment: Boolean(attachment),
+  });
 
   const recruiterText = [
     `[Đơn ứng tuyển mới] ${safeCandidateName} đã ứng tuyển ${input.jobTitle}`,
@@ -181,6 +252,7 @@ export async function sendApplicationSubmittedEmails(input: ApplicationSubmitted
     safeCandidatePhone ? `- số điện thoại: ${safeCandidatePhone}` : null,
     `- giới thiệu: ${safeIntroduction}`,
     "",
+    `- mở trong ATS: ${recruiterApplicationsUrl}`,
     attachment
       ? "CV của ứng viên được đính kèm trong email này."
       : `Xem CV trên TalentFlow: ${cvReviewUrl}`,
@@ -200,6 +272,7 @@ export async function sendApplicationSubmittedEmails(input: ApplicationSubmitted
     return { candidateEmailSent: false };
   }
 
+  const candidateApplicationsUrl = toAbsoluteUrl("/candidate/applications");
   const candidateHtml = buildEmailShell(
     "Ứng Tuyển Thành Công",
     `Hồ sơ ứng tuyển vị trí ${escapeHtml(input.jobTitle)} tại ${escapeHtml(input.companyName)} đã được ghi nhận.`,
@@ -213,7 +286,7 @@ export async function sendApplicationSubmittedEmails(input: ApplicationSubmitted
       </div>
       <p style="margin:0 0 14px;font-size:15px;line-height:1.8;color:#334155;">Vui lòng chờ phản hồi từ nhà tuyển dụng.</p>
       <p style="margin:0;font-size:14px;line-height:1.7;color:#64748b;">Bạn có thể xem lại tất cả đơn đã nộp trong trang quản lý ứng tuyển của ứng viên.</p>
-      <p style="margin:20px 0 0;"><a href="${getBaseUrl()}/candidate/applications" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:700;">Xem đơn ứng tuyển của tôi</a></p>
+      <p style="margin:20px 0 0;"><a href="${candidateApplicationsUrl}" style="display:inline-block;padding:12px 18px;border-radius:12px;background:#1d4ed8;color:#ffffff;text-decoration:none;font-weight:700;">Xem đơn ứng tuyển của tôi</a></p>
     `
   );
 
@@ -228,7 +301,7 @@ export async function sendApplicationSubmittedEmails(input: ApplicationSubmitted
     `thời gian nộp: ${safeAppliedAt}`,
     "Vui lòng chờ phản hồi từ nhà tuyển dụng.",
     "",
-    `Theo dõi đơn ứng tuyển: ${getBaseUrl()}/candidate/applications`,
+    `Theo dõi đơn ứng tuyển: ${candidateApplicationsUrl}`,
   ].join("\n");
 
   await sendEmail({

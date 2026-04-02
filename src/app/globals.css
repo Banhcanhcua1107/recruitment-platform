@@ -7,16 +7,41 @@
 
 :root {
     font-family: var(--font-sans), sans-serif;
+    --app-bg: #f7f9fb;
+    --app-surface: rgba(255, 255, 255, 0.94);
+    --app-surface-muted: #f8fafc;
+    --app-border: rgba(226, 232, 240, 0.95);
+    --app-text: #0f172a;
+    --app-muted-text: #64748b;
+    --app-shadow-soft: 0 24px 70px -46px rgba(15, 23, 42, 0.22);
 }
 
 html {
     font-family: var(--font-sans), sans-serif;
+    background: var(--app-bg);
 }
 
 body {
-    color: #0f172a;
-    background: #f8fafc;
+    color: var(--app-text);
+    background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 28%),
+        radial-gradient(circle at top right, rgba(148, 163, 184, 0.12), transparent 30%),
+        linear-gradient(180deg, #f7f9fb 0%, #f3f6fa 100%);
     text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+.font-headline {
+    font-family: var(--font-headline), var(--font-sans), sans-serif;
+}
+
+.app-shell-surface {
+    background: var(--app-surface);
+    border-color: var(--app-border);
+    box-shadow: var(--app-shadow-soft);
 }
 
 

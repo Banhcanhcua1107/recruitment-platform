@@ -71,6 +71,7 @@ export interface RecruitmentJob {
   postedAt: string | null;
   createdAt: string | null;
   candidateCount: number;
+  targetApplications: number | null;
   isPublicVisible: boolean;
 }
 
@@ -190,4 +191,5 @@ export interface JobUpsertInput {
   ageRange?: string | null;
   fullAddress?: string | null;
   sourceUrl?: string | null;
+  targetApplications?: number | null;
 }

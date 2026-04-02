@@ -46,7 +46,10 @@ export function PublicCandidateProfileView({
         </div>
       </section>
 
-      <CandidateProfilePresentation viewModel={viewModel} />
+      <CandidateProfilePresentation
+        viewModel={viewModel}
+        candidate={candidate}
+      />
     </div>
   );
 }

@@ -52,11 +52,11 @@ export default function CandidateFilterSidebar({
     (filters.openToWork ? 1 : 0);
 
   return (
-    <aside className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-6 flex items-center justify-between gap-3">
+    <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-[calc(100vh-7.5rem)] xl:overflow-y-auto">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-lg font-black text-slate-900">Bộ lọc ứng viên</h3>
-          <p className="mt-1 text-sm font-medium text-slate-500">
+          <h3 className="text-base font-black text-slate-900">Bộ lọc ứng viên</h3>
+          <p className="mt-1 text-xs font-medium text-slate-500">
             {activeCount > 0
               ? `${activeCount} bộ lọc đang áp dụng`
               : "Lọc theo kỹ năng, kinh nghiệm và mức sẵn sàng"}
@@ -73,10 +73,10 @@ export default function CandidateFilterSidebar({
         ) : null}
       </div>
 
-      <div className="space-y-6">
-        <section className="space-y-3 border-t border-slate-200/70 pt-6 first:border-t-0 first:pt-0">
+      <div className="space-y-4">
+        <section className="space-y-2.5 border-t border-slate-200/70 pt-4 first:border-t-0 first:pt-0">
           <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Kỹ năng</h4>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {skillOptions.map((skill) => {
               const selected = filters.skills.includes(skill);
               return (
@@ -89,7 +89,7 @@ export default function CandidateFilterSidebar({
                       skills: toggleArrayValue(filters.skills, skill),
                     })
                   }
-                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                  className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${
                     selected
                       ? "bg-primary text-white shadow-lg shadow-primary/20"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -102,13 +102,13 @@ export default function CandidateFilterSidebar({
           </div>
         </section>
 
-        <section className="space-y-3 border-t border-slate-200/70 pt-6">
+        <section className="space-y-2.5 border-t border-slate-200/70 pt-4">
           <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Kinh nghiệm</h4>
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {EXPERIENCE_OPTIONS.map((option) => (
               <label
                 key={option.value}
-                className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-50"
+                className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-slate-50"
               >
                 <input
                   type="radio"
@@ -118,20 +118,20 @@ export default function CandidateFilterSidebar({
                   onChange={() => onFiltersChange({ ...filters, experience: option.value })}
                   className="size-5 accent-primary"
                 />
-                <span className="text-sm font-semibold leading-5 text-slate-700">{option.label}</span>
+                <span className="text-sm font-semibold text-slate-700">{option.label}</span>
               </label>
             ))}
           </div>
         </section>
 
-        <section className="space-y-3 border-t border-slate-200/70 pt-6">
+        <section className="space-y-2.5 border-t border-slate-200/70 pt-4">
           <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Địa điểm</h4>
           <select
             value={filters.location}
             onChange={(event) => onFiltersChange({ ...filters, location: event.target.value })}
             aria-label="Chọn tỉnh thành"
             title="Chọn tỉnh thành"
-            className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-primary/30 focus:bg-white focus:ring-2 focus:ring-primary/10"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700 outline-none transition focus:border-primary/30 focus:bg-white focus:ring-2 focus:ring-primary/10"
           >
             <option value="">Tất cả tỉnh/thành</option>
             {allLocations.map((location) => (
@@ -142,10 +142,10 @@ export default function CandidateFilterSidebar({
           </select>
         </section>
 
-        <section className="space-y-3 border-t border-slate-200/70 pt-6">
+        <section className="space-y-2.5 border-t border-slate-200/70 pt-4">
           <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Mức lương mong muốn (triệu)</h4>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <div className="mb-3 flex items-center justify-between text-xs font-bold text-slate-500">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-500">
               <span>{filters.minSalary}M</span>
               <span>{filters.maxSalary}M+</span>
             </div>
@@ -181,14 +181,14 @@ export default function CandidateFilterSidebar({
                   maxSalary: Math.max(next, filters.minSalary),
                 });
               }}
-              className="mt-2 w-full"
+              className="mt-1.5 w-full"
             />
           </div>
         </section>
 
-        <section className="space-y-3 border-t border-slate-200/70 pt-6">
+        <section className="space-y-2.5 border-t border-slate-200/70 pt-4">
           <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Trạng thái</h4>
-          <label className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-50">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-slate-50">
             <input
               type="checkbox"
               checked={filters.availableNow}
@@ -197,9 +197,9 @@ export default function CandidateFilterSidebar({
               }
               className="size-5 accent-primary"
             />
-            <span className="text-sm font-semibold leading-5 text-slate-700">Available ngay</span>
+            <span className="text-sm font-semibold text-slate-700">Available ngay</span>
           </label>
-          <label className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-slate-50">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-slate-50">
             <input
               type="checkbox"
               checked={filters.openToWork}
@@ -208,7 +208,7 @@ export default function CandidateFilterSidebar({
               }
               className="size-5 accent-primary"
             />
-            <span className="text-sm font-semibold leading-5 text-slate-700">Open to work</span>
+            <span className="text-sm font-semibold text-slate-700">Open to work</span>
           </label>
         </section>
       </div>

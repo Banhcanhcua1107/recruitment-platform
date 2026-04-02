@@ -449,6 +449,13 @@ export function normalizeParsedJsonRecord(input: unknown): NormalizedParsedCV {
     .filter((item) => item.name)
     .map((item) => (item.proficiency ? `${item.name} (${item.proficiency})` : item.name));
 
+  const derivedAwards = effectiveMappedSections.awards.map((item) => ({
+    name: item.name,
+    issuer: item.issuer,
+    year: item.year,
+    description: item.description,
+  }));
+
   return {
     profile,
     contacts,
@@ -493,10 +500,10 @@ export function normalizeParsedJsonRecord(input: unknown): NormalizedParsedCV {
         ? (source.languages as Array<Record<string, unknown> | string>)
         : derivedLanguages,
     awards: preferCleanedJson
-      ? effectiveMappedSections.awards
+      ? derivedAwards
       : Array.isArray(source.awards)
         ? (source.awards as Array<Record<string, unknown>>)
-        : effectiveMappedSections.awards,
+        : derivedAwards,
     hobbies: preferCleanedJson
       ? effectiveMappedSections.hobbies
       : Array.isArray(source.hobbies)

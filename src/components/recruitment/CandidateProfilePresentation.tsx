@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { formatDateRange, formatProfileUpdatedAt } from "@/lib/candidate-profile-shared";
 import type { PublicProfileViewModel } from "@/lib/candidate-profile-document";
+import type { PublicCandidateSearchResult } from "@/types/candidate-profile";
+import { RecruiterContactCandidateButton } from "@/components/hr/RecruiterContactCandidateButton";
 import { getSectionMeta, type Section } from "@/app/candidate/profile/types/profile";
 
 function createInitials(name: string) {
@@ -420,8 +422,10 @@ function renderPublicSection(section: Section) {
 
 export function CandidateProfilePresentation({
   viewModel,
+  candidate,
 }: {
   viewModel: PublicProfileViewModel;
+  candidate?: PublicCandidateSearchResult;
 }) {
   const {
     mainSections,
@@ -490,7 +494,15 @@ export function CandidateProfilePresentation({
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row lg:self-start">
-              {displayEmail ? (
+              {candidate ? (
+                <RecruiterContactCandidateButton
+                  candidateId={candidate.candidateId}
+                  candidateName={candidate.fullName || displayName}
+                  candidateEmail={candidate.email || displayEmail}
+                  label="Gửi email"
+                  variant="outline"
+                />
+              ) : displayEmail ? (
                 <a
                   href={`mailto:${displayEmail}`}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:border-primary/30 hover:text-primary"

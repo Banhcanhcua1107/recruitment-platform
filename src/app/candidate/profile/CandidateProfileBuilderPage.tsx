@@ -66,7 +66,7 @@ function scrollToSection(sectionId: string) {
 
 function LoadingSkeleton() {
   return (
-    <div className="mx-auto w-full max-w-310 space-y-6">
+    <div className="mx-auto w-full max-w-330 space-y-6">
       <div className="h-32 animate-pulse rounded-[28px] bg-slate-200" />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
@@ -218,7 +218,7 @@ export default function CandidateProfileBuilderPage() {
 
   if (viewMode === 'preview') {
     return (
-      <div className="mx-auto w-full max-w-310 space-y-6 pb-8">
+      <div className="mx-auto w-full max-w-330 space-y-6 pb-8">
         <ProfileHeader
           userName={displayName}
           viewMode={viewMode}
@@ -332,7 +332,7 @@ export default function CandidateProfileBuilderPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-310 space-y-6 pb-8">
+    <div className="mx-auto w-full max-w-330 space-y-6 pb-8">
       <ProfileHeader
         userName={displayName}
         viewMode={viewMode}
@@ -540,8 +540,7 @@ export default function CandidateProfileBuilderPage() {
 
               <div className="mt-4 space-y-2">
                 {sectionChecklist.map((item) => {
-                  const isVisibleInCurrentMode =
-                    viewMode === 'preview' ? item.isReady : Boolean(item.section);
+                  const isVisibleInCurrentMode = Boolean(item.section);
 
                   return (
                     <button
@@ -553,13 +552,7 @@ export default function CandidateProfileBuilderPage() {
                           return;
                         }
 
-                        if (viewMode === 'preview' && !item.isReady) {
-                          setViewMode('edit');
-                        }
-
-                        if (viewMode === 'edit' || (viewMode === 'preview' && !item.isReady)) {
-                          setEditingSection(item.section.id);
-                        }
+                        setEditingSection(item.section.id);
 
                         setTimeout(() => scrollToSection(item.section!.id), 0);
                       }}

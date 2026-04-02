@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 860" role="img" aria-labelledby="titleD descD">
+  <title id="titleD">Creative Spark CV Preview</title>
+  <desc id="descD">A creative CV template preview.</desc>
+  <rect width="620" height="860" fill="#fff0f5"/>
+  <rect x="34" y="30" width="552" height="800" rx="20" fill="#ffffff" stroke="#fbcfe8"/>
+  <path d="M34 30h552v160H34z" fill="#be123c"/>
+  <circle cx="520" cy="84" r="58" fill="#fb7185" opacity="0.45"/>
+  <rect x="62" y="64" width="260" height="30" rx="6" fill="#ffffff"/>
+  <rect x="62" y="106" width="210" height="14" rx="4" fill="#fecdd3"/>
+  <rect x="62" y="194" width="140" height="16" rx="5" fill="#be123c"/>
+  <rect x="62" y="220" width="494" height="12" rx="4" fill="#f1f5f9"/>
+  <rect x="62" y="238" width="470" height="12" rx="4" fill="#f1f5f9"/>
+  <rect x="62" y="256" width="482" height="12" rx="4" fill="#f1f5f9"/>
+  <rect x="62" y="292" width="178" height="16" rx="5" fill="#be123c"/>
+  <rect x="62" y="320" width="494" height="12" rx="4" fill="#ffe4e6"/>
+  <rect x="62" y="338" width="494" height="12" rx="4" fill="#ffe4e6"/>
+  <rect x="62" y="356" width="494" height="12" rx="4" fill="#ffe4e6"/>
+  <rect x="62" y="392" width="120" height="16" rx="5" fill="#be123c"/>
+  <rect x="62" y="420" width="230" height="150" rx="10" fill="#fff7f7" stroke="#fecdd3"/>
+  <rect x="326" y="420" width="230" height="150" rx="10" fill="#fff7f7" stroke="#fecdd3"/>
+  <rect x="62" y="596" width="494" height="198" rx="12" fill="#fff7f7" stroke="#fecdd3"/>
+</svg>

@@ -30,6 +30,7 @@ export interface CandidateCvOption {
   createdAt: string;
   source: "profile" | "uploaded" | "builder";
   resumeId?: string;
+  downloadUrl?: string | null;
 }
 
 export const APPLICATION_STATUS_LABELS: Record<RecruitmentPipelineStatus, string> = {
@@ -78,6 +79,7 @@ type CandidateApplicationJobRow = {
   title?: string | null;
   company_name?: string | null;
   logo_url?: string | null;
+  description?: string | null;
   salary?: string | null;
   location?: string | null;
   employer_id?: string | null;
@@ -878,6 +880,7 @@ export async function applyToJob(input: {
   try {
     const companyName = safeTrim(employer?.company_name || job.company_name || "Recruiter");
     const emailResult = await sendApplicationSubmittedEmails({
+      applicationId,
       hrEmail: recruiterEmail,
       candidateEmail: candidateEmail || null,
       candidateName,
@@ -1098,14 +1101,20 @@ export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
         .createSignedUrl(item.path, 60);
 
       if (data?.signedUrl) {
-        return item;
+        return {
+          ...item,
+          downloadUrl: data.signedUrl,
+        };
       }
 
       if (isStorageObjectMissingError(error)) {
         return null;
       }
 
-      return item;
+      return {
+        ...item,
+        downloadUrl: null,
+      };
     })
   );
 
@@ -1670,6 +1679,7 @@ export async function getCandidateApplicationDetail(applicationId: string) {
         title,
         company_name,
         logo_url,
+        description,
         employer_id,
         salary,
         location,
@@ -1738,6 +1748,7 @@ export async function getCandidateApplicationDetail(applicationId: string) {
       title: safeTrim(job?.title),
       companyName: safeTrim(brandedJob.company_name || "Recruiter"),
       logoUrl: normalizeOptionalString(brandedJob.logo_url),
+      description: normalizeOptionalString(job?.description),
       salary: normalizeOptionalString(job?.salary),
       location: normalizeOptionalString(job?.location),
       employmentType: normalizeOptionalString(job?.employment_type),

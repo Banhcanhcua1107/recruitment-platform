@@ -28,7 +28,6 @@ interface CVDocumentWithEditorMetadata extends CVDocumentRecord {
   last_parsed_version_id?: string | null;
   file_updated_after_parse?: boolean | null;
   reparse_recommended?: boolean | null;
-  source_kind?: string | null;
 }
 
 type DocumentFileVersionRow = DocumentFileVersion;

@@ -32,6 +32,7 @@ interface JobEditorFormProps {
     ageRange?: string | null;
     fullAddress?: string | null;
     sourceUrl?: string | null;
+    targetApplications?: number | null;
   };
 }
 
@@ -69,7 +70,7 @@ export function JobEditorForm({
     >
       {mode === "edit" ? <input type="hidden" name="id" value={initialValues?.id ?? ""} /> : null}
 
-      <Card className="rounded-[32px] border-slate-200/80">
+      <Card className="rounded-4xl border-slate-200/80">
         <CardHeader>
           <CardTitle>
             {mode === "create" ? "Tạo tin tuyển dụng" : "Chỉnh sửa tin tuyển dụng"}
@@ -133,6 +134,21 @@ export function JobEditorForm({
               onChange={(event) => setSalary(event.target.value)}
               placeholder="Ví dụ: 25 - 35 triệu"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Số lượng hồ sơ mong muốn</label>
+            <Input
+              name="targetApplications"
+              type="number"
+              min={1}
+              step={1}
+              defaultValue={initialValues?.targetApplications ?? ""}
+              placeholder="Ví dụ: 30"
+            />
+            <p className="text-xs leading-5 text-slate-500">
+              Chỉ dùng để bạn tự theo dõi và tự ẩn tin khi đã đủ. Hệ thống không tự động đóng tin và không chặn ứng viên nộp CV.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -225,7 +241,7 @@ export function JobEditorForm({
             <textarea
               name="industry"
               defaultValue={(initialValues?.industry ?? []).join("\n")}
-              className="min-h-[100px] w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+              className="min-h-25 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
               placeholder={"Công nghệ thông tin\nPhần mềm\nSaaS"}
             />
           </div>
@@ -235,7 +251,7 @@ export function JobEditorForm({
             <textarea
               name="requirements"
               defaultValue={(initialValues?.requirements ?? []).join("\n")}
-              className="min-h-[140px] w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+              className="min-h-35 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
               placeholder={"React\nTypeScript\nTư duy hệ thống"}
             />
           </div>
@@ -245,7 +261,7 @@ export function JobEditorForm({
             <textarea
               name="benefits"
               defaultValue={(initialValues?.benefits ?? []).join("\n")}
-              className="min-h-[140px] w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+              className="min-h-35 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
               placeholder={"Thưởng hiệu suất\nBảo hiểm đầy đủ\nLinh hoạt thời gian làm việc"}
             />
           </div>
@@ -256,7 +272,7 @@ export function JobEditorForm({
               name="description"
               required
               defaultValue={initialValues?.description ?? ""}
-              className="min-h-[220px] w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+              className="min-h-55 w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
               placeholder="Nhập trách nhiệm, mục tiêu tuyển dụng và bối cảnh công việc."
             />
           </div>
@@ -264,8 +280,8 @@ export function JobEditorForm({
       </Card>
 
       <div className="space-y-6">
-        <Card className="overflow-hidden rounded-[32px] border-slate-200/80">
-          <div className="relative h-44 bg-gradient-to-br from-primary via-blue-600 to-indigo-700">
+        <Card className="overflow-hidden rounded-4xl border-slate-200/80">
+          <div className="relative h-44 bg-linear-to-br from-primary via-blue-600 to-indigo-700">
             {coverUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={coverUrl} alt="" className="h-full w-full object-cover opacity-35" />
