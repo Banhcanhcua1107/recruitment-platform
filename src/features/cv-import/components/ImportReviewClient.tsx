@@ -11,8 +11,10 @@ import {
   saveEditableCV,
   saveOriginalCVFromImport,
 } from "@/features/cv-import/api/client";
+import { createResumeFromSections } from "@/app/candidate/cv-builder/api";
 import { ImportDocumentPreview } from "@/features/cv-import/components/ImportDocumentPreview";
 import { ImportStatusBadge } from "@/features/cv-import/components/ImportStatusBadge";
+import { buildResumeSectionsFromParsedJson } from "@/features/cv-import/transforms/parsed-json-to-builder-sections";
 import { PersistedOcrReviewPanel } from "@/features/ocr-viewer";
 import type { SaveOriginalCVResponse } from "@/types/cv-import";
 
@@ -211,13 +213,33 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
         allow_partial: allowPartial,
         override_non_cv: overrideNonCv,
       });
+
+      const { sections, title } = buildResumeSectionsFromParsedJson(detail.parsed_json);
+      if (!sections.length) {
+        router.push(response.links.editor);
+        return;
+      }
+
+      try {
+        const resume = await createResumeFromSections(sections, {
+          title,
+        });
+
+        if (resume?.id) {
+          router.push(`/candidate/cv-builder/${resume.id}/edit`);
+          return;
+        }
+      } catch (createResumeError) {
+        console.warn("TipTap resume creation failed, fallback to editable editor", createResumeError);
+      }
+
       router.push(response.links.editor);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Khong the tao ban CV de chinh sua.");
     } finally {
       setIsSaving(false);
     }
-  }, [allowPartial, canOpenEditor, documentId, overrideNonCv, router]);
+  }, [allowPartial, canOpenEditor, detail.parsed_json, documentId, overrideNonCv, router]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#eef4fb] p-2.5 md:p-3">
@@ -382,7 +404,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                 className="inline-flex h-8 items-center gap-2 rounded-2xl bg-slate-900 px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                Chuyen sang editor
+                Chuyen sang TipTap
               </button>
             </>
           }

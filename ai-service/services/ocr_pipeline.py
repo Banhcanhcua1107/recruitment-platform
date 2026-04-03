@@ -24,7 +24,9 @@ from PIL import Image, ImageOps
 
 from services.cv_layout_parser import parse_structured_cv_from_ocr
 from services.cv_content_cleaner import postprocess_mapped_sections
+from services.cv_html_renderer import render_clean_cv_html
 from services.cv_parser import _call_llm, parse_cv_json
+from services.google_vision_ocr import extract_clean_text, run_google_vision_on_pages
 from services.mapped_sections import (
     build_builder_sections_from_mapped_sections,
     build_empty_document_analysis,
@@ -34,7 +36,7 @@ from services.mapped_sections import (
     mapped_sections_to_structured_data,
     normalize_mapped_sections,
 )
-from services.ocr_service import OCRBlock, OCRPageResult, extract_full_text
+from services.ocr_service import OCRBlock, OCRPageResult
 
 logger = logging.getLogger("ocr_pipeline")
 
@@ -1300,6 +1302,18 @@ def _build_non_cv_payload(
     }
 
 
+def _build_markdown_pages_from_ocr(page_results: list[OCRPageResult]) -> list[str]:
+    markdown_pages: list[str] = []
+    for page in sorted(page_results, key=lambda item: item.page):
+        lines = [
+            _normalize_block_text(block.text)
+            for block in page.blocks
+            if _normalize_block_text(block.text)
+        ]
+        markdown_pages.append("\n".join(lines).strip())
+    return markdown_pages
+
+
 def process_cv(
     file_bytes: bytes,
     *,
@@ -1310,8 +1324,8 @@ def process_cv(
     start = time.perf_counter()
     file_kind = _detect_file_type(content_type, filename, file_bytes)
     pipeline_warnings: list[str] = []
-    extraction_method = "paddle_ppocrv5_ppstructurev3"
-    ocr_provider = "PP-OCRv5 + PP-StructureV3"
+    extraction_method = "google_vision_document_text_detection"
+    ocr_provider = "Google Vision API DOCUMENT_TEXT_DETECTION"
 
     try:
         prepared_pages = _prepare_document_pages(
@@ -1320,8 +1334,8 @@ def process_cv(
             filename=filename,
         )
         if file_kind == "docx":
-            extraction_method = "docx_to_pdf_ppocrv5_ppstructurev3"
-            ocr_provider = "PP-OCRv5 + PP-StructureV3 (DOCX->PDF)"
+            extraction_method = "docx_to_pdf_google_vision_document_text_detection"
+            ocr_provider = "Google Vision API DOCUMENT_TEXT_DETECTION (DOCX->PDF)"
     except OCRPipelineError as exc:
         if file_kind == "docx":
             raise OCRPipelineError(
@@ -1329,14 +1343,22 @@ def process_cv(
             ) from exc
         raise
 
-    ocr_result = _run_ppocrv5_on_pages(prepared_pages, min_confidence=min_confidence)
-    structure_result = _run_ppstructure_on_pages(prepared_pages)
+    try:
+        ocr_result = run_google_vision_on_pages(prepared_pages, min_confidence=min_confidence)
+    except Exception as exc:
+        raise OCRPipelineError(f"Google Vision OCR failed: {exc}") from exc
     pipeline_warnings.extend(ocr_result.get("warnings", []))
-    pipeline_warnings.extend(structure_result.get("warnings", []))
 
     page_results: list[OCRPageResult] = ocr_result["pages"]
-    raw_text = extract_full_text(page_results)
+    raw_text = extract_clean_text(page_results)
+    markdown_pages = _build_markdown_pages_from_ocr(page_results)
+    structure_result = {
+        "layout_blocks": [],
+        "markdown_pages": markdown_pages,
+        "elapsed_seconds": 0.0,
+    }
     classification = _classify_document_type(raw_text)
+
     def _to_xyxy(points: list[list[int]]) -> list[int]:
         if not points:
             return [0, 0, 0, 0]
@@ -1437,6 +1459,18 @@ def process_cv(
             layout_blocks=structure_result["layout_blocks"],
         )
 
+    clean_html = render_clean_cv_html(
+        structured_data=parsed.get("data") if isinstance(parsed.get("data"), dict) else {},
+        mapped_sections=(
+            parsed.get("cleaned_json")
+            if isinstance(parsed.get("cleaned_json"), dict)
+            else parsed.get("mapped_sections")
+            if isinstance(parsed.get("mapped_sections"), dict)
+            else {}
+        ),
+        raw_text=raw_text,
+    )
+
     total_elapsed = time.perf_counter() - start
 
     return {
@@ -1461,6 +1495,7 @@ def process_cv(
         "layout": parsed["layout"],
         "raw_text": raw_text,
         "content": raw_text,
+        "clean_html": clean_html,
         "markdown_pages": structure_result["markdown_pages"],
         "layout_blocks": structure_result["layout_blocks"],
         "warnings": pipeline_warnings,

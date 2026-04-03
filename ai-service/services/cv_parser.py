@@ -29,10 +29,11 @@ import os
 import re
 from typing import Any
 
-import pdfplumber
 import requests
 from PIL import Image
 from services.cv_content_cleaner import postprocess_mapped_sections
+from services.cv_html_renderer import render_clean_cv_html
+from services.google_vision_ocr import extract_clean_text, run_google_vision_ocr
 from services.mapped_sections import (
     build_empty_document_analysis,
     mapped_sections_schema_json,
@@ -40,7 +41,6 @@ from services.mapped_sections import (
     normalize_document_analysis,
     normalize_mapped_sections,
 )
-from services.ocr_service import extract_full_text, run_ocr
 
 logger = logging.getLogger("cv_parser")
 
@@ -94,22 +94,20 @@ def _extract_avatar_b64(pdf_bytes: bytes) -> str | None:
         return None
 
 
-def extract_text_from_pdf(pdf_bytes: bytes) -> tuple[str, str | None, int]:
+def extract_text_from_pdf(pdf_bytes: bytes, filename: str = "document.pdf") -> tuple[str, str | None, int]:
     """
-    Use pdfplumber to extract the selectable text layer from a PDF.
-    Returns (raw_text, avatar_base64_or_None).
+    OCR full PDF content with Google Vision DOCUMENT_TEXT_DETECTION.
+    Returns (raw_text, avatar_base64_or_None, page_count).
     """
-    text_parts: list[str] = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        page_count = len(pdf.pages)
-        for page in pdf.pages:
-            t = page.extract_text()
-            if t:
-                text_parts.append(t.strip())
-
-    raw_text = "\n\n".join(text_parts).strip()
+    ocr_result = run_google_vision_ocr(
+        pdf_bytes,
+        content_type="application/pdf",
+        filename=filename,
+    )
+    page_results = ocr_result["pages"]
+    raw_text = extract_clean_text(page_results)
     avatar_b64 = _extract_avatar_b64(pdf_bytes)
-    return raw_text, avatar_b64, page_count
+    return raw_text, avatar_b64, len(page_results)
 
 
 def extract_text_from_image(
@@ -117,13 +115,13 @@ def extract_text_from_image(
     content_type: str = "image/jpeg",
     filename: str = "image.jpg",
 ) -> tuple[str, int]:
-    page_results = run_ocr(
+    ocr_result = run_google_vision_ocr(
         image_bytes,
         content_type=content_type,
         filename=filename,
-        apply_llm_correction=True,
     )
-    return extract_full_text(page_results), len(page_results)
+    page_results = ocr_result["pages"]
+    return extract_clean_text(page_results), len(page_results)
 
 
 def extract_text_from_docx(docx_bytes: bytes) -> str:
@@ -200,7 +198,32 @@ def clean_ocr_text(text: str) -> str:
     t = re.sub(r"[ \t]+", " ", t)
     # Collapse excess blank lines
     t = re.sub(r"\n{3,}", "\n\n", t)
-    return t.strip()
+
+    deduped_lines: list[str] = []
+    seen_lines: set[str] = set()
+    previous_key: str | None = None
+    for raw_line in t.splitlines():
+        cleaned_line = raw_line.strip()
+        if not cleaned_line:
+            if deduped_lines and deduped_lines[-1] != "":
+                deduped_lines.append("")
+            continue
+
+        key = re.sub(r"\W+", "", cleaned_line).lower()
+        if not key:
+            continue
+        if previous_key == key:
+            continue
+        if key in seen_lines and len(key) > 12:
+            continue
+
+        seen_lines.add(key)
+        deduped_lines.append(cleaned_line)
+        previous_key = key
+
+    cleaned_text = "\n".join(deduped_lines)
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)
+    return cleaned_text.strip()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -418,26 +441,11 @@ def parse_cv(
 
     # ── Extract
     if file_type == "pdf":
-        raw_text, avatar_b64, page_count = extract_text_from_pdf(file_bytes)
-        extraction_method = "pdf_text_layer"
-        # If pdfplumber yields too little text, the PDF is likely scanned/image-based.
-        # Fall back to OCR on all pages via RapidOCR.
-        if len(raw_text.split()) < 30:
-            logger.info("PDF text layer thin (%d words) — falling back to image OCR", len(raw_text.split()))
-            try:
-                page_results = run_ocr(
-                    file_bytes,
-                    content_type="application/pdf",
-                    filename=filename or "document.pdf",
-                    apply_llm_correction=True,
-                )
-                raw_text = extract_full_text(page_results)
-                page_count = len(page_results)
-                extraction_method = "pdf_ocr_fallback"
-                warnings.append("PDF text layer mỏng, đã chuyển sang OCR fallback.")
-            except Exception as e:
-                logger.warning("Fallback OCR failed: %s", e)
-                warnings.append(f"OCR fallback failed: {e}")
+        raw_text, avatar_b64, page_count = extract_text_from_pdf(
+            file_bytes,
+            filename=filename or "document.pdf",
+        )
+        extraction_method = "google_vision_document_text_detection_pdf"
 
     elif file_type == "image":
         raw_text, page_count = extract_text_from_image(
@@ -445,7 +453,7 @@ def parse_cv(
             content_type=content_type,
             filename=filename or "image.jpg",
         )
-        extraction_method = "image_ocr"
+        extraction_method = "google_vision_document_text_detection_image"
 
     elif file_type == "docx":
         raw_text = extract_text_from_docx(file_bytes)
@@ -498,6 +506,7 @@ def parse_cv(
             "document_analysis": normalize_document_analysis(build_empty_document_analysis()),
             "correction_log": [],
             "avatar_url": None,
+            "clean_html": "",
         }
 
     # ── Pre-clean OCR artifacts, then normalize via LLM
@@ -531,6 +540,11 @@ def parse_cv(
     )
     correction_log = postprocess_result.get("correction_log") or []
     structured_data = mapped_sections_to_structured_data(cleaned_json, raw_text=raw_text)
+    clean_html = render_clean_cv_html(
+        structured_data=structured_data,
+        mapped_sections=cleaned_json,
+        raw_text=raw_text,
+    )
 
     return {
         "success": True,
@@ -546,4 +560,5 @@ def parse_cv(
         "document_analysis": document_analysis,
         "correction_log": correction_log,
         "avatar_url": avatar_url,
+        "clean_html": clean_html,
     }

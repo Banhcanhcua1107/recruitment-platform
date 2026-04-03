@@ -213,6 +213,7 @@ class ParseCVResponse(BaseModel):
     document_analysis: DocumentAnalysisModel = Field(default_factory=DocumentAnalysisModel)
     correction_log: list[CorrectionLogEntryModel] = Field(default_factory=list)
     avatar_url: Optional[str] = Field(default=None, description="Data-URI of avatar image if detected")
+    clean_html: str = Field(default="", description="Sanitized CV HTML ready for rich-text editing")
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -300,6 +301,7 @@ class UploadCVResponse(BaseModel):
     markdown_pages: list[str] = Field(default_factory=list)
     raw_text: str = ""
     content: str = ""
+    clean_html: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
     debug: dict[str, Any] = Field(default_factory=dict)
     raw_ocr: dict[str, Any] = Field(default_factory=dict)
@@ -319,6 +321,19 @@ class MatchJobResponse(BaseModel):
     match_percentage: float = Field(..., ge=0, le=100)
     missing_keywords: list[str] = Field(default_factory=list)
     common_keywords: list[str] = Field(default_factory=list)
+    model_used: str = "ollama/qwen3:4b"
+
+
+class CVSuggestionsRequest(BaseModel):
+    clean_html: str = ""
+    structured_json: dict[str, Any] = Field(default_factory=dict)
+    raw_text: str = ""
+    max_items: int = Field(default=5, ge=1, le=10)
+
+
+class CVSuggestionsResponse(BaseModel):
+    success: bool = True
+    suggestions: list[str] = Field(default_factory=list)
     model_used: str = "ollama/qwen3:4b"
 
 
