@@ -1,16 +1,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { buildCanonicalAppUrl } from '@/lib/url/canonical-origin'
 
 function getSafeRedirectUrl(path: string, request: NextRequest) {
-  const url = request.nextUrl.clone()
-  url.pathname = path
-  url.search = ''
-
-  if (url.hostname === '0.0.0.0') {
-    url.hostname = 'localhost'
-  }
-
-  return url
+  return buildCanonicalAppUrl(path, request.url)
 }
 
 export async function updateSession(request: NextRequest) {
@@ -45,6 +38,20 @@ export async function updateSession(request: NextRequest) {
   // 2. Refresh Session
   const { data: { user } } = await supabase.auth.getUser()
   const path = request.nextUrl.pathname
+  const isRoleSelectionPath =
+    path === '/role-selection' || path.startsWith('/register/role-selection')
+
+  if (path === '/' && user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profile?.role === 'hr') {
+      return NextResponse.redirect(getSafeRedirectUrl('/hr-home', request))
+    }
+  }
 
   // 3. STRICT GUARD LOGIC
 
@@ -59,7 +66,7 @@ export async function updateSession(request: NextRequest) {
 
   // B. Auth Routes (Login, Register)
   // If Logged in -> Redirect to / (Home)
-  if (path.startsWith('/login') || path.startsWith('/register')) {
+  if (path === '/login' || path.startsWith('/register')) {
       // Exclude /register/role-selection if we are moving it, but user wants /role-selection separately.
       // If user is accessing /register/role-selection (old path), we should probably handle it or just focus on new path.
       // Assuming new path /role-selection is not under /register.
@@ -71,7 +78,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // C. Role Selection Route (/role-selection)
-  if (path.startsWith('/role-selection')) {
+  if (isRoleSelectionPath) {
       if (!user) {
           // Not logged in -> Login
         return NextResponse.redirect(getSafeRedirectUrl('/login', request))

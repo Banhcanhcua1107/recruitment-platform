@@ -1,20 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
-
-function getSafeOrigin(request: Request) {
-  const url = new URL(request.url)
-
-  // In local Docker/dev setups, request.url can use 0.0.0.0 which is invalid for browser navigation.
-  if (url.hostname === '0.0.0.0') {
-    url.hostname = 'localhost'
-  }
-
-  return url.origin
-}
+import { getCanonicalAppOrigin } from '@/lib/url/canonical-origin'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const origin = getSafeOrigin(request)
+  const origin = getCanonicalAppOrigin(request.url)
   const code = searchParams.get('code')
   
   // Default to nothing here, logic will decide destination
