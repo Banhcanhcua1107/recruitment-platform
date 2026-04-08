@@ -32,7 +32,7 @@ function createTimeoutController(timeoutMs: number) {
   };
 }
 
-function bindAbortSignal(target: AbortController, source?: AbortSignal) {
+function bindAbortSignal(target: AbortController, source?: AbortSignal | null) {
   if (!source) {
     return () => {};
   }

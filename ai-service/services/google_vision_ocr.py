@@ -12,7 +12,7 @@ from typing import Any, Protocol
 import requests
 from PIL import Image
 
-from services.ocr_service import OCRBlock, OCRPageResult, extract_full_text, normalise_to_images
+from services.ocr_common import OCRBlock, OCRPageResult, extract_full_text, normalise_to_images
 
 logger = logging.getLogger("google_vision_ocr")
 

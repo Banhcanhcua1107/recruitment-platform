@@ -17,6 +17,7 @@ import type {
 } from "@/types/cv-import";
 import { normalizeParsedJsonRecord } from "@/features/cv-import/normalize-parsed-json";
 import { logger, measureAsync } from "@/lib/observability";
+import { fetchWithTimeout } from "@/lib/upstream-http";
 
 const AI_SERVICE_URL =
   process.env.AI_SERVICE_URL ||
@@ -87,16 +88,28 @@ export function normalizeParsedJSON(input: unknown): NormalizedParsedCV {
   return normalizeParsedJsonRecord(input);
 }
 
+interface CreateCVImportOptions {
+  startProcessing?: boolean;
+}
+
 async function enqueueProcessing(documentId: string, jobId: string) {
-  const response = await fetch(`${AI_SERVICE_URL}/internal/jobs/cv-documents`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(AI_SERVICE_INTERNAL_TOKEN ? { Authorization: `Bearer ${AI_SERVICE_INTERNAL_TOKEN}` } : {}),
+  const timeoutMs = Number.parseInt(process.env.CV_IMPORT_ENQUEUE_TIMEOUT_MS || "10000", 10);
+  const { response } = await fetchWithTimeout(
+    `${AI_SERVICE_URL}/internal/jobs/cv-documents`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(AI_SERVICE_INTERNAL_TOKEN ? { Authorization: `Bearer ${AI_SERVICE_INTERNAL_TOKEN}` } : {}),
+      },
+      body: JSON.stringify({ document_id: documentId, job_id: jobId }),
+      cache: "no-store",
     },
-    body: JSON.stringify({ document_id: documentId, job_id: jobId }),
-    cache: "no-store",
-  });
+    {
+      timeoutMs,
+      timeoutMessage: `CV processing enqueue timed out after ${timeoutMs}ms.`,
+    },
+  );
 
   if (!response.ok) {
     const message = await response.text();
@@ -203,12 +216,17 @@ async function getArtifactMapByIds(artifactIds: string[]) {
   return new Map((data ?? []).map((artifact) => [artifact.id, artifact as CVArtifactRecord]));
 }
 
-export async function createCVImportFromUpload(userId: string, file: File): Promise<CVImportSummaryResponse> {
+export async function createCVImportFromUpload(
+  userId: string,
+  file: File,
+  options: CreateCVImportOptions = {},
+): Promise<CVImportSummaryResponse> {
   const admin = createAdminClient();
   const fileBuffer = Buffer.from(await file.arrayBuffer());
   const fileSha256 = computeSha256(fileBuffer);
   const documentId = randomUUID();
   const jobId = `cvdoc_${Date.now()}_${documentId.slice(0, 8)}`;
+  const startProcessing = options.startProcessing === true;
   const storagePath = buildOriginalStoragePath(userId, documentId, file.name);
   const sourceKind = detectSourceKind(file.type, file.name);
   const uploadedAt = nowIso();
@@ -264,12 +282,98 @@ export async function createCVImportFromUpload(userId: string, file: File): Prom
     throw new Error(insertArtifactError.message);
   }
 
+  if (startProcessing) {
+    const { error: queueUpdateError } = await admin
+      .from("cv_documents")
+      .update({
+        status: "queued",
+        queued_at: nowIso(),
+        job_id: jobId,
+        failure_stage: null,
+        failure_code: null,
+        review_required: false,
+        review_reason_code: null,
+      })
+      .eq("id", documentId)
+      .eq("user_id", userId);
+
+    if (queueUpdateError) {
+      throw new Error(queueUpdateError.message);
+    }
+
+    try {
+      await measureAsync("cv-imports.enqueue", { document_id: documentId, job_id: jobId }, () =>
+        enqueueProcessing(documentId, jobId)
+      );
+    } catch (error) {
+      await admin
+        .from("cv_documents")
+        .update({
+          status: "failed",
+          failure_stage: "queue" satisfies CVFailureStage,
+          failure_code: "enqueue_failed",
+        })
+        .eq("id", documentId)
+        .eq("user_id", userId);
+      throw error;
+    }
+  }
+
+  logger.info("cv-imports.created", {
+    document_id: documentId,
+    user_id: userId,
+    job_id: startProcessing ? jobId : null,
+    file_name: file.name,
+    file_size: file.size,
+    source_kind: sourceKind,
+    start_processing: startProcessing,
+  });
+
+  return {
+    document: {
+      id: documentId,
+      status: startProcessing ? "queued" : "uploaded",
+      document_type: "unknown",
+      file_name: file.name,
+      mime_type: file.type || "application/octet-stream",
+      file_size: file.size,
+      retry_count: 0,
+      job_id: startProcessing ? jobId : null,
+      review_required: false,
+    },
+    links: {
+      self: `/api/cv-imports/${documentId}`,
+      review: `/candidate/cv-builder/imports/${documentId}`,
+    },
+  };
+}
+
+export async function startCVDocumentProcessingForUser(
+  userId: string,
+  documentId: string,
+): Promise<CVImportSummaryResponse> {
+  const admin = createAdminClient();
+  const document = await getCVDocumentRecordForUser(userId, documentId);
+  if (!document) {
+    throw new Error("Document not found.");
+  }
+
+  if (ACTIVE_PROCESSING_STATUSES.has(document.status) && isActiveHeartbeat(document.last_heartbeat_at)) {
+    throw new Error("A processing job is still active for this document.");
+  }
+
+  const jobId = `cvdoc_${Date.now()}_${documentId.slice(0, 8)}`;
+  const retryCount = document.status === "uploaded" ? document.retry_count ?? 0 : (document.retry_count ?? 0) + 1;
+
   const { error: queueUpdateError } = await admin
     .from("cv_documents")
     .update({
       status: "queued",
       queued_at: nowIso(),
+      retry_count: retryCount,
       job_id: jobId,
+      processing_lock_token: null,
+      last_heartbeat_at: null,
       failure_stage: null,
       failure_code: null,
       review_required: false,
@@ -283,8 +387,8 @@ export async function createCVImportFromUpload(userId: string, file: File): Prom
   }
 
   try {
-    await measureAsync("cv-imports.enqueue", { document_id: documentId, job_id: jobId }, () =>
-      enqueueProcessing(documentId, jobId)
+    await measureAsync("cv-imports.start-analysis", { document_id: documentId, job_id: jobId }, () =>
+      enqueueProcessing(documentId, jobId),
     );
   } catch (error) {
     await admin
@@ -299,30 +403,29 @@ export async function createCVImportFromUpload(userId: string, file: File): Prom
     throw error;
   }
 
-  logger.info("cv-imports.created", {
+  logger.info("cv-imports.analysis-started", {
     document_id: documentId,
     user_id: userId,
     job_id: jobId,
-    file_name: file.name,
-    file_size: file.size,
-    source_kind: sourceKind,
+    retry_count: retryCount,
+    previous_status: document.status,
   });
 
   return {
     document: {
-      id: documentId,
+      id: document.id,
       status: "queued",
-      document_type: "unknown",
-      file_name: file.name,
-      mime_type: file.type || "application/octet-stream",
-      file_size: file.size,
-      retry_count: 0,
+      document_type: document.document_type,
+      file_name: document.file_name,
+      mime_type: document.mime_type,
+      file_size: document.file_size,
+      retry_count: retryCount,
       job_id: jobId,
       review_required: false,
     },
     links: {
-      self: `/api/cv-imports/${documentId}`,
-      review: `/candidate/cv-builder/imports/${documentId}`,
+      self: `/api/cv-imports/${document.id}`,
+      review: `/candidate/cv-builder/imports/${document.id}`,
     },
   };
 }

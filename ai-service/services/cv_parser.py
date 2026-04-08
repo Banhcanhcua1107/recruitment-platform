@@ -1,7 +1,7 @@
 """
 CV Parser Service
 ─────────────────
-Pipeline:
+Flow:
     Upload file
     ↓
     detect_file_type() → "pdf" | "image" | "docx"
@@ -15,7 +15,7 @@ Pipeline:
     {"raw_text", "clean_text", "cv_json", "avatar_url"}
 
 Models (Ollama):
-    OLLAMA_CV_PARSER_MODEL  = qwen2.5-coder:7b  (normalize + parse)
+    OLLAMA_CV_PARSER_MODEL  = qwen3:4b          (normalize + parse)
     OLLAMA_CV_SUGGEST_MODEL = qwen3:4b           (suggestions — untouched)
 """
 
@@ -45,7 +45,7 @@ from services.mapped_sections import (
 logger = logging.getLogger("cv_parser")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_CV_PARSER_MODEL = os.getenv("OLLAMA_CV_PARSER_MODEL", "qwen2.5-coder:7b")
+OLLAMA_CV_PARSER_MODEL = os.getenv("OLLAMA_CV_PARSER_MODEL", "qwen3:4b")
 
 # ─────────────────────────────────────────────────────────────────────
 # Step 1 — File-type detection
@@ -427,7 +427,7 @@ def parse_cv(
     filename: str = "",
 ) -> dict[str, Any]:
     """
-    Full pipeline. Returns both:
+    Full parsing flow. Returns both:
     - legacy fields: raw_text, clean_text, cv_json, avatar_url
     - builder fields: success, extraction_method, data, page_count, warnings
     """

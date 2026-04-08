@@ -1,12 +1,27 @@
 "use client";
 
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
-import { type User } from "@supabase/supabase-js";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import NotificationBell from "@/components/shared/NotificationBell";
+import { type User } from "@supabase/supabase-js";
+import {
+  BriefcaseBusiness,
+  Building2,
+  ChevronDown,
+  Circle,
+  FileText,
+  LayoutDashboard,
+  LayoutGrid,
+  LogOut,
+  Settings,
+  type LucideIcon,
+  UserRound,
+  Users,
+  X,
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { scheduleIdleTask } from "@/lib/client-idle";
 import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
 import { createClient } from "@/utils/supabase/client";
 import {
@@ -16,6 +31,11 @@ import {
   type HeaderViewer,
 } from "./headerModel";
 
+const NotificationBell = dynamic(() => import("@/components/shared/NotificationBell"), {
+  ssr: false,
+  loading: () => <div className="size-10 animate-pulse rounded-xl bg-slate-100" aria-hidden="true" />,
+});
+
 const ROLE_LABELS: Record<string, string> = {
   GUEST: "Khách",
   candidate: "Ứng viên",
@@ -23,6 +43,19 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
+
+const ACCOUNT_MENU_ICONS: Record<string, LucideIcon> = {
+  apartment: Building2,
+  dashboard: LayoutDashboard,
+  dashboard_customize: LayoutGrid,
+  description: FileText,
+  groups: Users,
+  logout: LogOut,
+  person: UserRound,
+  settings: Settings,
+  work: BriefcaseBusiness,
+  work_history: BriefcaseBusiness,
+};
 
 function isPrimaryLinkActive(pathname: string, href: string) {
   if (href === "/") {
@@ -75,6 +108,17 @@ function UserAvatar({
   );
 }
 
+function AccountMenuIcon({
+  iconName,
+  className,
+}: {
+  iconName: string;
+  className: string;
+}) {
+  const Icon = ACCOUNT_MENU_ICONS[iconName] ?? Circle;
+  return <Icon className={className} aria-hidden="true" />;
+}
+
 function AccountMenuItemRow({
   item,
   onNavigate,
@@ -88,9 +132,7 @@ function AccountMenuItemRow({
     "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition-colors";
 
   const icon = (
-    <span className="material-symbols-outlined text-[20px] text-slate-500">
-      {item.icon}
-    </span>
+    <AccountMenuIcon iconName={item.icon} className="size-5 text-slate-500" />
   );
 
   if (item.kind === "action") {
@@ -100,9 +142,7 @@ function AccountMenuItemRow({
         onClick={onAction}
         className={`${baseClassName} text-rose-600 hover:bg-rose-50`}
       >
-        <span className="material-symbols-outlined text-[20px] text-rose-500">
-          {item.icon}
-        </span>
+        <AccountMenuIcon iconName={item.icon} className="size-5 text-rose-500" />
         <span>{item.label}</span>
       </button>
     );
@@ -124,7 +164,12 @@ function AccountMenuItemRow({
   }
 
   return (
-    <Link href={item.href} onClick={onNavigate} className={`${baseClassName} text-slate-700 hover:bg-slate-50`}>
+    <Link
+      href={item.href}
+      prefetch={false}
+      onClick={onNavigate}
+      className={`${baseClassName} text-slate-700 hover:bg-slate-50`}
+    >
       {icon}
       <span>{item.label}</span>
     </Link>
@@ -191,6 +236,7 @@ export default function Navbar() {
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const accountButtonRef = useRef<HTMLButtonElement>(null);
+  const closeMenuTimerRef = useRef<number | null>(null);
 
   const model = getGlobalHeaderModel(viewer);
 
@@ -245,7 +291,9 @@ export default function Navbar() {
       setIsLoading(false);
     }
 
-    void resolveViewer();
+    const cancelIdleTask = scheduleIdleTask(() => {
+      void resolveViewer();
+    }, 450);
 
     const {
       data: { subscription },
@@ -255,6 +303,7 @@ export default function Navbar() {
 
     return () => {
       active = false;
+      cancelIdleTask();
       subscription.unsubscribe();
     };
   }, [supabase]);
@@ -319,7 +368,31 @@ export default function Navbar() {
     };
   }, [isDesktopMenuOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (closeMenuTimerRef.current !== null) {
+        window.clearTimeout(closeMenuTimerRef.current);
+      }
+    };
+  }, []);
+
+  const cancelDesktopMenuClose = () => {
+    if (closeMenuTimerRef.current !== null) {
+      window.clearTimeout(closeMenuTimerRef.current);
+      closeMenuTimerRef.current = null;
+    }
+  };
+
+  const scheduleDesktopMenuClose = () => {
+    cancelDesktopMenuClose();
+    closeMenuTimerRef.current = window.setTimeout(() => {
+      setIsDesktopMenuOpen(false);
+      closeMenuTimerRef.current = null;
+    }, 180);
+  };
+
   const closeAllMenus = () => {
+    cancelDesktopMenuClose();
     setIsDesktopMenuOpen(false);
     setIsMobileDrawerOpen(false);
   };
@@ -335,6 +408,7 @@ export default function Navbar() {
     }
 
     if (isDesktopViewport) {
+      cancelDesktopMenuClose();
       setIsDesktopMenuOpen((current) => !current);
       return;
     }
@@ -346,25 +420,30 @@ export default function Navbar() {
     <>
       <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/85 shadow-[0_10px_28px_-18px_rgba(15,23,42,0.25)] backdrop-blur-md">
         <div className="mx-auto max-w-screen-2xl px-4 sm:px-6 lg:px-8">
-          <div className="flex min-h-20 items-center gap-4 lg:min-h-24 lg:gap-8">
-            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="TalentFlow homepage">
-              <div className="flex size-13 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+          <div className="flex min-h-16 items-center gap-3 lg:min-h-20 lg:gap-6">
+            <Link
+              href="/"
+              prefetch={false}
+              className="flex shrink-0 items-center gap-2.5"
+              aria-label="TalentFlow homepage"
+            >
+              <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20 lg:size-12">
                 <Image
                   src="/logo.png"
                   alt="TalentFlow"
-                  width={44}
-                  height={44}
+                  width={40}
+                  height={40}
                   priority
-                  className="h-12 w-12 object-contain"
+                  className="h-9 w-9 object-contain lg:h-10 lg:w-10"
                 />
               </div>
-              <p className="hidden text-[2.1rem] font-extrabold tracking-tight text-slate-900 sm:block">
+              <p className="hidden text-[1.8rem] font-extrabold tracking-tight text-slate-900 sm:block lg:text-[1.95rem]">
                 TalentFlow
               </p>
             </Link>
 
-            <nav className="hidden flex-1 items-center justify-end md:flex md:pr-4 lg:pr-8 xl:pr-10">
-              <div className="flex items-center gap-5 lg:gap-7">
+            <nav className="hidden flex-1 items-center justify-end md:flex md:pr-4 lg:pr-6 xl:pr-8">
+              <div className="flex items-center gap-4 lg:gap-6">
                 {model.primaryLinks.map((item) => {
                   const isActive = isPrimaryLinkActive(pathname, item.href);
 
@@ -372,10 +451,11 @@ export default function Navbar() {
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`border-b-2 pb-1.5 text-[1.08rem] font-semibold transition-colors ${
+                      prefetch={false}
+                      className={`border-b-2 pb-1 text-[1rem] font-semibold transition-colors ${
                         isActive
-                          ? 'border-primary text-primary'
-                          : 'border-transparent text-slate-600 hover:text-primary'
+                          ? "border-primary text-primary"
+                          : "border-transparent text-slate-600 hover:text-primary"
                       }`}
                     >
                       {item.label}
@@ -385,7 +465,7 @@ export default function Navbar() {
               </div>
             </nav>
 
-            <div className="ml-auto flex items-center gap-3 sm:gap-4">
+            <div className="ml-auto flex items-center gap-2.5 sm:gap-3">
               {isLoading ? (
                 <div className="flex items-center gap-3">
                   <div className="size-10 animate-pulse rounded-full bg-slate-200" />
@@ -395,18 +475,19 @@ export default function Navbar() {
                 <>
                   <NotificationBell />
 
-                  <div className="hidden h-6 w-px bg-slate-200 md:block" />
+                  <div className="hidden h-5 w-px bg-slate-200 md:block" />
 
                   <div
                     className="relative"
                     onMouseEnter={() => {
                       if (isDesktopViewport) {
+                        cancelDesktopMenuClose();
                         setIsDesktopMenuOpen(true);
                       }
                     }}
                     onMouseLeave={() => {
                       if (isDesktopViewport) {
-                        setIsDesktopMenuOpen(false);
+                        scheduleDesktopMenuClose();
                       }
                     }}
                   >
@@ -414,25 +495,25 @@ export default function Navbar() {
                       ref={accountButtonRef}
                       type="button"
                       onClick={handleAccountTrigger}
-                      className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2.5 py-2 pr-3 transition-colors hover:border-primary/30 hover:bg-slate-50 sm:gap-3"
                       aria-haspopup="menu"
+                      className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5 pr-2.5 transition-colors hover:border-primary/30 hover:bg-slate-50 sm:gap-2.5"
                     >
                       <UserAvatar
                         avatarUrl={model.viewer.avatarUrl}
                         displayName={model.viewer.fullName}
-                        sizeClassName="size-10 sm:size-11"
+                        sizeClassName="size-9 sm:size-10"
                         textClassName="text-xs"
                       />
                       <div className="hidden min-w-0 text-left sm:block">
-                        <p className="max-w-24 truncate text-sm font-bold text-slate-900 sm:max-w-32 sm:text-base">
+                        <p className="max-w-24 truncate text-sm font-bold text-slate-900 sm:max-w-32 sm:text-sm">
                           {model.viewer.displayName}
                         </p>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
                           {ROLE_LABELS[model.viewer.role] ?? model.viewer.role}
                         </p>
                       </div>
-                      <span
-                        className={`material-symbols-outlined text-[20px] text-slate-400 transition-transform ${
+                      <ChevronDown
+                        className={`size-4.5 text-slate-400 transition-transform ${
                           isDesktopViewport
                             ? isDesktopMenuOpen
                               ? "rotate-180"
@@ -441,44 +522,36 @@ export default function Navbar() {
                               ? "rotate-180"
                               : ""
                         }`}
-                      >
-                        expand_more
-                      </span>
+                        aria-hidden="true"
+                      />
                     </button>
 
-                    <AnimatePresence>
-                      {isDesktopViewport && isDesktopMenuOpen ? (
-                        <motion.div
-                          ref={accountMenuRef}
-                          initial={{ opacity: 0, y: -8, scale: 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                          transition={{ duration: 0.18, ease: "easeOut" }}
-                          className="absolute right-0 top-full z-50 mt-4 w-85"
-                        >
-                          <AccountMenuContent
-                            model={model}
-                            onNavigate={closeAllMenus}
-                            onSignOut={() => {
-                              void handleLogout();
-                            }}
-                          />
-                        </motion.div>
-                      ) : null}
-                    </AnimatePresence>
+                    {isDesktopViewport && isDesktopMenuOpen ? (
+                      <div ref={accountMenuRef} className="absolute right-0 top-full z-50 w-85 pt-2">
+                        <AccountMenuContent
+                          model={model}
+                          onNavigate={closeAllMenus}
+                          onSignOut={() => {
+                            void handleLogout();
+                          }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 </>
               ) : (
                 <div className="flex items-center gap-2">
                   <Link
                     href="/login"
-                    className="rounded-full border border-primary/20 px-5 py-2.5 text-base font-bold text-primary transition-colors hover:bg-primary/5 sm:px-6"
+                    prefetch={false}
+                    className="rounded-full border border-primary/20 px-5 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/5 sm:px-6"
                   >
                     Đăng nhập
                   </Link>
                   <Link
                     href="/register"
-                    className="rounded-full bg-primary px-5 py-2.5 text-base font-bold text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.8)] transition-colors hover:bg-primary/90 sm:px-6"
+                    prefetch={false}
+                    className="rounded-full bg-primary px-5 py-2 text-sm font-bold text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.8)] transition-colors hover:bg-primary/90 sm:px-6"
                   >
                     Đăng ký
                   </Link>
@@ -487,7 +560,7 @@ export default function Navbar() {
             </div>
           </div>
 
-          <nav className="flex items-center gap-2 overflow-x-auto pb-4 lg:hidden">
+          <nav className="flex items-center gap-2 overflow-x-auto pb-3 lg:hidden">
             {model.primaryLinks.map((item) => {
               const isActive = isPrimaryLinkActive(pathname, item.href);
 
@@ -495,6 +568,7 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold transition-colors ${
                     isActive
                       ? "bg-primary text-white"
@@ -509,59 +583,47 @@ export default function Navbar() {
         </div>
       </header>
 
-      <AnimatePresence>
-        {isMobileDrawerOpen && model.isAuthenticated && model.viewer ? (
-          <>
-            <motion.button
-              type="button"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-60 bg-slate-950/40 backdrop-blur-[2px]"
-              aria-label="Close account drawer"
-              onClick={closeAllMenus}
-            />
+      {isMobileDrawerOpen && model.isAuthenticated && model.viewer ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-60 bg-slate-950/40 backdrop-blur-[2px]"
+            aria-label="Close account drawer"
+            onClick={closeAllMenus}
+          />
 
-            <motion.aside
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ duration: 0.24, ease: "easeOut" }}
-              className="fixed right-0 top-0 z-70 flex h-full w-full max-w-sm flex-col border-l border-slate-200 bg-white"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-5">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
-                    Tài khoản
-                  </p>
-                  <p className="mt-1 text-lg font-black text-slate-900">
-                    {model.viewer.fullName}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={closeAllMenus}
-                  className="rounded-full border border-slate-200 p-2 text-slate-500 transition-colors hover:bg-slate-50"
-                  aria-label="Close"
-                >
-                  <span className="material-symbols-outlined text-[20px]">close</span>
-                </button>
+          <aside className="fixed right-0 top-0 z-70 flex h-full w-full max-w-sm flex-col border-l border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-5">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-slate-400">
+                  Tài khoản
+                </p>
+                <p className="mt-1 text-lg font-black text-slate-900">
+                  {model.viewer.fullName}
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={closeAllMenus}
+                className="rounded-full border border-slate-200 p-2 text-slate-500 transition-colors hover:bg-slate-50"
+                aria-label="Close"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
 
-              <div className="flex-1 overflow-y-auto p-5">
-                <AccountMenuContent
-                  model={model}
-                  onNavigate={closeAllMenus}
-                  onSignOut={() => {
-                    void handleLogout();
-                  }}
-                />
-              </div>
-            </motion.aside>
-          </>
-        ) : null}
-      </AnimatePresence>
+            <div className="flex-1 overflow-y-auto p-5">
+              <AccountMenuContent
+                model={model}
+                onNavigate={closeAllMenus}
+                onSignOut={() => {
+                  void handleLogout();
+                }}
+              />
+            </div>
+          </aside>
+        </>
+      ) : null}
     </>
   );
 }

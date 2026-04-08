@@ -352,9 +352,95 @@ const ELEGANT_SIDEBAR_RENDER_CONFIG: CVTemplateConfig = {
   sectionOrder: SECTION_TYPES,
 };
 
+const TEAL_TIMELINE_RENDER_CONFIG: CVTemplateConfig = {
+  id: "teal-timeline",
+  name: "Teal Timeline",
+  description: "Mẫu CV trang 1 gọn gàng, thẳng hàng và ưu tiên đọc nhanh với tông teal nhẹ.",
+  pageSettings: {
+    pageSize: "A4",
+    outerFrameClassName: "",
+    paperFrameClassName: "border-0 bg-white rounded-none shadow-none",
+    paperPaddingClassName: "px-3 py-2 sm:px-4 sm:py-3",
+    paperMinHeightClassName: "min-h-[1160px]",
+    paperPatternClassName: "",
+  },
+  typographySettings: {
+    headingFontClassName: "font-semibold",
+    bodyFontClassName: "font-sans",
+    bodyTextClassName: "text-[12px] leading-[1.45]",
+  },
+  colorPalette: {
+    pageTextClassName: "text-slate-900",
+    mutedTextClassName: "text-slate-500",
+    hiddenSectionBackgroundClassName: "bg-slate-100",
+    hiddenSectionBorderClassName: "border-slate-300",
+  },
+  spacingRules: {
+    sectionGapClassName: "space-y-0.5",
+  },
+  sectionStyleRules: createSectionStyles({
+    accentTextClassName: "text-teal-700",
+    accentBackgroundClassName: "bg-teal-50",
+    accentBorderClassName: "border-teal-200",
+    dividerClassName: "bg-slate-300",
+    iconBackgroundClassName: "bg-teal-500",
+    iconBorderClassName: "border-teal-600",
+    baseBorderClassName: "border-slate-300",
+    baseBackgroundClassName: "bg-white",
+    customTitleTextClassName: "text-slate-900",
+    customIconBackgroundClassName: "bg-slate-700",
+    customIconBorderClassName: "border-slate-800",
+    iconShape: "square",
+    titleVariantOverrides: {
+      summary: "ribbon",
+      experience: "ribbon",
+      activities: "ribbon",
+    },
+  }),
+  headerLayout: {
+    variant: "reference-split",
+    showAvatar: true,
+    avatarSizeClassName: "h-26 w-26",
+    infoColumns: 2,
+    decorativeDots: true,
+    nameTextClassName: "text-teal-700",
+    roleTextClassName: "text-slate-700",
+    infoLabelTextClassName: "text-slate-900",
+    infoValueTextClassName: "text-slate-800",
+  },
+  sectionOrder: ["summary", "activities", "experience"],
+};
+
 export const DEFAULT_CV_TEMPLATE_ID = "professional-green";
 
 export const CV_TEMPLATE_REGISTRY: CVTemplateRegistryItem[] = [
+  {
+    id: "teal-timeline",
+    metadata: {
+      displayName: "Teal Timeline",
+      shortDescription: "Trang 1 tối giản với Overview + Hoạt động + Work experience, nhịp đọc rõ ràng và gọn.",
+      category: "Chuyên nghiệp",
+      tags: ["Teal", "Timeline", "Trang 1"],
+      themePreset: {
+        colors: {
+          primary: "#0f766e",
+          secondary: "#14b8a6",
+          text: "#0f172a",
+          background: "#f8faf9",
+        },
+        fonts: {
+          heading: "'Manrope', sans-serif",
+          body: "'Manrope', sans-serif",
+        },
+        spacing: 3,
+      },
+    },
+    preview: {
+      thumbnail: "/images/templates/template-professional-classic.svg",
+      images: ["/images/templates/template-professional-classic.svg"],
+    },
+    renderConfig: TEAL_TIMELINE_RENDER_CONFIG,
+  },
   {
     id: "professional-green",
     metadata: {

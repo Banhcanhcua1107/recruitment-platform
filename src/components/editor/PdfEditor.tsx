@@ -80,7 +80,10 @@ export default function PdfEditor({ metadata, onBack, onSave, isSaving }: PdfEdi
         const instance = await initializePdfViewerSession({
           container: container as unknown as PdfViewerContainerLike,
           webViewerOptions: {
-            path: metadata.vendorConfig.pdf?.webviewerPath || "/webviewer",
+            path:
+              process.env.NEXT_PUBLIC_WEBVIEWER_PATH ||
+              metadata.vendorConfig.pdf?.webviewerPath ||
+              "/webviewer",
             licenseKey: metadata.vendorConfig.pdf?.licenseKey,
             fullAPI: true,
             disableLogs: true,

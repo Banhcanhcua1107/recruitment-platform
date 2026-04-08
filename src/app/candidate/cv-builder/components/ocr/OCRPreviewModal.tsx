@@ -536,7 +536,7 @@ export function OCRPreviewModal({
     if (!file || isPromotingImport) return;
     try {
       setIsPromotingImport(true);
-      const response = await uploadCVImport(file);
+      const response = await uploadCVImport(file, { startProcessing: true });
       resetState();
       onClose();
       router.replace(`/candidate/cv-builder?importReview=${response.document.id}`, {
@@ -578,7 +578,7 @@ export function OCRPreviewModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.94, y: 20 }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
-          className="relative z-10 flex w-[94vw] max-w-[1700px] flex-col overflow-hidden rounded-3xl border border-slate-200/40 bg-white/95 shadow-2xl shadow-slate-900/20 backdrop-blur-xl"
+          className="relative z-10 flex w-[94vw] max-w-425 flex-col overflow-hidden rounded-3xl border border-slate-200/40 bg-white/95 shadow-2xl shadow-slate-900/20 backdrop-blur-xl"
           style={{ height: "90vh" }}
         >
           {!ocrLoading && !isSavingResult && (
@@ -648,7 +648,7 @@ export function OCRPreviewModal({
                       CV gốc
                     </h3>
                   </div>
-                  <span className="max-w-[220px] truncate text-[11px] font-medium text-slate-500">
+                  <span className="max-w-55 truncate text-[11px] font-medium text-slate-500">
                     {file.name}
                   </span>
                 </div>
@@ -681,7 +681,7 @@ export function OCRPreviewModal({
                           type="button"
                           onClick={() => void handleCreatePersistentImport()}
                           disabled={isPromotingImport}
-                          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition hover:-translate-y-[1px] hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-semibold text-slate-700 transition hover:-translate-y-px hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {isPromotingImport ? "Đang chuyển..." : "Mở hộp xem lại import mới"}
                         </button>

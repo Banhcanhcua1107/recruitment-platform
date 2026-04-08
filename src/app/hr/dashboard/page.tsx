@@ -1,3 +1,4 @@
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   ActionButton,
@@ -5,7 +6,6 @@ import {
   EmptyState,
   PanelCard,
 } from "@/components/app-shell";
-import { RecruitmentChart } from "@/components/recruitment/RecruitmentChart";
 import { StatusBadge as RecruitmentStatusBadge } from "@/components/recruitment/StatusBadge";
 import { RecruiterSavedCandidatesPanel } from "@/components/hr/RecruiterSavedCandidatesPanel";
 import {
@@ -17,6 +17,18 @@ import {
   getJobs,
 } from "@/lib/recruitment";
 import { getEmployerCandidates, getEmployerPipelineMetrics } from "@/lib/applications";
+
+const RecruitmentChart = dynamic(
+  () => import("@/components/recruitment/RecruitmentChart").then((module) => module.RecruitmentChart),
+  {
+    loading: () => (
+      <div className="rounded-4xl border border-slate-200/80 bg-white p-6 shadow-sm">
+        <div className="mb-4 h-6 w-56 animate-pulse rounded-lg bg-slate-100" />
+        <div className="h-65 animate-pulse rounded-3xl bg-slate-100" />
+      </div>
+    ),
+  },
+);
 
 export default async function HRDashboardPage() {
   const [stats, trend, pipeline, activityLogs, companyProfile, portfolioSummary, activeJobs, newCandidates] =

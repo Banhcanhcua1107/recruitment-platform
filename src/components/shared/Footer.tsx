@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BriefcaseBusiness, ChevronDown } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -8,7 +9,7 @@ export default function Footer() {
           <div className="col-span-2 md:col-span-1">
             <div className="mb-6 flex items-center gap-2 text-slate-900 dark:text-white">
               <div className="flex size-6 items-center justify-center text-primary">
-                <span className="material-symbols-outlined text-2xl font-bold">work</span>
+                <BriefcaseBusiness className="size-6" aria-hidden="true" />
               </div>
               <h2 className="text-lg font-extrabold leading-tight">TalentFlow</h2>
             </div>
@@ -36,17 +37,17 @@ export default function Footer() {
             <h3 className="mb-4 font-bold text-slate-900 dark:text-white">Về TalentFlow</h3>
             <ul className="space-y-3">
               <li>
-                <Link href="/about" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
+                <Link href="/contact" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
                   Giới thiệu
                 </Link>
               </li>
               <li>
-                <Link href="/careers" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
+                <Link href="/jobs" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
                   Tuyển dụng
                 </Link>
               </li>
               <li>
-                <Link href="/privacy" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
+                <Link href="/contact" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
                   Chính sách bảo mật
                 </Link>
               </li>
@@ -67,7 +68,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/blog" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
+                <Link href="/companies" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
                   Cẩm nang nghề nghiệp
                 </Link>
               </li>
@@ -88,7 +89,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/services" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
+                <Link href="/hr-home" className="text-sm text-slate-500 transition-colors hover:text-primary dark:text-slate-400">
                   Dịch vụ và bảng giá
                 </Link>
               </li>
@@ -104,7 +105,7 @@ export default function Footer() {
             <span className="text-sm text-slate-400">Ngôn ngữ:</span>
             <div className="flex cursor-pointer items-center gap-1 text-slate-500 transition-colors hover:text-primary">
               <span className="text-sm font-medium">Tiếng Việt</span>
-              <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+              <ChevronDown className="size-4" aria-hidden="true" />
             </div>
           </div>
         </div>

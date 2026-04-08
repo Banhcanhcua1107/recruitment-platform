@@ -10,6 +10,23 @@ interface CVPaperProps {
 }
 
 export function CVPaper({ template, children }: CVPaperProps) {
+  const isTealTimeline = template.id === "teal-timeline";
+
+  if (isTealTimeline) {
+    return (
+      <div
+        className={cn(
+          "mx-auto h-280.5 w-full max-w-198.5 overflow-hidden bg-white px-4 py-3 sm:px-6 sm:py-4 print:h-[297mm] print:w-[210mm] print:max-w-none print:bg-white print:px-0 print:py-0",
+          template.typographySettings.bodyFontClassName,
+          template.typographySettings.bodyTextClassName,
+          template.colorPalette.pageTextClassName,
+        )}
+      >
+        {children}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(

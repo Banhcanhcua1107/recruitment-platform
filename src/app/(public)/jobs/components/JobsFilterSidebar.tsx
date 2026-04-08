@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import * as React from "react";
+import { ChevronDown, ChevronUp, FileText } from "lucide-react";
 
 interface JobsFilterSidebarProps {
   activeFilterCount: number;
@@ -137,9 +138,7 @@ export function JobsFilterSidebar({
                   </option>
                 ))}
               </select>
-              <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                expand_more
-              </span>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
             </div>
           </SidebarBlock>
 
@@ -251,9 +250,11 @@ export function JobsFilterSidebar({
                   onClick={() => setShowAllIndustries((previous) => !previous)}
                   className="mt-4 inline-flex items-center gap-1 text-xs font-black uppercase tracking-[0.16em] text-primary transition hover:underline"
                 >
-                  <span className="material-symbols-outlined text-sm">
-                    {showAllIndustries ? "expand_less" : "expand_more"}
-                  </span>
+                  {showAllIndustries ? (
+                    <ChevronUp className="size-4" aria-hidden="true" />
+                  ) : (
+                    <ChevronDown className="size-4" aria-hidden="true" />
+                  )}
                   {showAllIndustries
                     ? "Thu gọn"
                     : `Xem thêm ${allIndustries.length - 6} ngành`}
@@ -265,11 +266,7 @@ export function JobsFilterSidebar({
       </div>
 
       <div className="overflow-hidden rounded-[28px] bg-linear-to-br from-blue-700 to-primary p-6 text-white shadow-xl shadow-blue-500/20">
-        <span
-          className="material-symbols-outlined mb-4 inline-flex rounded-2xl bg-white/20 p-3 text-3xl [font-variation-settings:'FILL'_1]"
-        >
-          description
-        </span>
+        <FileText className="mb-4 inline-flex size-12 rounded-2xl bg-white/20 p-3" aria-hidden="true" />
         <h4 className="text-lg font-black">Tạo CV chuyên nghiệp</h4>
         <p className="mt-2 text-sm font-medium leading-relaxed text-blue-100">
           Nâng cao tỷ lệ trúng tuyển với mẫu CV chuẩn ATS và dữ liệu hồ sơ rõ

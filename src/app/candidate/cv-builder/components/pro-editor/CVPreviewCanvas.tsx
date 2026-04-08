@@ -14,6 +14,28 @@ import { getTemplateConfig } from "@/app/candidate/cv-builder/components/pro-edi
 const A4_HEIGHT_PX = 1122;
 const PAGE_FOOTER_RESERVE_PX = 44;
 const HEADER_SECTION_GAP_PX = 20;
+const SINGLE_PAGE_ZOOM_DEFAULT_CLASS = "[zoom:1]";
+const MIN_READABLE_SINGLE_PAGE_ZOOM = 0.9;
+
+function resolveSinglePageZoomClass(zoomValue: number) {
+  if (zoomValue >= 0.985) {
+    return "[zoom:1]";
+  }
+
+  if (zoomValue >= 0.96) {
+    return "[zoom:0.96]";
+  }
+
+  if (zoomValue >= 0.94) {
+    return "[zoom:0.94]";
+  }
+
+  if (zoomValue >= 0.92) {
+    return "[zoom:0.92]";
+  }
+
+  return "[zoom:0.9]";
+}
 
 interface RenderSectionBlock {
   id: string;
@@ -270,6 +292,7 @@ export function CVPreviewCanvas({
   templateId,
 }: CVPreviewCanvasProps) {
   const template = useMemo(() => getTemplateConfig(templateId), [templateId]);
+  const forceSinglePage = template.id === "teal-timeline";
   const previewData = useMemo(() => mapBuilderSectionsToPreviewData(sections), [sections]);
   const orderedSections = useMemo(
     () => orderPreviewSections(previewData.sections, template.sectionOrder),
@@ -281,6 +304,8 @@ export function CVPreviewCanvas({
   const measureSectionsContainerRef = useRef<HTMLDivElement | null>(null);
   const measureSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [paginatedPages, setPaginatedPages] = useState<PreviewPage[]>([]);
+  const [singlePageZoomClassName, setSinglePageZoomClassName] = useState(SINGLE_PAGE_ZOOM_DEFAULT_CLASS);
+  const [tealPaginateForReadability, setTealPaginateForReadability] = useState(false);
 
   const headerSection = sections.find((section) => section.type === "header");
   const personalInfoSection = sections.find((section) => section.type === "personal_info");
@@ -328,9 +353,10 @@ export function CVPreviewCanvas({
       const borderTop = Number.parseFloat(paperStyles.borderTopWidth || "0") || 0;
       const borderBottom = Number.parseFloat(paperStyles.borderBottomWidth || "0") || 0;
 
+      const footerReservePx = forceSinglePage ? 8 : PAGE_FOOTER_RESERVE_PX;
       const maxPageContentHeight = Math.max(
         280,
-        A4_HEIGHT_PX - paddingTop - paddingBottom - borderTop - borderBottom - PAGE_FOOTER_RESERVE_PX,
+        A4_HEIGHT_PX - paddingTop - paddingBottom - borderTop - borderBottom - footerReservePx,
       );
 
       const headerHeight = hasHeader ? Math.max(1, measureHeaderRef.current?.offsetHeight ?? 0) : 0;
@@ -340,6 +366,16 @@ export function CVPreviewCanvas({
         const sectionNode = measureSectionRefs.current[section.id];
         const sectionHeight = Math.max(1, sectionNode?.offsetHeight ?? 1);
 
+        if (forceSinglePage) {
+          return [
+            {
+              id: section.id,
+              section,
+              height: sectionHeight,
+            },
+          ];
+        }
+
         return buildSectionBlocks({
           section,
           sectionHeight,
@@ -347,6 +383,52 @@ export function CVPreviewCanvas({
           maxPageContentHeight,
         });
       });
+
+      if (forceSinglePage) {
+        const totalBlocksHeight = blocks.reduce(
+          (total, block, blockIndex) => total + block.height + (blockIndex > 0 ? sectionGap : 0),
+          0,
+        );
+        const totalContentHeight = totalBlocksHeight + (hasHeader ? headerHeight + HEADER_SECTION_GAP_PX : 0);
+
+        const nextZoom = totalContentHeight > maxPageContentHeight
+          ? Math.max(0.72, maxPageContentHeight / totalContentHeight)
+          : 1;
+
+        if (nextZoom >= MIN_READABLE_SINGLE_PAGE_ZOOM) {
+          setTealPaginateForReadability(false);
+
+          const nextZoomClassName = resolveSinglePageZoomClass(nextZoom);
+          setSinglePageZoomClassName((previousClassName) =>
+            previousClassName === nextZoomClassName ? previousClassName : nextZoomClassName,
+          );
+
+          const singlePage: PreviewPage[] = [
+            {
+              includeHeader: hasHeader,
+              blocks,
+            },
+          ];
+
+          setPaginatedPages((previousPages) =>
+            arePagesEqual(previousPages, singlePage) ? previousPages : singlePage,
+          );
+          return;
+        }
+
+        setTealPaginateForReadability(true);
+        setSinglePageZoomClassName((previousClassName) =>
+          previousClassName === SINGLE_PAGE_ZOOM_DEFAULT_CLASS
+            ? previousClassName
+            : SINGLE_PAGE_ZOOM_DEFAULT_CLASS,
+        );
+      }
+
+      setSinglePageZoomClassName((previousClassName) =>
+        previousClassName === SINGLE_PAGE_ZOOM_DEFAULT_CLASS
+          ? previousClassName
+          : SINGLE_PAGE_ZOOM_DEFAULT_CLASS,
+      );
 
       const computedPages: PreviewPage[] = [];
       let currentPage: PreviewPage = {
@@ -388,7 +470,7 @@ export function CVPreviewCanvas({
     return () => {
       window.removeEventListener("resize", recalculatePages);
     };
-  }, [hasHeader, orderedSections, sections, template]);
+  }, [forceSinglePage, hasHeader, orderedSections, sections, template]);
 
   const handleHeaderEdit = (field: "fullName" | "headline", value: string) => {
     if (!headerSection) {
@@ -425,11 +507,14 @@ export function CVPreviewCanvas({
           },
         ];
 
+  const shouldUseSinglePageMode = forceSinglePage && !tealPaginateForReadability;
   const totalPages = pages.length;
+  const pageListClassName = shouldUseSinglePageMode ? "space-y-0" : "space-y-6";
+  const measurePaperClassName = "mx-auto h-280.5 w-198.5 max-w-full overflow-hidden";
 
   return (
     <>
-      <div className="space-y-6">
+      <div className={pageListClassName}>
         {pages.map((page, pageIndex) => (
           <div
             key={`cv-page-${pageIndex + 1}`}
@@ -437,7 +522,12 @@ export function CVPreviewCanvas({
           >
             <CVPaper template={template}>
               <div className="flex h-full flex-col">
-                <div className="flex-1">
+                <div
+                  className={cn(
+                    "flex-1 origin-top-left",
+                    shouldUseSinglePageMode ? singlePageZoomClassName : SINGLE_PAGE_ZOOM_DEFAULT_CLASS,
+                  )}
+                >
                   {page.includeHeader ? (
                     <CVHeader
                       template={template}
@@ -487,12 +577,14 @@ export function CVPreviewCanvas({
                   ) : null}
                 </div>
 
-                <footer className="mt-6 flex items-center justify-between border-t border-slate-200 pt-3 text-[11px] font-semibold text-slate-500">
-                  <span className="tracking-[0.14em]">TalentFlow</span>
-                  <span className="font-medium tracking-normal">
-                    Trang {pageIndex + 1} / {totalPages}
-                  </span>
-                </footer>
+                {!shouldUseSinglePageMode ? (
+                  <footer className="mt-6 flex items-center justify-between border-t border-slate-200 pt-3 text-[11px] font-semibold text-slate-500">
+                    <span className="tracking-[0.14em]">TalentFlow</span>
+                    <span className="font-medium tracking-normal">
+                      Trang {pageIndex + 1} / {totalPages}
+                    </span>
+                  </footer>
+                ) : null}
               </div>
             </CVPaper>
           </div>
@@ -503,7 +595,7 @@ export function CVPreviewCanvas({
         <div
           ref={measurePaperRef}
           className={cn(
-            "mx-auto h-280.5 w-198.5 max-w-full overflow-hidden",
+            measurePaperClassName,
             template.pageSettings.paperFrameClassName,
             template.pageSettings.paperPatternClassName,
             template.pageSettings.paperPaddingClassName,

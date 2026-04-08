@@ -89,19 +89,22 @@ function SectionTitle({ styleConfig }: { styleConfig: CVResolvedSectionStyleConf
   }
 
   return (
-    <div className="mb-3 flex items-center gap-2.5">
-      <span
-        className={cn(
-          "inline-flex h-6 w-6 items-center justify-center border",
-          styleConfig.iconShape === "circle" ? "rounded-full" : "rounded-sm",
-          styleConfig.iconColorClassName,
-          styleConfig.iconBackgroundClassName,
-          styleConfig.iconBorderClassName,
-        )}
-      >
-        <Icon size={13} />
-      </span>
-      <h3 className={cn("text-[22px] font-semibold leading-tight tracking-[-0.01em]", styleConfig.titleTextClassName)}>{titleText}</h3>
+    <div className="mb-3">
+      <div className="flex items-center gap-2.5">
+        <span
+          className={cn(
+            "inline-flex h-6 w-6 items-center justify-center border",
+            styleConfig.iconShape === "circle" ? "rounded-full" : "rounded-sm",
+            styleConfig.iconColorClassName,
+            styleConfig.iconBackgroundClassName,
+            styleConfig.iconBorderClassName,
+          )}
+        >
+          <Icon size={13} />
+        </span>
+        <h3 className={cn("text-[22px] font-semibold leading-tight tracking-[-0.01em]", styleConfig.titleTextClassName)}>{titleText}</h3>
+      </div>
+      <div className="mt-2 h-px bg-slate-300" />
     </div>
   );
 }

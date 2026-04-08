@@ -60,6 +60,7 @@ export function CVSectionRenderer({
       }}
     >
       <SchemaDrivenSectionRenderer
+        templateId={template.id}
         section={section}
         styleConfig={styleConfig}
         isActive={isActive}

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import CandidateCard, { type HrCandidateItem } from "./CandidateCard";
+import CandidateJobsDrawer from "./CandidateJobsDrawer";
 import CandidateFilterSidebar, {
   type CandidateExperienceFilter,
   type CandidateFilters,
@@ -14,6 +15,10 @@ interface HrCandidatesApiResponse {
   pageSize: number;
   total: number;
   totalPages: number;
+  activeJobCount: number;
+  relevanceThreshold: number;
+  matchingMode: "strict" | "relaxed" | "broad";
+  contextWarning: string | null;
 }
 
 const INITIAL_FILTERS: CandidateFilters = {
@@ -23,9 +28,8 @@ const INITIAL_FILTERS: CandidateFilters = {
   skills: [],
   minSalary: 0,
   maxSalary: 100,
-  availableNow: false,
-  openToWork: false,
-  sort: "latest",
+  minMatchScore: 0,
+  sort: "best_match",
 };
 
 const QUICK_SKILLS = ["React", "Node.js", "Java", "UI/UX", "Python", "Next.js"];
@@ -67,21 +71,25 @@ function buildQuery(filters: CandidateFilters, page: number) {
     params.set("experience", experience);
   }
 
-  if (filters.availableNow) {
-    params.set("availableNow", "true");
-  }
-
-  if (filters.openToWork) {
-    params.set("openToWork", "true");
-  }
-
   params.set("minSalary", String(filters.minSalary));
   params.set("maxSalary", String(filters.maxSalary));
+  params.set("minMatch", String(filters.minMatchScore));
   params.set("sort", filters.sort);
   params.set("page", String(page));
   params.set("pageSize", "12");
 
   return params;
+}
+
+function getMatchingModeLabel(mode: HrCandidatesApiResponse["matchingMode"]) {
+  switch (mode) {
+    case "relaxed":
+      return "Ghép mở rộng";
+    case "broad":
+      return "Ghép tổng quan";
+    default:
+      return "Ghép chuẩn";
+  }
 }
 
 export default function HrHomePage() {
@@ -90,12 +98,17 @@ export default function HrHomePage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [jobsDrawerCandidate, setJobsDrawerCandidate] = useState<HrCandidateItem | null>(null);
   const [result, setResult] = useState<HrCandidatesApiResponse>({
     items: [],
     page: 1,
     pageSize: 12,
     total: 0,
     totalPages: 1,
+    activeJobCount: 0,
+    relevanceThreshold: 0.5,
+    matchingMode: "strict",
+    contextWarning: null,
   });
   const responseCacheRef = useRef<Map<string, { expiresAt: number; data: HrCandidatesApiResponse }>>(
     new Map()
@@ -131,7 +144,7 @@ export default function HrHomePage() {
         const payload = (await response.json()) as HrCandidatesApiResponse & { error?: string };
 
         if (!response.ok) {
-          throw new Error(payload.error || "Không thể tải danh sách ứng viên.");
+          throw new Error(payload.error || "Không thể tải danh sách ứng viên phù hợp.");
         }
 
         if (!active) {
@@ -144,7 +157,14 @@ export default function HrHomePage() {
           pageSize: Number(payload.pageSize || 12),
           total: Number(payload.total || 0),
           totalPages: Math.max(1, Number(payload.totalPages || 1)),
-        };
+          activeJobCount: Math.max(0, Number(payload.activeJobCount || 0)),
+          relevanceThreshold: Number(payload.relevanceThreshold || 0.5),
+          matchingMode:
+            payload.matchingMode === "relaxed" || payload.matchingMode === "broad"
+              ? payload.matchingMode
+              : "strict",
+          contextWarning: payload.contextWarning || null,
+        } satisfies HrCandidatesApiResponse;
 
         responseCacheRef.current.set(queryKey, {
           expiresAt: now + HR_CANDIDATE_SEARCH_CACHE_TTL_MS,
@@ -178,7 +198,7 @@ export default function HrHomePage() {
         setError(
           fetchError instanceof Error
             ? fetchError.message
-            : "Không thể tải danh sách ứng viên."
+            : "Không thể tải danh sách ứng viên phù hợp."
         );
       } finally {
         if (active) {
@@ -203,11 +223,15 @@ export default function HrHomePage() {
       }
     });
 
+    if (filters.location) {
+      set.add(filters.location);
+    }
+
     return Array.from(set).sort((a, b) => a.localeCompare(b, "vi"));
-  }, [result.items]);
+  }, [result.items, filters.location]);
 
   const skillOptions = useMemo(() => {
-    const set = new Set<string>(QUICK_SKILLS);
+    const set = new Set<string>([...QUICK_SKILLS, ...filters.skills]);
     result.items.forEach((candidate) => {
       candidate.skills.forEach((skill) => {
         if (skill.trim()) {
@@ -217,9 +241,7 @@ export default function HrHomePage() {
     });
 
     return Array.from(set).slice(0, 18);
-  }, [result.items]);
-
-  const recommendations: HrCandidateItem[] = [];
+  }, [result.items, filters.skills]);
 
   return (
     <>
@@ -307,33 +329,36 @@ export default function HrHomePage() {
       <main className="px-4 pb-24 pt-8 sm:px-6 lg:px-8">
         <div className={`${HR_HOME_CONTAINER_CLASS} space-y-8`}>
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Đề xuất cho bạn</p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">Ứng viên phù hợp theo nhu cầu tuyển dụng</h2>
-            </div>
-          </div>
-
-          {recommendations.length === 0 ? (
-            <div className="mt-4 rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8">
-              <p className="text-base font-semibold text-slate-700">Chưa có gợi ý phù hợp</p>
-              <p className="mt-2 text-sm text-slate-500">Hãy phân tích JD hoặc tạo job mới để hệ thống đề xuất ứng viên chuẩn hơn.</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 transition hover:border-primary hover:text-primary"
-                >
-                  Phân tích JD
-                </button>
-                <Link
-                  href="/hr/jobs/create"
-                  className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-black text-white transition hover:bg-blue-700"
-                >
-                  Tạo job
-                </Link>
+            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Tổng quan đề xuất</p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                  Ứng viên phù hợp theo nhu cầu tuyển dụng
+                </h2>
               </div>
             </div>
-          ) : null}
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Ứng viên phù hợp</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">{loading ? "..." : result.total}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Job đang mở</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">{loading ? "..." : result.activeJobCount}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Ngưỡng ghép hiện tại</p>
+                <p className="mt-1 text-2xl font-black text-slate-900">
+                  {Math.round(result.relevanceThreshold * 100)}%
+                </p>
+                <p className="text-[11px] font-semibold text-slate-500">{getMatchingModeLabel(result.matchingMode)}</p>
+              </div>
+            </div>
+
+            {result.contextWarning ? (
+              <p className="mt-3 text-sm font-medium text-slate-600">{result.contextWarning}</p>
+            ) : null}
           </section>
 
           <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
@@ -343,7 +368,11 @@ export default function HrHomePage() {
                   filters={filters}
                   allLocations={allLocations}
                   skillOptions={skillOptions}
-                  onFiltersChange={setFilters}
+                  onFiltersChange={(next) => {
+                    setFilters(next);
+                    setSubmittedFilters(next);
+                    setPage(1);
+                  }}
                   onClear={() => {
                     setFilters(INITIAL_FILTERS);
                     setPage(1);
@@ -356,7 +385,7 @@ export default function HrHomePage() {
             <section className="min-w-0 space-y-5">
               <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm md:flex-row md:items-center md:justify-between">
                 <p className="text-sm font-semibold text-slate-500">
-                  Hiển thị <span className="font-black text-slate-900">{result.total}</span> ứng viên public
+                  Hiển thị <span className="font-black text-slate-900">{result.total}</span> ứng viên phù hợp
                 </p>
 
                 <div className="flex items-center gap-3">
@@ -374,8 +403,8 @@ export default function HrHomePage() {
                     title="Sắp xếp danh sách ứng viên"
                     className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-black text-primary outline-none transition focus:border-primary/30 focus:ring-2 focus:ring-primary/10"
                   >
-                    <option value="latest">Mới nhất</option>
                     <option value="best_match">Phù hợp nhất</option>
+                    <option value="latest">Mới cập nhật</option>
                   </select>
                 </div>
               </div>
@@ -396,13 +425,29 @@ export default function HrHomePage() {
                 <div className="rounded-[28px] border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
                   <p className="text-xl font-black text-slate-900">Không có ứng viên phù hợp</p>
                   <p className="mt-2 text-sm font-medium text-slate-500">
-                    Hãy thử nới lỏng bộ lọc hoặc thay đổi từ khóa tìm kiếm.
+                    {result.activeJobCount === 0
+                      ? "Hiện chưa có job đang mở. Bạn có thể tạo job mới hoặc nới bộ lọc để hệ thống mở rộng ghép ứng viên."
+                      : "Hãy thử nới lỏng bộ lọc hoặc thay đổi từ khóa tìm kiếm."}
                   </p>
+                  {result.activeJobCount === 0 ? (
+                    <div className="mt-5">
+                      <Link
+                        href="/hr/jobs/create"
+                        className="inline-flex h-11 items-center justify-center rounded-2xl bg-primary px-5 text-sm font-black text-white transition hover:bg-blue-700"
+                      >
+                        Tạo job
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="grid items-start gap-3 md:grid-cols-2">
                   {result.items.map((candidate) => (
-                    <CandidateCard key={candidate.id} candidate={candidate} />
+                    <CandidateCard
+                      key={candidate.id}
+                      candidate={candidate}
+                      onOpenJobsDrawer={setJobsDrawerCandidate}
+                    />
                   ))}
                 </div>
               )}
@@ -447,6 +492,11 @@ export default function HrHomePage() {
           </div>
         </div>
       </main>
+
+      <CandidateJobsDrawer
+        candidate={jobsDrawerCandidate}
+        onClose={() => setJobsDrawerCandidate(null)}
+      />
     </>
   );
 }

@@ -2,6 +2,24 @@ import type { Job } from "@/types/job";
 
 export type SortKey = "newest" | "az" | "salary-high" | "salary-low";
 
+export interface JobsQueryFilters {
+  q: string;
+  location: string;
+  levels: string[];
+  types: string[];
+  industries: string[];
+  company: string;
+  sort: SortKey;
+}
+
+export interface JobsApiResponse {
+  items: Job[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface JobsPageFilters {
   q: string;
   selectedLocation: string;
@@ -24,6 +42,13 @@ export interface RecommendedJobItem {
   matchedSkills: string[];
   missingSkills: string[];
   job: Job;
+}
+
+export interface JobCardMatchMeta {
+  matchScore: number;
+  fitLevel: "High" | "Medium" | "Low";
+  badge: "Top match" | "Recommended";
+  matchedSkills: string[];
 }
 
 export interface RecommendedJobsPayload {

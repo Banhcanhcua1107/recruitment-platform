@@ -1,16 +1,45 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { ReactNode } from "react";
+import { ArrowLeft, Briefcase, BriefcaseBusiness, Clock3, MapPin, Tag, Users } from "lucide-react";
 import {
-  getAllCompanies,
   getCompanyBySlug,
   getJobsByCompanySlug,
 } from "@/lib/companies";
 
+export const revalidate = 300;
+export const dynamicParams = true;
+
+const OPTIMIZED_IMAGE_HOSTS = new Set([
+  "careerviet.vn",
+  "images.careerviet.vn",
+  "placehold.co",
+  "via.placeholder.com",
+  "images.unsplash.com",
+  "res.cloudinary.com",
+]);
+
+function canUseNextImage(src: string) {
+  if (!src) {
+    return false;
+  }
+
+  if (src.startsWith("/")) {
+    return true;
+  }
+
+  try {
+    return OPTIMIZED_IMAGE_HOSTS.has(new URL(src).hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ── Static params for SSG ──
 export async function generateStaticParams() {
-  const companies = await getAllCompanies();
-  return companies.map((c) => ({ id: c.slug }));
+  return [];
 }
 
 // ── SEO ──
@@ -50,31 +79,53 @@ export default async function CompanyProfilePage({
   return (
     <main className="min-h-screen bg-[#f6f7f8]">
       {/* ── Cover ── */}
-      <div className="h-56 md:h-72 relative bg-gradient-to-br from-primary via-blue-600 to-violet-600 overflow-hidden">
+      <div className="h-56 md:h-72 relative bg-linear-to-br from-primary via-blue-600 to-violet-600 overflow-hidden">
         {hasCover && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={company.coverUrl!}
-            alt=""
-            className="w-full h-full object-cover opacity-30"
-          />
+          canUseNextImage(company.coverUrl!) ? (
+            <Image
+              src={company.coverUrl!}
+              alt=""
+              fill
+              priority
+              sizes="100vw"
+              className="object-cover opacity-30"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={company.coverUrl!}
+              alt=""
+              className="w-full h-full object-cover opacity-30"
+            />
+          )
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+        <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-transparent" />
       </div>
 
-      <div className="max-w-[1100px] mx-auto px-6 -mt-20 relative z-10 pb-20">
+      <div className="max-w-275 mx-auto px-6 -mt-20 relative z-10 pb-20">
         {/* ── Company header card ── */}
         <div className="bg-white rounded-3xl border border-slate-100 shadow-xl p-6 md:p-10 mb-8">
           <div className="flex flex-col sm:flex-row gap-6 items-start">
             {/* logo */}
             <div className="size-24 md:size-28 rounded-2xl border-2 border-slate-100 bg-white shadow-md flex items-center justify-center shrink-0 overflow-hidden">
               {hasLogo ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
-                  src={company.logoUrl!}
-                  alt={company.name}
-                  className="w-full h-full object-contain p-2"
-                />
+                canUseNextImage(company.logoUrl!) ? (
+                  <Image
+                    src={company.logoUrl!}
+                    alt={company.name}
+                    width={112}
+                    height={112}
+                    sizes="112px"
+                    className="w-full h-full object-contain p-2"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={company.logoUrl!}
+                    alt={company.name}
+                    className="w-full h-full object-contain p-2"
+                  />
+                )
               ) : (
                 <span className="text-4xl font-black text-primary">
                   {initial}
@@ -91,21 +142,21 @@ export default async function CompanyProfilePage({
               <div className="mt-3 flex flex-wrap gap-2.5">
                 {company.location && (
                   <MetaPill
-                    icon="location_on"
+                    icon={<MapPin className="size-4.5" aria-hidden="true" />}
                     text={company.location}
                   />
                 )}
                 {company.industry.length > 0 && (
                   <MetaPill
-                    icon="category"
+                    icon={<Tag className="size-4.5" aria-hidden="true" />}
                     text={company.industry.join(", ")}
                   />
                 )}
                 {company.size && (
-                  <MetaPill icon="group" text={company.size} />
+                  <MetaPill icon={<Users className="size-4.5" aria-hidden="true" />} text={company.size} />
                 )}
                 <MetaPill
-                  icon="work"
+                  icon={<BriefcaseBusiness className="size-4.5" aria-hidden="true" />}
                   text={`${company.jobCount} việc làm`}
                   accent
                 />
@@ -117,17 +168,17 @@ export default async function CompanyProfilePage({
         {/* ── Info cards ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
           <InfoCard
-            icon="location_on"
+            icon={<MapPin className="size-6" aria-hidden="true" />}
             title="Địa chỉ"
             detail={company.location ?? "Chưa cập nhật"}
           />
           <InfoCard
-            icon="group"
+            icon={<Users className="size-6" aria-hidden="true" />}
             title="Quy mô"
             detail={company.size ?? "Chưa cập nhật"}
           />
           <InfoCard
-            icon="category"
+            icon={<Tag className="size-6" aria-hidden="true" />}
             title="Lĩnh vực"
             detail={
               company.industry.length > 0
@@ -141,16 +192,14 @@ export default async function CompanyProfilePage({
         <section>
           <h2 className="flex items-center gap-3 text-2xl font-black text-slate-900 mb-6 tracking-tight">
             <span className="flex items-center justify-center size-10 rounded-xl bg-primary/10 text-primary">
-              <span className="material-symbols-outlined text-2xl">work</span>
+              <BriefcaseBusiness className="size-6" aria-hidden="true" />
             </span>
             Việc làm đang tuyển ({jobs.length})
           </h2>
 
           {jobs.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-3xl border border-slate-100">
-              <span className="material-symbols-outlined text-5xl text-slate-200 mb-4 block">
-                work_off
-              </span>
+              <Briefcase className="mx-auto mb-4 size-12 text-slate-200" aria-hidden="true" />
               <p className="text-slate-400 font-bold">
                 Hiện chưa có việc làm nào đang tuyển.
               </p>
@@ -170,9 +219,7 @@ export default async function CompanyProfilePage({
             href="/companies"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-slate-100 bg-white text-slate-600 font-black hover:text-primary hover:border-primary/30 hover:shadow-sm hover:-translate-x-1 transition-all"
           >
-            <span className="material-symbols-outlined text-xl">
-              arrow_back
-            </span>
+            <ArrowLeft className="size-5" aria-hidden="true" />
             Danh sách công ty
           </Link>
         </div>
@@ -188,7 +235,7 @@ function MetaPill({
   text,
   accent,
 }: {
-  icon: string;
+  icon: ReactNode;
   text: string;
   accent?: boolean;
 }) {
@@ -200,7 +247,7 @@ function MetaPill({
           : "bg-slate-50 text-slate-600 border-slate-200"
       }`}
     >
-      <span className="material-symbols-outlined text-[18px]">{icon}</span>
+      {icon}
       {text}
     </span>
   );
@@ -211,14 +258,14 @@ function InfoCard({
   title,
   detail,
 }: {
-  icon: string;
+  icon: ReactNode;
   title: string;
   detail: string;
 }) {
   return (
     <div className="bg-white p-5 rounded-2xl border border-slate-100 flex items-center gap-4 shadow-sm hover:border-primary/30 transition-all">
       <div className="bg-primary/5 p-3 rounded-xl text-primary flex items-center justify-center shrink-0">
-        <span className="material-symbols-outlined text-2xl">{icon}</span>
+        {icon}
       </div>
       <div>
         <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-0.5">
@@ -284,16 +331,12 @@ function CompanyJobCard({
         {/* meta */}
         <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1.5">
           <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
-            <span className="material-symbols-outlined text-base">
-              location_on
-            </span>
+            <MapPin className="size-4" aria-hidden="true" />
             {job.location}
           </span>
           {job.deadline && (
             <span className="flex items-center gap-1 text-xs font-semibold text-slate-500">
-              <span className="material-symbols-outlined text-base">
-                schedule
-              </span>
+              <Clock3 className="size-4" aria-hidden="true" />
               {job.deadline}
             </span>
           )}

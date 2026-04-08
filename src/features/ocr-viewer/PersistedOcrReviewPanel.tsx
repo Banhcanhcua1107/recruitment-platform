@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { DocumentPreview } from "@/features/ocr-viewer/components/DocumentPreview";
 import { OcrProcessingState, type OcrProcessingStep } from "@/features/ocr-viewer/components/OcrProcessingState";
 import { PreviewScaleToolbar } from "@/features/ocr-viewer/components/PreviewScaleToolbar";
-import { SemanticReviewPanel } from "@/features/ocr-viewer/components/SemanticReviewPanel";
+import { ParsedBlockList } from "@/features/ocr-viewer/components/ParsedBlockList";
 import { normalizeParsedJsonRecord } from "@/features/cv-import/normalize-parsed-json";
 import { getReviewableBlocks } from "@/features/ocr-viewer/components/ParsedBlockList";
 import { fetchJsonlResult } from "@/features/ocr-viewer/services/paddleApi";
@@ -14,7 +14,6 @@ import type {
   NormalizedOcrResult,
   PreviewScaleMode,
 } from "@/features/ocr-viewer/types";
-import { buildSemanticJsonFromMappedSections } from "@/features/ocr-viewer/utils/mappedSectionsSemantic";
 import { normalizeOcrResult } from "@/features/ocr-viewer/utils/ocrNormalize";
 import type { CVArtifactKind, CVDocumentDetailResponse, CVDocumentStatus } from "@/types/cv-import";
 
@@ -67,7 +66,7 @@ function getScaleZoomForMode(mode: PreviewScaleMode, pageCount: number) {
 function getReviewStatusText(status: CVDocumentStatus, pageCount: number) {
   const safePageCount = Math.max(1, pageCount);
 
-  if (["uploaded", "queued", "normalizing", "rendering_preview", "retrying"].includes(status)) {
+  if (["queued", "normalizing", "rendering_preview", "retrying"].includes(status)) {
     return `He thong dang chuan bi file va dung preview de bat dau quet ${safePageCount} trang CV.`;
   }
 
@@ -91,7 +90,7 @@ function getReviewStatusText(status: CVDocumentStatus, pageCount: number) {
 }
 
 function buildReviewSteps(status: CVDocumentStatus): OcrProcessingStep[] {
-  const isAfterPrepare = !["uploaded", "queued", "normalizing", "rendering_preview", "retrying"].includes(status);
+  const isAfterPrepare = !["queued", "normalizing", "rendering_preview", "retrying"].includes(status);
   const isAfterOcr = ["layout_running", "vl_running", "parsing_structured", "persisting", "ready", "partial_ready"].includes(status);
   const isAfterLayout = ["parsing_structured", "persisting", "ready", "partial_ready"].includes(status);
   const isReady = ["ready", "partial_ready"].includes(status);
@@ -154,6 +153,20 @@ function getReadyArtifact(detail: CVDocumentDetailResponse, kind: CVArtifactKind
   );
 }
 
+function hasMeaningfulParsedJson(parsedJson: Record<string, unknown>) {
+  return Object.values(parsedJson).some((value) => {
+    if (Array.isArray(value)) {
+      return value.length > 0;
+    }
+
+    if (value && typeof value === "object") {
+      return Object.keys(value as Record<string, unknown>).length > 0;
+    }
+
+    return value !== null && value !== "";
+  });
+}
+
 export function PersistedOcrReviewPanel({
   detail,
   fallbackContent,
@@ -164,10 +177,6 @@ export function PersistedOcrReviewPanel({
   const normalizedFromParsed = useMemo(
     () => normalizeOcrResult({ parsed_json: normalizedParsedJson, pages: detail.pages }),
     [detail.pages, normalizedParsedJson],
-  );
-  const semanticOverride = useMemo(
-    () => buildSemanticJsonFromMappedSections(normalizedParsedJson.cleaned_json ?? normalizedParsedJson.mapped_sections),
-    [normalizedParsedJson.cleaned_json, normalizedParsedJson.mapped_sections],
   );
   const [artifactResult, setArtifactResult] = useState<NormalizedOcrResult | null>(null);
   const [artifactLoading, setArtifactLoading] = useState(false);
@@ -183,6 +192,8 @@ export function PersistedOcrReviewPanel({
   const pageCount = normalizedResult.pages.length;
   const blockCount = countBlocks(normalizedResult);
   const hasReviewContent = blockCount > 0;
+  const hasParsedJsonContent = useMemo(() => hasMeaningfulParsedJson(normalizedParsedJson), [normalizedParsedJson]);
+  const parsedJsonText = useMemo(() => JSON.stringify(normalizedParsedJson, null, 2), [normalizedParsedJson]);
   const hasRenderedPages = detail.pages.some((page) => Boolean(page.background_url));
   const previewFallbackUrl =
     getReadyArtifact(detail, "preview_pdf")?.download_url ?? getReadyArtifact(detail, "original_file")?.download_url;
@@ -214,7 +225,6 @@ export function PersistedOcrReviewPanel({
   const isDocumentProcessing =
     !hasReviewContent &&
     [
-      "uploaded",
       "queued",
       "normalizing",
       "rendering_preview",
@@ -225,6 +235,7 @@ export function PersistedOcrReviewPanel({
       "persisting",
       "retrying",
     ].includes(detail.document.status);
+  const isAwaitingAnalysis = detail.document.status === "uploaded" && !hasReviewContent;
 
   const processingSteps = useMemo(() => buildReviewSteps(detail.document.status), [detail.document.status]);
   const processingStatusText = useMemo(
@@ -367,7 +378,49 @@ export function PersistedOcrReviewPanel({
         </div>
       ) : null}
 
-      <div className="grid min-h-0 flex-1 overflow-hidden gap-2.5 p-2.5 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <div className="grid min-h-0 flex-1 gap-2.5 overflow-hidden p-2.5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.28fr)]">
+        <div className="min-h-0 overflow-y-auto rounded-[22px] border border-slate-200 bg-[#f8fbff] px-3 py-2 md:px-3.5">
+          {isDocumentProcessing || (artifactLoading && !hasReviewContent) ? (
+            <OcrProcessingState
+              title="CV dang duoc quet va phan tich"
+              description="Sau khi OCR hoan tat, panel nay se hien thi toan bo parsed JSON de ban doi chieu va chinh sua."
+              statusText={processingStatusText ?? (artifactLoading ? "Dang doc du lieu OCR da luu..." : null)}
+              steps={processingSteps}
+            />
+          ) : isAwaitingAnalysis ? (
+            <div className="flex h-full min-h-55 items-center justify-center">
+              <div className="max-w-105 rounded-[18px] border border-slate-200 bg-white px-4 py-5 text-center shadow-[0_16px_34px_-30px_rgba(15,23,42,0.28)]">
+                <p className="text-sm font-semibold text-slate-900">CV da duoc upload thanh cong</p>
+                <p className="mt-2 text-[13px] leading-6 text-slate-600">
+                  Bam <span className="font-semibold text-slate-900">Trich xuat JSON</span> de bat dau OCR. Khi hoan tat,
+                  panel nay se hien thi day du noi dung parsed JSON.
+                </p>
+              </div>
+            </div>
+          ) : hasParsedJsonContent ? (
+            <div className="overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_16px_34px_-30px_rgba(15,23,42,0.26)]">
+              <div className="border-b border-slate-100 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Parsed JSON</p>
+              </div>
+              <pre className="max-h-[calc(100vh-300px)] overflow-auto px-4 py-3 text-[12px] leading-5 text-slate-700">
+                {parsedJsonText}
+              </pre>
+            </div>
+          ) : hasReviewContent ? (
+            <ParsedBlockList
+              pages={normalizedResult.pages}
+              activeBlockId={activeBlockId}
+              hoveredBlockId={hoveredBlockId}
+              onHover={setHoveredBlockId}
+              onClick={setActiveBlockId}
+            />
+          ) : (
+            <div className="flex h-full min-h-55 items-center justify-center text-center text-[13px] text-slate-500">
+              Chua co noi dung parsed JSON de hien thi.
+            </div>
+          )}
+        </div>
+
         <div className="min-h-0 overflow-hidden rounded-[22px] border border-slate-200 bg-slate-50/90 p-1.5 md:p-2">
           <DocumentPreview
             pages={normalizedResult.pages}
@@ -380,26 +433,6 @@ export function PersistedOcrReviewPanel({
             onBoxHover={setHoveredBlockId}
             onBoxClick={setActiveBlockId}
           />
-        </div>
-
-        <div className="min-h-0 overflow-y-auto rounded-[22px] border border-slate-200 bg-[#f8fbff] px-2 py-1.5 md:px-2.5">
-          {isDocumentProcessing || (artifactLoading && !hasReviewContent) ? (
-            <OcrProcessingState
-              title="CV dang duoc quet va phan tich"
-              description="Sau khi he thong hoan tat OCR va gom noi dung, cot phai se tu chuyen sang phan noi dung CV de ban review."
-              statusText={processingStatusText ?? (artifactLoading ? "Dang doc du lieu OCR da luu..." : null)}
-              steps={processingSteps}
-            />
-          ) : (
-            <SemanticReviewPanel
-              pages={normalizedResult.pages}
-              semanticOverride={semanticOverride}
-              activeBlockId={activeBlockId}
-              hoveredBlockId={hoveredBlockId}
-              onHover={setHoveredBlockId}
-              onClick={setActiveBlockId}
-            />
-          )}
         </div>
       </div>
     </div>

@@ -17,3 +17,7 @@ RUN apt-get update \
 COPY ai-service/requirements.txt /tmp/requirements.txt
 
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY ai-service /workspace/ai-service
+
+EXPOSE 8000

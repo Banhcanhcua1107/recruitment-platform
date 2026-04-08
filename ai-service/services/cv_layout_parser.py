@@ -12,7 +12,7 @@ from services.mapped_sections import (
     mapped_sections_to_structured_data,
     normalize_mapped_sections,
 )
-from services.ocr_service import OCRBlock, OCRPageResult, extract_full_text
+from services.ocr_common import OCRBlock, OCRPageResult, extract_full_text
 
 
 @dataclass

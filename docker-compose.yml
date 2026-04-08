@@ -12,6 +12,33 @@ services:
       retries: 20
       start_period: 5s
 
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "mongodb://127.0.0.1:27017/admin",
+          "--eval",
+          "db.adminCommand({ ping: 1 }).ok",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   ai-service:
     image: recruitment-platform-ai-service-dev
     build:
@@ -100,8 +127,11 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.frontend
-    working_dir: /workspace
+      dockerfile: Dockerfile
+      target: deps
+    working_dir: /app
+    env_file:
+      - .env.local
     environment:
       AI_SERVICE_URL: http://ai-service:8000
       NEXT_PUBLIC_AI_SERVICE_URL: http://localhost:8000
@@ -109,6 +139,20 @@ services:
       DOCKER_DEV: "true"
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
+      EMAIL_MODE: ${EMAIL_MODE:-test}
+      MONGODB_URI: mongodb://mongodb:27017/recruitment_platform
+      MONGODB_DB: recruitment_platform
+      MAILPIT_SMTP_HOST: mailpit
+      MAILPIT_SMTP_PORT: "1025"
+      MAILPIT_API_BASE_URL: http://mailpit:8025
+      MAILPIT_WEB_URL: http://localhost:8025
+      TEST_SMTP_FROM: no-reply@gmail.test
+      REAL_SMTP_HOST: ${REAL_SMTP_HOST:-smtp.gmail.com}
+      REAL_SMTP_PORT: ${REAL_SMTP_PORT:-587}
+      REAL_SMTP_SECURE: ${REAL_SMTP_SECURE:-false}
+      REAL_SMTP_USER: ${REAL_SMTP_USER:-}
+      REAL_SMTP_PASS: ${REAL_SMTP_PASS:-}
+      REAL_SMTP_FROM: ${REAL_SMTP_FROM:-}
     command:
       - npm
       - run
@@ -121,26 +165,31 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - .:/workspace
-      - frontend-node-modules:/workspace/node_modules
-      - frontend-next:/workspace/.next
-      - /workspace/.venv
-      - /workspace/.worktrees
-      - /workspace/.agent
-      - /workspace/.agents
-      - /workspace/.git
-      - /workspace/.vscode
-      - /workspace/ai-service
-      - /workspace/docs
-      - /workspace/mau
-      - /workspace/supabase
+      - .:/app
+      - frontend-node-modules:/app/node_modules
+      - frontend-next:/app/.next
+      - /app/.venv
+      - /app/.worktrees
+      - /app/.agent
+      - /app/.agents
+      - /app/.git
+      - /app/.vscode
+      - /app/ai-service
+      - /app/docs
+      - /app/mau
+      - /app/supabase
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       ai-service:
         condition: service_started
+      mongodb:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
 
 volumes:
   redis-data:
+  mongodb-data:
   frontend-node-modules:
   frontend-next:

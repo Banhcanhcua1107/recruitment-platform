@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronDown, MapPin, Search } from "lucide-react";
+
 interface JobsHeroProps {
   q: string;
   selectedLocation: string;
@@ -22,22 +24,12 @@ export function JobsHero({
   onSearchClick,
 }: JobsHeroProps) {
   return (
-    <header className="bg-linear-to-b from-blue-50 to-[#f7f9fb] px-4 pt-24 pb-16 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-310 text-center">
-        <h1 className="mb-6 text-4xl font-black tracking-tight text-slate-900 md:text-6xl">
-          Tìm kiếm công việc mơ ước
-        </h1>
-        <p className="mx-auto mb-12 max-w-3xl text-base font-medium leading-relaxed text-slate-500 md:text-lg">
-          Khám phá hàng ngàn cơ hội nghề nghiệp được kết nối trực tiếp với kỹ
-          năng, kinh nghiệm và mục tiêu nghề nghiệp của bạn.
-        </p>
-
+    <header className="bg-linear-to-b from-blue-50 to-[#f7f9fb] px-4 pb-16 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-368 text-center">
         <div className="rounded-[28px] bg-white p-2 shadow-[0_24px_80px_rgba(37,99,235,0.12)]">
           <div className="flex flex-col gap-2 md:flex-row">
             <div className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-4">
-              <span className="material-symbols-outlined text-2xl text-slate-400">
-                search
-              </span>
+              <Search className="size-6 text-slate-400" aria-hidden="true" />
               <input
                 type="text"
                 value={q}
@@ -50,9 +42,7 @@ export function JobsHero({
             <div className="hidden w-px bg-slate-200 md:block" />
 
             <div className="relative flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-4">
-              <span className="material-symbols-outlined text-2xl text-slate-400">
-                location_on
-              </span>
+              <MapPin className="size-6 text-slate-400" aria-hidden="true" />
               <select
                 value={selectedLocation}
                 onChange={(event) => onLocationChange(event.target.value)}
@@ -66,9 +56,7 @@ export function JobsHero({
                   </option>
                 ))}
               </select>
-              <span className="material-symbols-outlined pointer-events-none absolute right-4 text-slate-400">
-                expand_more
-              </span>
+              <ChevronDown className="pointer-events-none absolute right-4 size-5 text-slate-400" aria-hidden="true" />
             </div>
 
             <button

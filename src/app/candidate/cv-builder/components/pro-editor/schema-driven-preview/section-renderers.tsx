@@ -4,6 +4,11 @@ import type { ReactElement } from "react";
 import { SectionShell } from "@/app/candidate/cv-builder/components/pro-editor/SectionShell";
 import { cn } from "@/lib/utils";
 import { EditableList, EditableText } from "./inline-editors";
+import {
+  OverviewSection,
+  TealActivitiesSection,
+  WorkExperienceSection,
+} from "./teal-timeline-sections";
 import type {
   ActivitiesSectionData,
   AwardsSectionData,
@@ -571,6 +576,7 @@ export function resolveSectionStyleConfig(
 }
 
 interface SchemaDrivenSectionRendererProps {
+  templateId: string;
   section: CVPreviewSection;
   styleConfig: CVResolvedSectionStyleConfig;
   isActive: boolean;
@@ -580,6 +586,7 @@ interface SchemaDrivenSectionRendererProps {
 }
 
 export function SchemaDrivenSectionRenderer({
+  templateId,
   section,
   styleConfig,
   isActive,
@@ -587,6 +594,47 @@ export function SchemaDrivenSectionRenderer({
   onAddAbove,
   onAddBelow,
 }: SchemaDrivenSectionRendererProps) {
+  if (templateId === "teal-timeline") {
+    if (section.type === "summary") {
+      return (
+        <OverviewSection
+          data={section.data as SummarySectionData}
+          styleConfig={styleConfig}
+          isActive={isActive}
+          onEdit={(updates) => onEdit(updates as Record<string, unknown>)}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      );
+    }
+
+    if (section.type === "experience") {
+      return (
+        <WorkExperienceSection
+          data={section.data as ExperienceSectionData}
+          styleConfig={styleConfig}
+          isActive={isActive}
+          onEdit={(updates) => onEdit(updates as Record<string, unknown>)}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      );
+    }
+
+    if (section.type === "activities") {
+      return (
+        <TealActivitiesSection
+          data={section.data as ActivitiesSectionData}
+          styleConfig={styleConfig}
+          isActive={isActive}
+          onEdit={(updates) => onEdit(updates as Record<string, unknown>)}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      );
+    }
+  }
+
   const Component = SECTION_COMPONENT_MAP[section.type] as (
     props: CVSectionComponentProps<unknown>
   ) => ReactElement;

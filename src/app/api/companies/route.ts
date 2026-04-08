@@ -1,15 +1,30 @@
 import { NextResponse } from "next/server";
-import { getAllCompanies } from "@/lib/companies";
+import { searchPublicCompanies, type PublicCompaniesSort } from "@/lib/companies";
+
+function parseSort(value: string | null): PublicCompaniesSort {
+  if (value?.toLowerCase() === "name_asc") {
+    return "name_asc";
+  }
+
+  return "jobs_desc";
+}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
 
-  const q = (searchParams.get("q") || "").toLowerCase().trim();
+  const q = (searchParams.get("q") || "").trim();
   const page = Math.max(1, Number(searchParams.get("page") || 1));
   const limit = Math.min(50, Math.max(1, Number(searchParams.get("limit") || 12)));
-  const sort = (searchParams.get("sort") || "jobs_desc").toLowerCase();
+  const sort = parseSort(searchParams.get("sort"));
 
-  let companies = (await getAllCompanies()).map((company) => ({
+  const result = await searchPublicCompanies({
+    q,
+    page,
+    limit,
+    sort,
+  });
+
+  const items = result.items.map((company) => ({
     slug: company.slug,
     name: company.name,
     logoUrl: company.logoUrl,
@@ -19,27 +34,18 @@ export async function GET(req: Request) {
     jobCount: company.jobCount,
   }));
 
-  if (q) {
-    companies = companies.filter((company) =>
-      `${company.name} ${company.location}`.toLowerCase().includes(q)
-    );
-  }
-
-  if (sort === "name_asc") {
-    companies.sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  } else {
-    companies.sort((a, b) => b.jobCount - a.jobCount);
-  }
-
-  const total = companies.length;
-  const start = (page - 1) * limit;
-  const items = companies.slice(start, start + limit);
-
-  return NextResponse.json({
-    page,
-    limit,
-    total,
-    totalPages: Math.ceil(total / limit),
-    items,
-  });
+  return NextResponse.json(
+    {
+      page: result.page,
+      limit: result.limit,
+      total: result.total,
+      totalPages: result.totalPages,
+      items,
+    },
+    {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+      },
+    },
+  );
 }

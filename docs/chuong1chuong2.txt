@@ -1,0 +1,419 @@
+CHƯƠNG 1 - TỔNG QUAN VỀ ỨNG DỤNG
+1.1.  TỔNG QUAN VỀ ĐỀ TÀI
+1.1.1. HIỆN TRẠNG NGÀNH F&B VÀ NHU CẦU CHUYỂN ĐỔI SỐ TẠI VIỆT NAM
+Trong những năm gần đây, ngành dịch vụ ăn uống (F&B - Food & Beverage) tại Việt Nam phát triển mạnh mẽ cả về quy mô lẫn hình thức kinh doanh. Cà phê, đồ uống và ẩm thực nhanh đã trở thành một phần không thể thiếu trong đời sống người dân, đặc biệt tại các thành phố lớn. Bên cạnh các thương hiệu chuỗi nổi tiếng, nhiều quán ăn, nhà hàng và quán cà phê quy mô nhỏ và vừa cũng liên tục ra đời nhằm đáp ứng nhu cầu thưởng thức và trải nghiệm đa dạng của khách hàng.
+Sự thay đổi trong thói quen tiêu dùng đã thúc đẩy quá trình chuyển đổi số trong ngành F&B. Người tiêu dùng hiện nay có xu hướng tìm kiếm sự tiện lợi, nhanh chóng và minh bạch trong quá trình gọi món, thanh toán và nhận dịch vụ. Các nhà hàng không chỉ cần phục vụ món ăn ngon, mà còn phải đảm bảo quy trình vận hành chuyên nghiệp và trải nghiệm khách hàng mượt mà. Chính vì vậy, việc áp dụng các giải pháp công nghệ thông tin trong quản lý hoạt động và phục vụ khách hàng trở thành xu hướng tất yếu.
+Tuy nhiên, thực tế cho thấy nhiều cơ sở kinh doanh F&B quy mô nhỏ và vừa vẫn còn duy trì mô hình quản lý thủ công, như:
+•	Ghi order bằng giấy, tính tiền bằng máy tính cầm tay.
+•	Trao đổi thông tin giữa nhân viên phục vụ và bếp qua lời nói.
+•	Không có sự đồng bộ dữ liệu giữa các bộ phận (phục vụ, bếp, thanh toán).
+Cách làm này tuy đơn giản nhưng dễ dẫn đến sai sót, nhầm lẫn và thiếu sự phối hợp giữa các bộ phận. Khi lượng khách hàng tăng cao, việc phục vụ chậm trễ hoặc ghi nhận sai đơn hàng thường xuyên xảy ra, ảnh hưởng trực tiếp đến trải nghiệm của khách hàng và hiệu quả hoạt động của quán.
+Bên cạnh đó, việc phụ thuộc vào các nền tảng trung gian như ứng dụng giao đồ ăn hay kênh bán hàng bên thứ ba cũng khiến nhiều cửa hàng nhỏ gặp khó khăn. Dù giúp tiếp cận khách hàng nhanh hơn, nhưng những nền tảng này thường yêu cầu mức phí cao và không cho phép cửa hàng chủ động quản lý dữ liệu khách hàng hay triển khai chương trình chăm sóc riêng.
+Từ thực tế đó, nhu cầu về một giải pháp công nghệ độc lập, chi phí hợp lý và dễ sử dụng trở nên rõ ràng. Một hệ thống cho phép quản lý toàn diện gọi món, bếp, thu ngân và thanh toán ngay tại bàn - tích hợp realtime - sẽ giúp các nhà hàng, quán ăn quy mô nhỏ và vừa tự động hóa quy trình phục vụ, giảm sai sót, nâng cao trải nghiệm khách hàng và tối ưu hiệu quả kinh doanh.
+1.1.2. GIỚI THIỆU ĐỀ TÀI
+Đề tài "Xây dựng ứng dụng gọi món và thanh toán tại bàn – TableFlow" được lựa chọn nhằm phát triển một giải pháp công nghệ toàn diện hỗ trợ các nhà hàng, quán ăn, quán cà phê quản lý toàn bộ hoạt động gọi món, phục vụ, bếp, và thanh toán trong cùng một hệ thống duy nhất.
+•	Ứng dụng được thiết kế đa vai trò, bao gồm bốn nhóm người dùng chính:
+o	Nhân viên phục vụ (Staff): Gọi món, tạo đơn hàng, theo dõi tiến độ chế biến, gửi yêu cầu thanh toán.
+o	Bộ phận Bếp (Kitchen): Nhận và cập nhật tình trạng món ăn theo thời gian thực qua hệ thống Kitchen Display System (KDS).
+o	Thu ngân (Cashier): Quản lý hóa đơn, xác nhận thanh toán, hỗ trợ nhiều phương thức thanh toán, in biên lai.
+o	Quản lý (Admin): Giám sát hoạt động tổng thể, quản lý người dùng, sản phẩm, báo cáo doanh thu và lợi nhuận.
+•	Công nghệ sử dụng:
+o	Frontend: React Native + Expo + TypeScript (phát triển ứng dụng cross-platform cho iOS/Android).
+o	Backend: Supabase (PostgreSQL + Realtime + Authentication + Storage).
+o	Thanh toán: Tích hợp MoMo QR Code và VietQR cho phép khách hàng thanh toán trực tiếp tại bàn.
+o	Styling: NativeWind (Tailwind CSS) cho giao diện modern và responsive.
+1.2. ƯU ĐIỂM VÀ HẠN CHẾ CỦA CÁC GIẢI PHÁP HIỆN NAY
+1.2.1. ƯU ĐIỂM CỦA CÁC GIẢI PHÁP HIỆN CÓ
+Hiện nay, trên thị trường có một số hướng tiếp cận phổ biến để quản lý nhà hàng:
+•	Các nền tảng giao hàng bên thứ ba:
+o	Tiếp cận nhanh với lượng người dùng lớn.
+o	Có sẵn hệ thống giao hàng và thanh toán.
+o	Dễ dàng triển khai mà không cần đội kỹ thuật riêng.
+•	Hệ thống của các chuỗi lớn:
+o	Có website hoặc ứng dụng riêng, thiết kế mang dấu ấn thương hiệu.
+o	Quản lý đồng bộ giữa đặt món, thanh toán, và quản lý khách hàng.
+o	Tự chủ hoàn toàn trong việc thu thập dữ liệu và phát triển hệ sinh thái khách hàng thân thiết.
+•	Các nền tảng quản lý F&B nội địa:
+o	Cung cấp giải pháp quản lý bán hàng, hóa đơn, tồn kho, và báo cáo doanh thu.
+o	Hỗ trợ nhiều mô hình F&B khác nhau.
+o	Có thể tùy chỉnh giao diện và tính năng ở mức cơ bản.
+1.2.2. HẠN CHẾ VÀ VẤN ĐỀ TỒN TẠI
+Tuy nhiên, các giải pháp hiện tại vẫn tồn tại nhiều bất cập đối với quán ăn, quán cà phê quy mô nhỏ và vừa:
+•	Chi phí triển khai cao: Phần mềm chuyên nghiệp hoặc nền tảng thương mại tính phí hàng tháng hoặc theo hoa hồng (20–30%/đơn hàng).
+•	Phụ thuộc vào bên thứ ba: Không kiểm soát được dữ liệu khách hàng và chính sách nền tảng.
+•	Thiếu tính linh hoạt: Không thể điều chỉnh giao diện hoặc quy trình phục vụ theo đặc thù từng quán.
+•	Thiếu tích hợp real-time: Dữ liệu giữa nhân viên – bếp – thu ngân không đồng bộ tức thời, gây sai lệch và chậm trễ.
+•	Không hỗ trợ thanh toán điện tử tại bàn: Khách hàng vẫn phải chờ nhân viên mang hóa đơn giấy hoặc chuyển tiền thủ công.
+Những điểm yếu này cho thấy khoảng trống thị trường rõ ràng cho một giải pháp “ứng dụng gọi món và thanh toán tại bàn” — vừa gọn nhẹ, chi phí thấp, vừa đủ tính năng như hệ thống chuyên nghiệp.
+1.3.  MỤC TIÊU CỦA ĐỀ TÀI
+Đề tài hướng đến việc xây dựng một ứng dụng di động gọi món và thanh toán tại bàn mang tên TableFlow, cung cấp giải pháp toàn diện giúp các nhà hàng, quán ăn, quán cà phê quy mô nhỏ và vừa chuyển đổi số hiệu quả trong quy trình phục vụ khách hàng.
+Hệ thống được thiết kế nhằm:
+•	Tự động hóa các thao tác và giao tiếp giữa nhân viên phục vụ ↔ bếp ↔ thu ngân
+•	Giảm sai sót trong xử lý đơn hàng thông qua tích hợp realtime
+•	Tăng tốc độ phục vụ bằng cách loại bỏ các thao tác thủ công
+•	Nâng cao trải nghiệm khách hàng qua thanh toán nhanh, chính xác và tiện lợi
+Ứng dụng không chỉ hỗ trợ quản lý gọi món và thanh toán, mà còn tích hợp các tính năng giám sát hoạt động, thống kê doanh thu, quản lý người dùng, hướng đến mục tiêu xây dựng một hệ sinh thái quản lý F&B toàn diện trên thiết bị di động.
+1.3.1. MỤC TIÊU TỔNG QUÁT
+•	Xây dựng ứng dụng di động đa vai trò (multi-role) bao gồm các nhóm người dùng: Nhân viên phục vụ, Bếp, Thu ngân và Quản lý.
+•	Cung cấp quy trình gọi món – chế biến – thanh toán – báo cáo đồng bộ theo thời gian thực.
+•	Giúp nhà hàng giảm sai sót trong xử lý đơn hàng, tăng tốc độ phục vụ và cải thiện hiệu quả vận hành.
+•	Ứng dụng các công nghệ hiện đại (React Native, TypeScript, Supabase) để đảm bảo hiệu suất, độ ổn định và khả năng mở rộng.
+•	Hỗ trợ các phương thức thanh toán điện tử như MoMo và VietQR, mang lại trải nghiệm tiện lợi cho khách hàng.
+1.3.2. MỤC TIÊU CỤ THỂ
+•	Xây dựng giao diện người dùng (Front-end) hiện đại và tối ưu trải nghiệm
+o	Phát triển ứng dụng trên nền tảng React Native + Expo, cho phép triển khai đa nền tảng (Android/iOS).
+o	Thiết kế giao diện trực quan, thân thiện với người dùng nhờ sử dụng NativeWind (Tailwind CSS).
+o	Hỗ trợ hiển thị tốt trên các thiết bị di động, tối ưu tốc độ phản hồi và thao tác của nhân viên trong môi trường áp lực cao.
+o	Đảm bảo quy trình thao tác liền mạch giữa các vai trò – từ gọi món, xác nhận đơn, đến thanh toán và in hóa đơn.
+•	Phát triển hệ thống xử lý dữ liệu (Back-end) mạnh mẽ và thời gian thực
+o	Sử dụng Supabase làm nền tảng backend, tích hợp các dịch vụ:
+o	Realtime Database – đồng bộ trạng thái đơn hàng giữa các vai trò.	
+o	Authentication – xác thực và phân quyền người dùng (RBAC).
+o	Storage – lưu trữ hình ảnh sản phẩm, biên lai, và dữ liệu khác.
+o	Edge Functions – xử lý nghiệp vụ liên quan đến thanh toán và thông báo.
+o	Xây dựng các API RESTful phục vụ giao tiếp giữa client và server.
+o	Đảm bảo tính bảo mật, ổn định và mở rộng linh hoạt trong quá trình vận hành.
+•	Hoàn thiện các chức năng cốt lõi của ứng dụng
+o	Đối với Nhân viên phục vụ:
+	Chọn bàn, xem menu, tạo đơn hàng và gửi order đến bếp theo thời gian thực.
+	Nhận thông báo khi món đã hoàn thành và hỗ trợ thanh toán cho khách.
+o	Đối với Bộ phận Bếp:
+	Nhận order mới ngay khi nhân viên gửi.
+	Cập nhật trạng thái món (Đang chế biến / Hoàn thành).
+	Gửi thông báo cho nhân viên phục vụ khi món sẵn sàng.
+o	Đối với Thu ngân:
+	Nhận thông tin bàn cần thanh toán, hiển thị chi tiết đơn hàng.
+	Xử lý các hình thức thanh toán (Tiền mặt, MoMo, VietQR).
+	In biên lai và xác nhận hoàn tất giao dịch.
+o	Đối với Quản lý:
+	Giám sát hoạt động quán theo thời gian thực.
+	Quản lý người dùng, sản phẩm và báo cáo doanh thu.
+	Theo dõi hiệu suất làm việc và trạng thái vận hành tổng thể.
+•	Tích hợp hệ thống thông báo theo vai trò (Role-based Notification System)
+o	Xây dựng cơ chế thông báo thời gian thực giữa các vai trò trong hệ thống.
+o	Đảm bảo mỗi vai trò chỉ nhận được thông tin phù hợp (ví dụ: bếp không nhận thông báo của thu ngân).
+o	Tích hợp âm thanh, rung và hiển thị popup nhằm đảm bảo thông tin được truyền tải kịp thời.
+•	Tích hợp thanh toán điện tử an toàn và nhanh chóng
+o	Tích hợp MoMo API và VietQR cho phép thanh toán tại bàn bằng quét mã QR.
+o	Hệ thống tự động xác nhận giao dịch thành công thông qua Supabase Realtime Listener.
+o	Tự động cập nhật trạng thái hóa đơn và điều hướng đến trang in biên lai sau khi thanh toán.
+1.4.  PHẠM VI CÔNG NGHỆ
+Để đảm bảo tính khả thi trong khuôn khổ đồ án, hệ thống được giới hạn trong phạm vi chức năng, công nghệ và đối tượng cụ thể như sau:
+1.4.1. Phạm Vi Chức Năng
+Ứng dụng TableFlow bao gồm bốn nhóm vai trò chính và các chức năng tương ứng:
+a.	Phía nhân viên phục vụ
+•	Xem sơ đồ bàn và chọn bàn phục vụ.
+•	Duyệt menu, tìm kiếm, lọc sản phẩm.
+•	Tạo đơn hàng, tùy chỉnh sản phẩm.
+•	Gửi order đến bếp theo thời gian thực.
+•	Theo dõi tiến độ chế biến.
+•	Gửi yêu cầu thanh toán.
+b.	Phía bếp (Kitchen Display System – KDS)
+•	Nhận đơn hàng mới từ nhân viên theo thời gian thực.
+•	Xem chi tiết đơn hàng trên màn hình KDS.
+•	Cập nhật trạng thái món (Đang chế biến, Hoàn thành).
+•	Gửi thông báo cho nhân viên phục vụ khi món sẵn sàng.
+c.	Phía thu ngân
+•	Nhận danh sách bàn cần thanh toán.
+•	Xem chi tiết đơn hàng và tính toán tổng tiền.
+•	Xử lý thanh toán qua nhiều phương thức (Tiền mặt, Chuyển khoản, MoMo, VietQR).
+•	In hóa đơn, biên lai.
+•	Xem thống kê doanh thu theo ngày/tuần/tháng.
+d.	Phía admin
+•	Xem thống kê doanh thu, lợi nhuận, chi phí toàn quán.
+•	Quản lý người dùng (thêm, sửa, xóa, phân quyền).
+•	Quản lý menu (thêm sản phẩm, cập nhật giá, ảnh).
+•	Quản lý danh sách bàn.
+•	Cấu hình hệ thống.
+1.4.2. Phạm Vi Công Nghệ
+•	Nền tảng phát triển
+o	Công nghệ sử dụng: React Native kết hợp Expo.
+o	Chức năng chính: Dùng để phát triển ứng dụng di động đa nền tảng (Android và iOS) chỉ với một mã nguồn duy nhất, giúp tiết kiệm thời gian triển khai và dễ dàng kiểm thử trên nhiều thiết bị.
+•	Ngôn ngữ lập trình
+o	Công nghệ sử dụng: TypeScript.
+o	Chức năng chính: Cung cấp khả năng kiểm tra kiểu dữ liệu tĩnh (type-checking) giúp hạn chế lỗi khi lập trình, tăng hiệu suất phát triển và đảm bảo tính ổn định cho ứng dụng.
+•	Hệ thống Backend
+o	Công nghệ sử dụng: Supabase (PostgreSQL + Realtime + Auth + Storage).
+o	Chức năng chính:
+	Quản lý cơ sở dữ liệu quan hệ (PostgreSQL).
+	Xác thực và phân quyền người dùng (Supabase Auth).
+	Đồng bộ dữ liệu thời gian thực giữa các vai trò (Realtime).
+	Lưu trữ hình ảnh và tệp tin (Storage).
+	Cung cấp API RESTful tự động để giao tiếp giữa Client và Server.
+•	Công cụ phát triển
+o	Công nghệ sử dụng: Visual Studio Code và GitHub.
+o	Chức năng chính:
+	Visual Studio Code: Môi trường soạn thảo mã nguồn nhẹ, hỗ trợ mở rộng và gỡ lỗi hiệu quả.
+	GitHub: Lưu trữ mã nguồn, theo dõi phiên bản và hỗ trợ làm việc nhóm, đảm bảo quy trình phát triển minh bạch và an toàn.
+•	Thanh toán điện tử
+o	Công nghệ sử dụng: MoMo API và VietQR.
+o	Chức năng chính:
+	Tích hợp quét mã QR để khách hàng thanh toán nhanh chóng và thuận tiện.
+	Xác nhận giao dịch tự động thông qua Supabase Realtime, cập nhật trạng thái hóa đơn ngay sau khi thanh toán thành công.
+•	Giao diện người dùng
+o	Công nghệ sử dụng: NativeWind (Tailwind CSS).
+o	Chức năng chính:
+	Tối ưu quá trình thiết kế giao diện bằng hệ thống lớp tiện ích (utility classes).
+	Giúp giao diện thống nhất, hiện đại, dễ tùy chỉnh và thân thiện với người dùng.
+	Hỗ trợ hiệu suất cao khi hiển thị trên nhiều kích thước màn hình di động khác nhau.
+•	Kiểm thử và triển khai
+o	Công nghệ sử dụng: Expo Go và Android Studio.
+o	Chức năng chính:
+	Expo Go: Giúp chạy và kiểm thử ứng dụng trực tiếp trên thiết bị thật mà không cần build phức tạp.
+	Android Studio: Dùng để giả lập thiết bị, kiểm thử sâu và tạo bản build APK phục vụ triển khai chính thức.
+1.4.3. ĐỐI TƯỢNG SỬ DỤNG
+Ứng dụng TableFlow hướng đến hai nhóm người dùng chính:
+•	Nhân viên nhà hàng: Bao gồm nhân viên phục vụ, bếp, thu ngân – những người trực tiếp sử dụng hệ thống trong quá trình vận hành quán.
+•	Chủ quán/Quản lý: Người có quyền truy cập toàn bộ dữ liệu để giám sát hoạt động, thống kê doanh thu và cấu hình hệ thống.
+ 
+CHƯƠNG 2 - CƠ SỞ LÝ THUYẾT VÀ CÔNG NGHỆ SỬ DỤNG
+2.1. TỔNG QUAN VỀ ỨNG DỤNG
+Ứng dụng quản lý nhà hàng/quán ăn (Restaurant Management System - RMS) là nền tảng di động cho phép quản lý các hoạt động hàng ngày của nhà hàng, bao gồm quản lý bàn, đơn hàng, thanh toán, và báo cáo doanh số. TableFlow là một giải pháp RMS toàn diện, được thiết kế cho nhiều vai trò (Nhân viên phục vụ, Bếp, Thu ngân, Quản lý) với giao diện và chức năng riêng biệt cho từng role [1], [2].
+Ứng dụng cung cấp các chức năng chính như:
+•	Quản lý bàn: Hiển thị trạng thái bàn (trống, có khách, thanh toán), cho phép bàn hợp nhất hoặc chia tách.
+•	Gọi món: Nhân viên phục vụ duyệt menu, tùy chỉnh sản phẩm, thêm vào giỏ hàng, xác nhận đơn hàng.
+•	Hệ thống hiển thị bếp (KDS): Bếp nhìn thấy các đơn hàng mới, cập nhật trạng thái, và nhân viên được thông báo khi đơn hàng hoàn tất.
+•	Thanh toán đa phương thức: Hỗ trợ tiền mặt, chuyển khoản ngân hàng, ví MoMo, VietQR, với khả năng hoàn trả từng mục hàng.
+•	Báo cáo tài chính: Hôm nay, tuần, tháng với thống kê doanh số, lợi nhuận, chi phí, hàng tồn kho.
+•	Hệ thống thông báo: Thông báo real-time cho phù hợp với vai trò (Bếp nhận thông báo đơn hàng mới, Nhân viên được thông báo khi đơn hoàn tất).
+Ứng dụng được thiết kế theo mô hình ứng dụng di động hybrid (React Native), cho phép hoạt động trên iOS và Android từ một codebase duy nhất, mang lại trải nghiệm gần như native, tốc độ cao, và hỗ trợ offline cơ bản. Khác với SPA web, TableFlow có thể sử dụng các tính năng thiết bị (camera, âm thanh, vibration) và có khả năng hoạt động với kết nối mạng yếu hoặc không có [3], [4].
+2.2. MÔ HÌNH KIẾN TRÚC ỨNG DỤNG
+Ứng dụng quản lý nhà hàng được xây dựng dựa trên mô hình client-server, bao gồm bốn thành phần chính: Frontend (Ứng dụng di động), Backend (Server), Database, và Cloud Services. Các thành phần này phối hợp để cung cấp một hệ thống hoàn chỉnh, đáp ứng nhu cầu của cả nhân viên và quản lý [5], [6], [7].
+2.2.1. FRONT-END - ỨNG DỤNG DI ĐỘNG (REACT NATIVE)
+	Frontend là phần tương tác trực tiếp với người dùng (nhân viên phục vụ, bếp, thu ngân, quản lý), hiển thị các màn hình như chọn bàn, menu, đơn hàng, thanh toán, báo cáo. Frontend được xây dựng bằng React Native, một framework JavaScript cho phép xây dựng ứng dụng di động cross-platform từ một codebase [8], [9].
+React Native & Expo
+•	React Native là thư viện JavaScript được phát triển bởi Facebook, cho phép xây dựng giao diện di động native từ JSX. Ứng dụng sử dụng Expo, một nền tảng xây dựng ứng dụng React Native, cung cấp:
+•	Công cụ phát triển nhanh (Expo CLI, dev client).
+•	Build & deployment tự động cho iOS/Android.
+•	Hỗ trợ hot reload, giúp phát triển nhanh hơn.
+•	Ví dụ các components chính:
+o	HomeScreen (Table Selection): Hiển thị danh sách bàn dạng lưới, mỗi bàn là một component có thể bấm để chọn.
+o	MenuScreen: Hiển thị danh sách menu item, component cho phép tìm kiếm, lọc theo danh mục.
+o	OrderScreen: Hiển thị đơn hàng hiện tại, cho phép thêm/xóa sản phẩm.
+o	KitchenDisplayScreen: Hiển thị hàng đợi đơn hàng cho bếp, real-time updates.
+NativeWind + Tailwind CSS
+•	Thay vì CSS web, ứng dụng di động sử dụng NativeWind, một thư viện giúp sử dụng Tailwind CSS utilities cho React Native. NativeWind cung cấp:
+•	Utility-first styling cho React Native (tương tự Tailwind CSS).
+•	Responsive design support (xLayout khác nhau cho portrait/landscape, different screen sizes).
+•	Theme support (light/dark mode).
+React Navigation
+•	Thư viện React Navigation quản lý điều hướng giữa các màn hình (stack navigation, tab navigation, drawer navigation). Ứng dụng sử dụng:
+•	NativeStackNavigator: Chồng các màn hình lên nhau (ví dụ: HomeScreen → MenuScreen → OrderScreen).
+•	BottomTabNavigator: Các tab ở dưới màn hình (ví dụ: Kitchen, Cashier, Profile).
+•	DrawerNavigator: Menu slide từ cạnh (ví dụ: Admin menu).
+2.2.2. BACK-END – MÁY CHỦ & API
+Backend xử lý logic nghiệp vụ, xác thực người dùng, quản lý dữ liệu, và cung cấp API cho Frontend. Hệ thống backend được xây dựng dựa trên Supabase, một nền tảng Backend-as-a-Service (BaaS) cung cấp:
+•	PostgreSQL Database: Cơ sở dữ liệu quan hệ mạnh mẽ lưu trữ tất cả dữ liệu.
+•	Supabase Auth: Xác thực người dùng (đăng nhập, đăng ký, OTP, mật khẩu).
+•	Supabase Realtime: Cập nhật real-time cho các thay đổi dữ liệu (đơn hàng mới, cập nhật trạng thái, thanh toán).
+•	PostgreSQL Row Level Security (RLS): Kiểm soát truy cập dựa trên vai trò (role-based access).
+•	Supabase Edge Functions: Hàm serverless để xử lý logic phức tạp (ví dụ: tích hợp MoMo payment, VietQR).
+Authentication & RBAC (Role-Based Access Control):
+•	Supabase cung cấp xác thực qua JWT tokens. Ứng dụng hỗ trợ 4 vai trò:
+o	Staff (Nhân viên phục vụ): Chỉ có quyền gọi món, xem trạng thái đơn hàng.
+o	Kitchen (Bếp): Chỉ có quyền xem KDS, cập nhật trạng thái món.
+o	Cashier (Thu ngân): Quyền thanh toán, xem báo cáo tài chính.
+o	Admin (Quản lý): Toàn quyền quản lý.
+2.2.3. DATABASE (CƠ SỞ DỮ LIỆU)
+Hệ thống sử dụng Supabase làm nền tảng lưu trữ và quản lý dữ liệu. Supabase được xây dựng trên PostgreSQL, một hệ quản trị cơ sở dữ liệu quan hệ mạnh mẽ, bảo mật cao và hỗ trợ tốt cho các mô hình dữ liệu có cấu trúc. Ngoài ra, Supabase cung cấp các tính năng đặc thù như Row Level Security (RLS), Realtime, RESTful API tự động, giúp đơn giản hóa quá trình phát triển và đảm bảo an toàn dữ liệu.
+2.2.3.1. Cơ sở dữ liệu bao gồm các bảng chính:
+Products: Lưu trữ thông tin về sản phẩm. Các cột chính:
+•	Id.
+•	name.
+•	price.
+•	description.
+•	image_url.
+•	category_id (khóa ngoại).
+•	created_at (tự động từ PostgreSQL).
+•	updated_at.
+Users: Lưu thông tin người dùng, bao gồm khách hàng, nhân viên hoặc quản trị viên. Sử dụng Supabase Auth kết hợp với bảng “profiles” (theo kiến trúc chuẩn Supabase). Các cột (trong bảng profiles):
+•	id (trùng với auth.users.id)
+•	email
+•	role
+•	full_name (tùy chọn)
+•	created_at
+Mật khẩu và xác thực không lưu trực tiếp mà được Supabase Auth quản lý an toàn trong bảng hệ thống auth.users.
+Orders: Lưu thông tin đơn hàng. Các cột:
+•	id
+•	user_id (khóa ngoại liên kết đến profiles.id)
+•	total_price
+•	status
+•	created_at
+•	updated_at
+Categories: Quản lý danh mục sản phẩm. Các cột:
+•	id
+•	name
+•	created_at
+2.2.3.2. Quan hệ bảng
+Các bảng được liên kết thông qua khóa ngoại theo chuẩn PostgreSQL:
+•	products.category_id → categories.id
+•	orders.user_id → profiles.id
+Nhờ vào khả năng hỗ trợ ràng buộc mạnh mẽ của PostgreSQL, cơ sở dữ liệu đảm bảo được tính toàn vẹn, nhất quán và hiệu suất.
+2.2.3.3. Công cụ thiết kế và quản lý dữ liệu
+Supabase cung cấp giao diện quản trị trực quan tương tự MySQL Workbench, cho phép:
+•	Thiết kế schema trực tiếp bằng giao diện lưới
+•	Viết và thực thi truy vấn SQL
+•	Theo dõi dữ liệu thời gian thực
+•	Quản lý RLS và chính sách bảo mật
+•	Giám sát hiệu năng thông qua SQL Editor
+Supabase giúp tự động tạo API RESTful và GraphQL cho tất cả bảng, đồng thời hỗ trợ tính năng Realtime giúp cập nhật dữ liệu ngay lập tức trên ứng dụng mà không cần cấu hình thêm.
+2.2.4. TRIỂN KHAI TRÊN CLOUD
+MoMo Payment
+•	Ứng dụng tích hợp thanh toán MoMo, cho phép khách hàng thanh toán qua ví MoMo:
+•	MoMo API: Tạo QR code thanh toán, kiểm tra trạng thái giao dịch.
+•	Supabase Edge Function: Xử lý callback từ MoMo, cập nhật trạng thái thanh toán.
+•	Realtime Listener: Frontend lắng nghe cập nhật thanh toán real-time.
+VietQR
+•	Tương tự MoMo, VietQR cho phép chuyển khoản ngân hàng:
+•	VietQR API: Tạo QR code chuyển khoản.
+•	Webhook Handler: Xử lý thông báo giao dịch từ ngân hàng.
+•	Status Tracking: Theo dõi trạng thái thanh toán.
+Cloudinary
+•	Nếu cần upload hình ảnh sản phẩm:
+•	Cloudinary API: Upload, tối ưu hóa, phân phối hình ảnh.
+•	URL Transformation: Cắt, nén, thay đổi kích thước hình ảnh.
+2.3. QUY TRÌNH HOẠT ĐỘNG CỦA ỨNG DỤNG
+2.3.1. QUY TRÌNH GỌI MÓN
+1.	Đăng nhập: Nhân viên mở ứng dụng, nhập email/mật khẩu. Frontend gửi yêu cầu POST /auth/login đến Supabase Auth, nhận JWT token [4], [5], [9].
+2.	Chọn bàn: Nhân viên thấy danh sách bàn, bấm chọn bàn trống. Frontend hiển thị menu.
+3.	Duyệt menu: Nhân viên xem danh sách sản phẩm theo danh mục. Frontend lấy dữ liệu từ bảng menu_items via Supabase.
+4.	Tùy chỉnh sản phẩm: Nhân viên chọn sản phẩm, tùy chỉnh (ví dụ: cà phê + đá, không đường). Frontend hiển thị option_groups, nhân viên chọn option_choices.
+5.	Thêm vào giỏ hàng: Frontend lưu sản phẩm vào state cart (không gửi server ngay).
+6.	Xác nhận đơn hàng: Nhân viên bấm "Confirm Order". Frontend gửi POST request tạo:
+•	Bản ghi mới trong bảng orders (status = "pending").
+•	Bản ghi mới trong bảng order_items (chi tiết từng sản phẩm).
+•	Cập nhật tables (status = "occupied").
+2.3.2. THÔNG BÁO CHO BẾP (KITCHEN DISPLAY SYSTEM)	
+1.	Realtime Notification: Supabase Realtime phát hiện INSERT mới trong bảng orders.
+2.	KitchenDisplayScreen: Bếp thấy đơn hàng mới (nếu ứng dụng đang mở).
+3.	Sound Alert: Phát âm thanh cảnh báo (sử dụng expo-av).
+4.	Vibration: Điện thoại rung (sử dụng react-native Vibration API).
+5.	Bếp cập nhật trạng thái: Bếp chọn các sản phẩm đã nấu, bấm "Mark as Done".
+6.	Backend Update: Frontend gửi PATCH request cập nhật order_items (item_status = "prepared").
+2.3.3. THÔNG BÁO CHO NHÂN VIÊN & THANH TOÁN
+1.	Realtime Update: Supabase Realtime phát hiện UPDATE trong order_items (status = "prepared").
+2.	Staff Notification: Nhân viên phục vụ được thông báo "Bàn X, sản phẩm Y đã sẵn sàng".
+3.	Phục vụ: Nhân viên đem sản phẩm ra bàn, cập nhật trạng thế trong ứng dụng.
+4.	Yêu cầu thanh toán: Khách hàng yêu cầu thanh toán. Nhân viên bấm "Request Bill".
+5.	Chọn phương thức thanh toán: Thu ngân xem bill, chọn phương thức (Cash, Bank, MoMo, VietQR)
+2.3.4. THANH TOÁN
+•	Thanh toán tiền mặt:
+o	Thu ngân nhập số tiền khách đưa, ứng dụng tính tiền thối.
+o	Frontend cập nhật orders (status = "paid", payment_method = "cash").
+o	Tạo bản ghi transactions (method = "cash", status = "completed").
+•	Thanh toán MoMo:
+o	Frontend gọi Supabase Edge Function /create-momo-payment, nhận QR code.
+o	Frontend hiển thị QR code, khách quét bằng MoMo.
+o	MoMo gửi callback webhook tới Supabase Edge Function.
+o	Backend cập nhật transactions (status = "completed").
+o	Frontend lắng nghe Realtime update, tự động chuyển sang màn hình "Payment Success".
+o	Cập nhật orders (status = "paid").
+•	Thanh toán VietQR:
+o	Tương tự MoMo, hiển thị QR code chuyển khoản.
+o	Webhook từ ngân hàng xác nhận giao dịch.
+2.3.5. HOÀN TRẢ HÀNG
+1.	Nhân viên báo lỗi sản phẩm hoặc khách hàng đổi ý: Bấm "Return Item", chọn sản phẩm, lý do.
+2.	Tạo Return Slip: Frontend tạo bản ghi trong return_slips, chi tiết trong return_slip_items.
+3.	Thông báo Bếp: Bếp được thông báo có sản phẩm cần làm lại.
+4.	Cập nhật Hóa Đơn: Tùy theo chính sách, tính toán lại giá (hoàn toàn hoặc không).
+2.4. CÁC CÔNG NGHỆ SỬ DỤNG
+Các công nghệ được lựa chọn dựa trên khả năng cross-platform, hiệu suất, tính phổ biến, hỗ trợ offline, và tích hợp real-time, phù hợp với yêu cầu của ứng dụng quản lý nhà hàng di động.
+2.4.1. REACT NATIVE & EXPO
+React Native là framework cho phép xây dựng ứng dụng di động native từ JavaScript/JSX, được phát triển bởi Facebook. Thay vì viết code riêng cho iOS (Swift) và Android (Kotlin), React Native cho phép một codebase chạy trên cả hai nền tảng.
+•	Ưu điểm:
+o	Cross-platform: Một codebase cho iOS + Android.
+o	Component-based: Tái sử dụng component, giảm thời gian phát triển.
+o	Hot Reload: Cập nhật code mà không cần rebuild toàn bộ.
+o	JavaScript: Sử dụng ngôn ngữ web, dễ học cho web developers.
+o	Performance: Bridge giữa JS và native APIs, hiệu suất gần native.
+•	Khuyết điểm:
+o	Native Modules: Một số tính năng phức tạp vẫn cần native code.
+o	File Size: Bundle size lớn hơn native app.
+o	Bridge Performance: JS-Native bridge có overhead.
+	Lý do chọn: React Native cho phép xây dựng ứng dụng cross-platform nhanh chóng từ một codebase, tối ưu chi phí phát triển.
+•	Expo là nền tảng xây dựng ứng dụng React Native, cung cấp:
+o	Managed Workflow: Expo CLI xử lý build, deployment mà không cần Xcode/Android Studio.
+o	Expo Go App: Test trực tiếp trên phone qua Expo Go.
+o	OTA Updates: Over-the-air updates (cập nhật app mà không cần submit App Store).
+o	Push Notifications: Hỗ trợ push notifications.
+o	Plugins & Modules: Thư viện 300+ modules (camera, sensor, etc.).
+o	Ưu điểm:
+	Phát triển nhanh: Không cần setup native development environment.
+	EAS Build: Build cloud-based, không cần máy tính mạnh.
+	Dev Client: Development environment tối ưu.
+•	Khuyết điểm:
+	Limited Customization: Managed workflow hạn chế tùy chỉnh.
+	Dependency: Phụ thuộc vào Expo infrastructure.
+•	Lý do chọn: Expo giúp phát triển nhanh, deploy dễ dàng, phù hợp cho startup/dự án có deadline gấp.
+2.4.2. TYPESCRIPT
+TypeScript là superset của JavaScript, thêm static type checking, giúp phát hiện lỗi sớm.
+Ưu điểm:
+•	Type Safety: Phát hiện lỗi tại compile-time, không runtime.
+•	IDE Support: IntelliSense tốt hơn, hỗ trợ refactoring.
+•	Documentation: Type hints tự động là tài liệu code.
+•	Maintainability: Code dễ bảo trì, tái cấu trúc an toàn.
+Khuyết điểm:
+•	Learning Curve: Cần học TypeScript syntax.
+•	Compilation Time: Thêm bước compile, build chậm hơn.
+•	Lý do chọn: TypeScript giúp giảm bugs, tăng code quality, đặc biệt trong dự án lớn.
+2.4.3. SUPABASE & POSTGRESQL
+Supabase là Backend-as-a-Service (BaaS) mã nguồn mở, cung cấp:
+•	PostgreSQL Database: Cơ sở dữ liệu mạnh mẽ với RLS, JSON support, full-text search.
+•	Realtime: WebSocket-based real-time subscriptions.
+•	Auth: JWT-based authentication, hỗ trợ OAuth, email/password.
+•	Edge Functions: Serverless functions để xử lý logic phức tạp.
+•	Storage: File storage cho hình ảnh, video.
+•	Vector Support: Embedding support cho AI features.
+Ưu điểm:
+•	Không cần backend team: BaaS giảm cần xây dựng backend từ đầu.
+•	Realtime: Real-time subscriptions built-in, không cần websocket library.
+•	PostgreSQL: Mạnh mẽ, reliable, hỗ trợ JSON, arrays, full-text search.
+•	RLS: Bảo mật row-level, không cần backend validation.
+•	Pricing: Free tier hao phí cho dự án nhỏ.
+Khuyết điểm:
+•	Vendor Lock-in: Phụ thuộc vào Supabase, khó migrate.
+•	Limited Customization: Một số logic phức tạp cần Edge Functions.
+•	Cold Start: Edge Functions có cold start latency.
+Lý do chọn: Supabase cung cấp backend hoàn chỉnh, real-time support, giúp team tập trung vào frontend.
+PostgreSQL là hệ quản trị cơ sở dữ liệu quan hệ mã nguồn mở, mạnh mẽ, reliable.
+Ưu điểm:
+•	Advanced Features: JSON, arrays, full-text search, geospatial.
+•	Performance: Tối ưu cho các query phức tạp.
+•	ACID Compliance: Đảm bảo dữ liệu consistent.
+•	Extensibility: Có thể viết stored procedures, custom functions.
+Khuyết điểm:
+•	Learning Curve: Complex queries cần kiến thức SQL.
+•	Scaling: Horizontal scaling khó hơn so với NoSQL.
+Lý do chọn: PostgreSQL phù hợp cho ứng dụng quản lý, cần tính toàn vẹn dữ liệu cao, hỗ trợ query phức tạp.
+2.4.4. NATIVEWIND + TAILWIND CSS
+NativeWind là thư viện giúp sử dụng Tailwind CSS utilities trong React Native.
+Ưu điểm:
+•	Tailwind Utilities: Tái sử dụng kiến thức Tailwind CSS từ web.
+•	Consistency: Giao diện consistent giữa web và mobile.
+•	Responsive: Hỗ trợ responsive design cho mobile screens.
+•	Performance: Tối ưu CSS, không load toàn bộ.
+Khuyết điểm:
+•	Limited: Một số Tailwind features không support (transitions, hover states).
+•	Learning: Cần học cách sử dụng Tailwind cho mobile.
+Lý do chọn: NativeWind cho phép styling nhanh chóng, consistent với Tailwind, giảm thời gian design.
+2.4.5. CLOUDINARY
+Cloudinary là nền tảng quản lý hình ảnh trên đám mây, hỗ trợ upload, tối ưu hóa, và phân phối hình ảnh. Hình ảnh sản phẩm được upload qua API và hiển thị trên Front-end với kích thước tối ưu.
+Ưu điểm:
+•	Tối ưu hóa hình ảnh tự động (nén, thay đổi kích thước).
+•	Dễ tích hợp với NodeJS và ReactJS.
+•	Lưu trữ an toàn trên đám mây.
+Khuyết điểm:
+•	Phụ thuộc vào dịch vụ bên thứ ba.
+•	Có thể phát sinh chi phí với lưu lượng lớn.
+Lý do chọn: Cloudinary cải thiện tốc độ tải trang.
+2.4.6. VISUAL STUDIO CODE
+Visual Studio Code (VS Code) là trình soạn thảo mã nguồn chính được sử dụng trong quá trình phát triển ứng dụng TableFlow. VS Code hỗ trợ mạnh mẽ cho lập trình JavaScript/TypeScript và đặc biệt phù hợp khi làm việc với React Native, nhờ hệ thống tiện ích mở rộng (extensions) phong phú như ESLint, Prettier, Tailwind CSS IntelliSense, và React Native Tools. Ngoài ra, VS Code tích hợp Git, terminal và công cụ debug, giúp quá trình phát triển trở nên thuận tiện và hiệu quả hơn.
+Ưu điểm:
+•	Nhẹ, tốc độ nhanh và dễ tùy chỉnh theo nhu cầu phát triển.
+•	Hệ sinh thái extension phong phú, hỗ trợ tốt cho React Native, TypeScript, Supabase, và Tailwind CSS (NativeWind).
+•	Tích hợp Git, terminal và hệ thống debug hỗ trợ lập trình hiệu quả.
+•	Giao diện thân thiện, dễ tiếp cận đối với sinh viên và lập trình viên.
+Khuyết điểm:
+•	Cần cài đặt và cấu hình thêm nhiều extension để tối ưu cho React Native.
+•	Khi dự án lớn, việc bật nhiều extension có thể làm chậm hiệu suất.
+VS Code là trình soạn thảo phổ biến nhất hiện nay trong lĩnh vực phát triển ứng dụng di động sử dụng React Native. Công cụ này mang lại tốc độ, độ linh hoạt và khả năng mở rộng cao, phù hợp với việc phát triển một ứng dụng đa nền tảng như TableFlow, giúp tối ưu thời gian lập trình, kiểm thử và triển khai trong suốt quá trình thực hiện đồ án.

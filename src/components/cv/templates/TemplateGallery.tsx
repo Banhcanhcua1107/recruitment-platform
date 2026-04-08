@@ -9,7 +9,7 @@ import { TemplateCarousel } from "./TemplateCarousel";
 import { TemplateFilterBar } from "./TemplateFilterBar";
 import { TemplatePreviewModal } from "./TemplatePreviewModal";
 import {
-  CV_TEMPLATE_LIBRARY,
+  CV_TEMPLATE_LIBRARY_UI,
   type CVTemplateDefinition,
   type TemplateFilterOption,
 } from "@/components/cv/templates/templateCatalog";
@@ -26,15 +26,16 @@ export function TemplateGallery() {
   const router = useRouter();
   const [activeCategory, setActiveCategory] = useState<TemplateFilterOption>("Tất cả");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(CV_TEMPLATE_LIBRARY[0]?.id ?? null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(CV_TEMPLATE_LIBRARY_UI[0]?.id ?? null);
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   const [previewTemplate, setPreviewTemplate] = useState<CVTemplateDefinition | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const hasTemplateInLibrary = CV_TEMPLATE_LIBRARY_UI.length > 0;
 
   const filteredTemplates = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return CV_TEMPLATE_LIBRARY.filter((template) => {
+    return CV_TEMPLATE_LIBRARY_UI.filter((template) => {
       const matchCategory =
         activeCategory === "Tất cả" ||
         template.category === activeCategory ||
@@ -314,8 +315,14 @@ export function TemplateGallery() {
         </section>
       ) : (
         <section className="mt-8 rounded-[28px] border border-slate-200 bg-white px-6 py-14 text-center shadow-[var(--app-shadow-soft)]">
-          <p className="text-lg font-bold text-slate-900">Không tìm thấy template phù hợp</p>
-          <p className="mt-2 text-sm text-slate-500">Hãy đổi bộ lọc hoặc thử từ khóa khác.</p>
+          <p className="text-lg font-bold text-slate-900">
+            {hasTemplateInLibrary ? "Không tìm thấy template phù hợp" : "Mẫu CV đang được cập nhật"}
+          </p>
+          <p className="mt-2 text-sm text-slate-500">
+            {hasTemplateInLibrary
+              ? "Hãy đổi bộ lọc hoặc thử từ khóa khác."
+              : "Tạm thời toàn bộ mẫu CV hiện có đã được ẩn khỏi giao diện. Vui lòng quay lại sau khi có mẫu mới."}
+          </p>
         </section>
       )}
 

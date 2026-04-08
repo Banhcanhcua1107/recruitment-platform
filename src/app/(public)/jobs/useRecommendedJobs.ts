@@ -31,7 +31,12 @@ function writeRecommendationCache(payload: unknown) {
   }
 }
 
-export function useRecommendedJobs() {
+interface UseRecommendedJobsOptions {
+  enabled?: boolean;
+}
+
+export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
+  const { enabled = true } = options;
   const [status, setStatus] = React.useState<RecommendationStatus>("loading");
   const [data, setData] = React.useState<ResolvedRecommendedJobsData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -39,6 +44,15 @@ export function useRecommendedJobs() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
 
   React.useEffect(() => {
+    if (!enabled) {
+      setStatus("empty");
+      setData(null);
+      setError(null);
+      setIsAnalyzing(false);
+      setIsAuthenticated(false);
+      return;
+    }
+
     let cancelled = false;
 
     async function loadRecommendations() {
@@ -57,7 +71,7 @@ export function useRecommendedJobs() {
       ]);
 
       const hasAuthenticatedUser = Boolean(authResult?.data?.user);
-      const apiPayload = response?.ok ? await response.json().catch(() => null) : null;
+      let apiPayload = response?.ok ? await response.json().catch(() => null) : null;
       const localPayload = hasAuthenticatedUser ? readRecommendationCache() : null;
 
       if (!cancelled) {
@@ -71,11 +85,40 @@ export function useRecommendedJobs() {
         });
       }
 
-      const resolved = resolveRecommendedJobsData({
+      let resolved = resolveRecommendedJobsData({
         apiPayload,
         localPayload,
         allowLocalFallback: hasAuthenticatedUser,
       });
+
+      if (!resolved && hasAuthenticatedUser) {
+        const regenerateResponse = await fetch("/api/recommend-jobs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+          credentials: "same-origin",
+        }).catch(() => null);
+
+        const regeneratedPayload = regenerateResponse?.ok
+          ? await regenerateResponse.json().catch(() => null)
+          : null;
+
+        if (regeneratedPayload) {
+          apiPayload = regeneratedPayload;
+          writeRecommendationCache({
+            ...regeneratedPayload,
+            cachedAt: new Date().toISOString(),
+          });
+
+          resolved = resolveRecommendedJobsData({
+            apiPayload,
+            localPayload,
+            allowLocalFallback: true,
+          });
+        }
+      }
 
       if (cancelled) return;
 
@@ -94,9 +137,13 @@ export function useRecommendedJobs() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
   const analyzeRecommendations = React.useCallback(async () => {
+    if (!enabled) {
+      return;
+    }
+
     setIsAnalyzing(true);
     setStatus("loading");
     setError(null);
@@ -145,7 +192,7 @@ export function useRecommendedJobs() {
     } finally {
       setIsAnalyzing(false);
     }
-  }, []);
+  }, [enabled]);
 
   return {
     status,

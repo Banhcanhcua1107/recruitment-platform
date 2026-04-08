@@ -220,8 +220,8 @@ class MappedSectionsContractTests(unittest.TestCase):
         )
 
     def test_build_non_cv_payload_exposes_empty_cleaned_json_and_correction_log(self):
-        from services.ocr_pipeline import _build_non_cv_payload
-        from services.ocr_service import OCRPageResult
+        from services.cv_processing import _build_non_cv_payload
+        from services.ocr_common import OCRPageResult
 
         payload = _build_non_cv_payload(
             raw_text="Invoice #1001\nCustomer: Nguyen Van A",

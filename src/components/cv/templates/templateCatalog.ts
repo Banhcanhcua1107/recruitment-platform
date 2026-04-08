@@ -86,6 +86,13 @@ function mapCategory(label: string): TemplateCategory {
 
 const PRO_TEMPLATE_IDS = new Set(["modern-blue", "elegant-sidebar"]);
 
+export const TEMPORARILY_DISABLED_TEMPLATE_IDS = new Set([
+  "professional-green",
+  "minimal-gray",
+  "modern-blue",
+  "elegant-sidebar",
+]);
+
 function resolveTemplateBadge(templateId: string): TemplateBadge {
   return PRO_TEMPLATE_IDS.has(templateId) ? "PRO" : "Miễn phí";
 }
@@ -277,7 +284,157 @@ function buildSharedSampleSections(): TemplateSectionDraft[] {
   });
 }
 
-export const CV_TEMPLATE_LIBRARY: CVTemplateDefinition[] = listTemplateRegistry().map((item) => ({
+function buildTealTimelinePageOneSections(): TemplateSectionDraft[] {
+  const overviewItems = [
+    {
+      id: "ov1",
+      content: "La mot nguoi coi mo, thich ung nhanh voi moi truong moi, khong ngai kho khan.",
+    },
+    {
+      id: "ov2",
+      content: "Strengths: Front-end technology and Back-end web application development.",
+    },
+    {
+      id: "ov3",
+      content: "Over 2 years of experience in programming with good communication and quick learning skills.",
+    },
+    {
+      id: "ov4",
+      content: "Proficiency in HTML, CSS, JavaScript and practical ReactJS workflows.",
+    },
+    {
+      id: "ov5",
+      content: "Strong proficiency in JavaScript, including DOM manipulation and the JavaScript object model.",
+    },
+    {
+      id: "ov6",
+      content: "Thorough understanding of React.js and its core principles.",
+    },
+    {
+      id: "ov7",
+      content: "Familiarity with newer specifications of EcmaScript and data structure libraries.",
+    },
+    {
+      id: "ov8",
+      content: "Familiarity with RESTful APIs and JSON API integration.",
+    },
+    {
+      id: "ov9",
+      content: "Strong experience in PHP, JavaScript (ReactJS, React-native), MySQL, NoSQL, GraphQL, Redis.",
+    },
+    {
+      id: "ov10",
+      content: "Proficient use of source code management tools: SVN, Git.",
+    },
+    {
+      id: "ov11",
+      content: "Proficiency in operating systems: Linux (Ubuntu, OSX), Windows.",
+    },
+    {
+      id: "ov12",
+      content: "Ability to learn and apply new technologies quickly.",
+    },
+    {
+      id: "ov13",
+      content: "Current working location: Ha Noi, Viet Nam.",
+    },
+  ];
+
+  return [
+    {
+      type: "header",
+      isVisible: true,
+      data: {
+        fullName: "Nguyen Van A",
+        title: "Fullstack developer",
+        avatarUrl: "",
+      },
+    },
+    {
+      type: "personal_info",
+      isVisible: true,
+      data: {
+        email: "nguyenvana@gmail.com",
+        phone: "+84 1234567890",
+        address: "Ha Noi, Viet Nam",
+        dob: "01/01/2000",
+      },
+    },
+    {
+      type: "summary",
+      title: "Overview",
+      isVisible: true,
+      data: {
+        title: "Overview",
+        text: overviewItems.map((item) => item.content).join("\n"),
+        items: overviewItems,
+      },
+    },
+    {
+      type: "custom_text",
+      title: "Hoat dong",
+      isVisible: true,
+      data: {
+        items: [
+          {
+            id: "act1",
+            startDate: "06/2016",
+            endDate: "",
+            name: "Ngay hoi hien mau cuu nguoi 2016",
+            role: "Tinh nguyen vien",
+            description: "Tinh nguyen vien",
+          },
+        ],
+      },
+    },
+    {
+      type: "experience_list",
+      title: "Work experience",
+      isVisible: true,
+      data: {
+        title: "Work experience",
+        items: [
+          {
+            id: "we1",
+            startDate: "01/2018",
+            endDate: "Present",
+            company: "FB TECHNOLOGY EDUCATION., JSC",
+            position: "Full-stack Developer",
+            description:
+              "- Programme outsourcing projects.\n- Create coding frames and design database based on project descriptions.",
+          },
+          {
+            id: "we2",
+            startDate: "07/2015",
+            endDate: "03/2018",
+            company: "AI&T JSC",
+            position: "Full-stack Developer",
+            description:
+              "- Programme outsourcing projects.\n- Create coding frames and design database based on project descriptions.",
+          },
+          {
+            id: "we3",
+            startDate: "01/2015",
+            endDate: "07/2015",
+            company: "FREELANCER",
+            position: "Full-stack Developer",
+            description: "- Develop web module on given projects.",
+          },
+        ],
+      },
+    },
+  ];
+}
+
+function resolveTemplateDefaultSections(templateId: string) {
+  if (templateId === "teal-timeline") {
+    return buildTealTimelinePageOneSections();
+  }
+
+  return buildSharedSampleSections();
+}
+
+const ALL_CV_TEMPLATE_LIBRARY: CVTemplateDefinition[] = listTemplateRegistry().map((item) => ({
   id: item.id,
   name: item.metadata.displayName,
   category: mapCategory(item.metadata.category),
@@ -289,7 +446,7 @@ export const CV_TEMPLATE_LIBRARY: CVTemplateDefinition[] = listTemplateRegistry(
   tags: item.metadata.tags,
   defaultCVData: {
     resumeTitle: `CV ${item.metadata.displayName}`,
-    sections: buildSharedSampleSections(),
+    sections: resolveTemplateDefaultSections(item.id),
   },
   templateStyles: {
     colors: {
@@ -301,3 +458,9 @@ export const CV_TEMPLATE_LIBRARY: CVTemplateDefinition[] = listTemplateRegistry(
     spacing: item.metadata.themePreset.spacing,
   },
 }));
+
+export const CV_TEMPLATE_LIBRARY: CVTemplateDefinition[] = ALL_CV_TEMPLATE_LIBRARY;
+
+export const CV_TEMPLATE_LIBRARY_UI: CVTemplateDefinition[] = ALL_CV_TEMPLATE_LIBRARY.filter(
+  (template) => !TEMPORARILY_DISABLED_TEMPLATE_IDS.has(template.id),
+);

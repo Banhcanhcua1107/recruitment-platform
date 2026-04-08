@@ -7,7 +7,7 @@ import { EditorTopbar } from "@/app/candidate/cv-builder/components/pro-editor/E
 import { RightEditPanel } from "@/app/candidate/cv-builder/components/pro-editor/RightEditPanel";
 import { EDITOR_UI_TEXTS } from "@/app/candidate/cv-builder/components/pro-editor/editor-ui-texts.vi";
 import type { ModalSectionCatalogItem } from "@/app/candidate/cv-builder/components/pro-editor/template-schema";
-import { CV_TEMPLATE_LIBRARY } from "@/components/cv/templates/templateCatalog";
+import { CV_TEMPLATE_LIBRARY_UI } from "@/components/cv/templates/templateCatalog";
 import type { SectionType } from "../../types";
 import { useCVStore } from "../../store";
 
@@ -83,7 +83,7 @@ export function EditorLayout({
   };
 
   const handleChangeTemplate = (templateId: string) => {
-    const matchedTemplate = CV_TEMPLATE_LIBRARY.find((template) => template.id === templateId);
+    const matchedTemplate = CV_TEMPLATE_LIBRARY_UI.find((template) => template.id === templateId);
 
     setMeta({ templateId });
 

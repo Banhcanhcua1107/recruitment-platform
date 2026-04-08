@@ -54,12 +54,12 @@ from services.cv_parser import parse_cv
 from services.cv_layout_parser import parse_structured_cv_from_ocr
 from services.cv_suggestions import suggest_cv_improvements
 from services.google_vision_ocr import extract_clean_text, run_google_vision_ocr, run_google_vision_on_pages
-from services.ocr_pipeline import (
+from services.cv_processing import (
     _prepare_document_pages,
+    CVProcessingError,
     InvalidCVFormatError,
-    OCRPipelineError,
     build_preview_payload,
-    process_cv,
+    process_cv_document,
 )
 
 # ── Logging ──────────────────────────────────────────────────
@@ -493,7 +493,7 @@ def _validate_upload_bytes(
     return ct, ext
 
 
-def _run_ocr_pipeline(
+def _run_ocr_processing(
     file_bytes: bytes,
     content_type: str,
     filename: str,
@@ -509,12 +509,12 @@ def _run_ocr_pipeline(
         )
         result = run_google_vision_on_pages(prepared_pages, min_confidence=min_confidence)
     except Exception as exc:
-        raise OCRPipelineError(f"Google Vision OCR failed: {exc}") from exc
+        raise CVProcessingError(f"Google Vision OCR failed: {exc}") from exc
     return result["pages"]
 
 
 def _build_page_results_from_blocks(blocks: list) -> list:
-    from services.ocr_service import OCRBlock, OCRPageResult
+    from services.ocr_common import OCRBlock, OCRPageResult
 
     pages_by_number: dict[int, list] = {}
     for block in blocks:
@@ -594,7 +594,7 @@ def _serialize_raw_ocr_pages(page_results) -> dict[str, object]:
 
 def _build_upload_meta(
     *,
-    pipeline_version: str,
+    processing_version: str,
     document_type: str,
     document_confidence: float,
     document_signals: list[str],
@@ -606,7 +606,9 @@ def _build_upload_meta(
     timings: dict[str, object],
 ) -> dict[str, object]:
     return {
-        "pipeline_version": pipeline_version,
+        # Keep legacy key for backward compatibility with existing clients.
+        "pipeline_version": processing_version,
+        "processing_version": processing_version,
         "document_type": document_type,
         "document_confidence": document_confidence,
         "document_signals": document_signals,
@@ -713,7 +715,7 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
         content=parsed["raw_text"],
         clean_html=clean_html,
         meta=_build_upload_meta(
-            pipeline_version="v2-reparse",
+            processing_version="v2-reparse",
             document_type="cv",
             document_confidence=1.0,
             document_signals=["manual_parse_ocr_blocks"],
@@ -733,7 +735,7 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
     )
 
 
-def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings: list[str]) -> UploadCVResponse:
+def _build_upload_cv_response_from_processing(result: dict[str, object], warnings: list[str]) -> UploadCVResponse:
     from models import OCRBlockModel, OCRPageModel
 
     page_results = result["page_results"]
@@ -803,7 +805,7 @@ def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings:
         content=str(result.get("content") or result["raw_text"]),
         clean_html=clean_html,
         meta=_build_upload_meta(
-            pipeline_version="v2",
+            processing_version="v2",
             document_type=str(result.get("document_type") or "cv"),
             document_confidence=float(result.get("document_confidence") or 0.0),
             document_signals=[str(item) for item in result.get("document_signals", [])],
@@ -858,7 +860,7 @@ async def endpoint_prepare_cv_preview(
         )
     except InvalidCVFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OCRPipelineError as exc:
+    except CVProcessingError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Preview generation failed")
@@ -933,7 +935,7 @@ async def endpoint_upload_cv(
     warnings: list[str] = []
 
     try:
-        pipeline_result = process_cv(
+        processing_result = process_cv_document(
             file_bytes=file_bytes,
             content_type=ct,
             filename=file.filename or "",
@@ -941,19 +943,19 @@ async def endpoint_upload_cv(
         )
     except InvalidCVFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OCRPipelineError as exc:
-        logger.error("Upload CV OCR pipeline error: %s", exc)
+    except CVProcessingError as exc:
+        logger.error("Upload CV OCR processing error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("Upload CV pipeline failed")
+        logger.exception("Upload CV processing failed")
         raise HTTPException(status_code=500, detail=f"Failed to process CV: {exc}") from exc
 
     elapsed = time.perf_counter() - start
     if elapsed > 2.0:
         warnings.append(f"Processing took {elapsed:.1f}s (target < 2s).")
-    warnings.extend([str(item) for item in pipeline_result.get("warnings", []) if str(item).strip()])
-    return _build_upload_cv_response_from_pipeline(
-        result=pipeline_result,
+    warnings.extend([str(item) for item in processing_result.get("warnings", []) if str(item).strip()])
+    return _build_upload_cv_response_from_processing(
+        result=processing_result,
         warnings=warnings,
     )
 
@@ -981,7 +983,7 @@ async def endpoint_parse_ocr_blocks(
         page_results = _build_page_results_from_blocks(payload.blocks)
         parsed = parse_structured_cv_from_ocr(page_results)
     except RuntimeError as exc:
-        logger.error("Parse OCR blocks pipeline error: %s", exc)
+        logger.error("Parse OCR blocks processing error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Parse OCR blocks failed")
@@ -1035,7 +1037,7 @@ async def endpoint_ocr_upload(
 
     try:
         from models import OCRBlockModel, OCRPageModel
-        page_results = _run_ocr_pipeline(
+        page_results = _run_ocr_processing(
             file_bytes=file_bytes,
             content_type=ct,
             filename=file.filename or "",
@@ -1045,8 +1047,8 @@ async def endpoint_ocr_upload(
 
     except InvalidCVFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OCRPipelineError as exc:
-        logger.error("OCR pipeline error: %s", exc)
+    except CVProcessingError as exc:
+        logger.error("OCR processing error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("OCR inference failed")

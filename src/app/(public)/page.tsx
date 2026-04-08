@@ -1,28 +1,84 @@
 import Link from "next/link";
 import Image from "next/image";
-import { redirect } from "next/navigation";
-import { createClient } from "@/utils/supabase/server";
+import type { ReactNode } from "react";
+import { ArrowRight, Building2, FileText, MapPin, Search, Send, TrendingUp, UserRound } from "lucide-react";
+import { getLatestPublicJobs } from "@/lib/jobs";
+export const revalidate = 600;
 
-export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+interface FeaturedJobCardData {
+  id?: string;
+  title: string;
+  company: string;
+  salary: string;
+  location: string;
+  tag: string;
+}
 
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profile?.role === "hr") {
-      redirect("/hr-home");
-    }
+function resolveFeaturedTag(postedDate: string, index: number) {
+  if (!postedDate) {
+    return index === 0 ? "HOT" : "";
   }
 
+  const parsed = new Date(postedDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return index === 0 ? "HOT" : "";
+  }
+
+  const diffMs = Date.now() - parsed.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 2) {
+    return "HOT";
+  }
+
+  if (diffDays <= 7) {
+    return "NEW";
+  }
+
+  return "";
+}
+
+function getFallbackFeaturedJobs(): FeaturedJobCardData[] {
+  return [
+    {
+      title: "Senior Frontend Engineer",
+      company: "VNG Corporation",
+      salary: "$2,000 - $3,500",
+      location: "Hồ Chí Minh",
+      tag: "HOT",
+    },
+    {
+      title: "Product Manager",
+      company: "Tiki",
+      salary: "$1,800 - $2,800",
+      location: "Hà Nội",
+      tag: "NEW",
+    },
+    {
+      title: "UI/UX Designer",
+      company: "FPT Software",
+      salary: "$1,200 - $2,000",
+      location: "Đà Nẵng",
+      tag: "",
+    },
+  ];
+}
+
+export default async function HomePage() {
+  const latestJobs = await getLatestPublicJobs(3);
+  const featuredJobs: FeaturedJobCardData[] = latestJobs.length
+    ? latestJobs.map((job, index) => ({
+        id: job.id,
+        title: job.title,
+        company: job.company_name,
+        salary: job.salary || "Thỏa thuận",
+        location: job.location || "Toàn quốc",
+        tag: resolveFeaturedTag(job.posted_date, index),
+      }))
+    : getFallbackFeaturedJobs();
+
   return (
-    <div className="relative flex min-h-[100dvh] w-full flex-col overflow-x-hidden bg-[#f6f7f8]">
+    <div className="relative flex min-h-dvh w-full flex-col overflow-x-hidden bg-[#f6f7f8]">
       <main className="flex-1">
         
         {/* ==================== HERO SECTION ==================== */}
@@ -37,14 +93,14 @@ export default async function HomePage() {
             <div className="absolute bottom-32 left-1/4 h-16 w-16 rounded-full bg-primary/10" />
             <div className="absolute top-60 left-20 h-12 w-12 rounded-xl border-4 border-primary/20 rotate-45" />
             {/* Grid Pattern */}
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(37,99,235,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(37,99,235,0.03)_1px,transparent_1px)] bg-[size:60px_60px]" />
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(37,99,235,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(37,99,235,0.03)_1px,transparent_1px)] bg-size-[60px_60px]" />
           </div>
           
-          <div className="max-w-[1360px] mx-auto px-6 lg:px-10 relative z-10 flex flex-col items-center">
+          <div className="max-w-340 mx-auto px-6 lg:px-10 relative z-10 flex flex-col items-center">
             <div className="grid lg:grid-cols-2 gap-24 items-center mb-10 text-left w-full">
               
               {/* LEFT: Content */}
-              <div className="animate-fade-in-up">
+              <div>
                 <div className="inline-flex items-center rounded-full border border-primary/20 bg-primary/5 px-5 py-2 text-sm font-bold text-primary mb-8 shadow-sm">
                   <span className="flex h-2.5 w-2.5 rounded-full bg-primary mr-3 animate-pulse" />
                   Nền tảng sự nghiệp thế hệ mới
@@ -62,7 +118,7 @@ export default async function HomePage() {
                   bạn hằng mong ước
                 </h1>
                 
-                <p className="text-slate-600 text-lg md:text-xl font-medium leading-relaxed max-w-xl mb-10 opacity-90">
+                <p className="text-slate-600 text-lg md:text-xl font-medium leading-relaxed max-w-xl mb-10">
                   Khám phá hàng ngàn cơ hội nghề nghiệp từ các doanh nghiệp uy tín nhất. 
                   Tạo CV chuyên nghiệp và ứng tuyển chỉ trong 1 phút.
                 </p>
@@ -74,13 +130,13 @@ export default async function HomePage() {
                     className="btn-shine inline-flex items-center h-14 px-8 bg-primary hover:bg-primary-hover text-white text-lg font-bold rounded-2xl shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5 active:scale-95"
                   >
                     Khám phá việc làm
-                    <span className="material-symbols-outlined ml-2">arrow_forward</span>
+                    <ArrowRight className="ml-2 size-5" aria-hidden="true" />
                   </Link>
                   <Link 
-                    href="/cv-builder" 
+                    href="/candidate/cv-builder" 
                     className="inline-flex items-center h-14 px-8 bg-white border-2 border-slate-200 hover:border-primary text-slate-700 hover:text-primary text-lg font-bold rounded-2xl transition-all hover:-translate-y-0.5"
                   >
-                    <span className="material-symbols-outlined mr-2">description</span>
+                    <FileText className="mr-2 size-5" aria-hidden="true" />
                     Tạo CV miễn phí
                   </Link>
                 </div>
@@ -97,10 +153,10 @@ export default async function HomePage() {
               <div className="hidden lg:block relative animate-fade-in delay-300">
                 <div className="relative">
                   {/* Decorative blob behind image */}
-                  <div className="absolute -inset-4 rounded-[40px] bg-gradient-to-br from-primary/16 to-sky-400/12" />
+                  <div className="absolute -inset-4 rounded-[40px] bg-linear-to-br from-primary/16 to-sky-400/12" />
                   
                   {/* Main image container */}
-                  <div className="relative w-full h-[480px] bg-slate-100 rounded-[32px] overflow-hidden shadow-2xl shadow-slate-900/10 group">
+                  <div className="relative w-full h-120 bg-slate-100 rounded-4xl overflow-hidden shadow-2xl shadow-slate-900/10 group">
                     <Image
                       src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200&h=900&fit=crop&auto=format&q=80"
                       alt="Đội ngũ đang cộng tác tại văn phòng"
@@ -110,13 +166,13 @@ export default async function HomePage() {
                       className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                     />
                     {/* Gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/40 via-transparent to-transparent" />
+                    <div className="absolute inset-0 bg-linear-to-t from-slate-900/40 via-transparent to-transparent" />
                     
                     {/* Floating card */}
                     <div className="absolute bottom-6 left-6 right-6 rounded-2xl bg-white/95 p-5 shadow-xl shadow-slate-900/10">
                       <div className="flex items-center gap-4">
                         <div className="size-12 rounded-xl bg-green-500 flex items-center justify-center text-white">
-                          <span className="material-symbols-outlined">trending_up</span>
+                          <TrendingUp className="size-5" aria-hidden="true" />
                         </div>
                         <div>
                           <p className="text-slate-900 font-bold">+1,234 việc làm mới</p>
@@ -135,7 +191,7 @@ export default async function HomePage() {
                 
                 {/* Input Vị trí */}
                 <div className="flex-[1.4] flex items-center px-6 h-16 bg-slate-50 rounded-2xl border-2 border-transparent focus-within:bg-white focus-within:border-primary focus-within:glow-primary transition-all group">
-                  <span className="material-symbols-outlined text-slate-400 text-2xl mr-4 transition-colors group-focus-within:text-primary">search</span>
+                  <Search className="mr-4 size-6 text-slate-400 transition-colors group-focus-within:text-primary" aria-hidden="true" />
                   <input 
                     className="w-full bg-transparent border-none p-0 text-slate-900 text-lg placeholder:text-slate-400 focus:ring-0 focus:outline-none" 
                     placeholder="Vị trí ứng tuyển, kỹ năng..." 
@@ -145,7 +201,7 @@ export default async function HomePage() {
                 
                 {/* Input Địa điểm */}
                 <div className="flex-1 flex items-center px-6 h-16 bg-slate-50 rounded-2xl border-2 border-transparent focus-within:bg-white focus-within:border-primary focus-within:glow-primary transition-all group">
-                  <span className="material-symbols-outlined text-slate-400 text-2xl mr-4 transition-colors group-focus-within:text-primary">location_on</span>
+                  <MapPin className="mr-4 size-6 text-slate-400 transition-colors group-focus-within:text-primary" aria-hidden="true" />
                   <input 
                     className="w-full bg-transparent border-none p-0 text-slate-900 text-lg placeholder:text-slate-400 focus:ring-0 focus:outline-none" 
                     placeholder="Địa điểm..." 
@@ -165,7 +221,7 @@ export default async function HomePage() {
                 {["Developer", "Marketing", "Kế toán", "Thiết kế", "Sales", "HR"].map((tag) => (
                   <Link 
                     key={tag} 
-                    href={`/search?q=${tag}`} 
+                    href={`/jobs?q=${encodeURIComponent(tag)}`} 
                     className="px-4 py-1.5 rounded-full bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-primary hover:text-white transition-all"
                   >
                     {tag}
@@ -177,7 +233,7 @@ export default async function HomePage() {
         </section>
 
         {/* ==================== FEATURED JOBS ==================== */}
-        <section className="py-24 bg-[#f6f7f8]">
+        <section className="py-24 bg-[#f6f7f8] [content-visibility:auto] [contain-intrinsic-size:920px]">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between mb-14 gap-4">
               <div>
@@ -189,24 +245,20 @@ export default async function HomePage() {
               </div>
               <Link href="/jobs" className="inline-flex items-center text-primary font-bold hover:gap-3 gap-1 transition-all group">
                 Xem tất cả việc làm 
-                <span className="material-symbols-outlined transition-transform group-hover:translate-x-1">arrow_forward</span>
+                <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
               </Link>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[
-                { title: "Senior Frontend Engineer", company: "VNG Corporation", salary: "$2,000 - $3,500", location: "Hồ Chí Minh", tag: "HOT" },
-                { title: "Product Manager", company: "Tiki", salary: "$1,800 - $2,800", location: "Hà Nội", tag: "NEW" },
-                { title: "UI/UX Designer", company: "FPT Software", salary: "$1,200 - $2,000", location: "Đà Nẵng", tag: "" },
-              ].map((job, index) => (
-                <JobCard key={index} {...job} index={index} />
+              {featuredJobs.map((job, index) => (
+                <JobCard key={job.id ?? `${job.title}-${index}`} {...job} index={index} />
               ))}
             </div>
           </div>
         </section>
 
         {/* ==================== PROCESS SECTION ==================== */}
-        <section className="py-24 bg-white relative overflow-hidden">
+        <section className="py-24 bg-white relative overflow-hidden [content-visibility:auto] [contain-intrinsic-size:980px]">
           {/* Background decoration */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(37,99,235,0.05)_0%,transparent_50%)]" />
           
@@ -221,17 +273,17 @@ export default async function HomePage() {
             
             <div className="grid md:grid-cols-3 gap-8 relative">
               {/* Connecting Line */}
-              <div className="hidden md:block absolute top-24 left-1/6 right-1/6 h-0.5 bg-gradient-to-r from-primary/20 via-primary to-primary/20" />
+              <div className="hidden md:block absolute top-24 left-1/6 right-1/6 h-0.5 bg-linear-to-r from-primary/20 via-primary to-primary/20" />
               
-              <Step icon="account_circle" step="1" title="Tạo tài khoản" desc="Đăng ký thành viên và hoàn thiện hồ sơ cá nhân của bạn." />
-              <Step icon="description" step="2" title="Tạo/Tải CV" desc="Dùng công cụ tạo CV online hoặc tải lên file sẵn có." />
-              <Step icon="send" step="3" title="Ứng tuyển ngay" desc="Tìm kiếm và gửi hồ sơ trực tiếp đến nhà tuyển dụng." />
+              <Step icon={<UserRound className="size-10" aria-hidden="true" />} step="1" title="Tạo tài khoản" desc="Đăng ký thành viên và hoàn thiện hồ sơ cá nhân của bạn." />
+              <Step icon={<FileText className="size-10" aria-hidden="true" />} step="2" title="Tạo/Tải CV" desc="Dùng công cụ tạo CV online hoặc tải lên file sẵn có." />
+              <Step icon={<Send className="size-10" aria-hidden="true" />} step="3" title="Ứng tuyển ngay" desc="Tìm kiếm và gửi hồ sơ trực tiếp đến nhà tuyển dụng." />
             </div>
           </div>
         </section>
 
         {/* ==================== CTA SECTION ==================== */}
-        <section className="relative overflow-hidden bg-gradient-to-br from-primary via-blue-600 to-sky-600 py-24">
+        <section className="relative overflow-hidden bg-linear-to-br from-primary via-blue-600 to-sky-600 py-24 [content-visibility:auto] [contain-intrinsic-size:760px]">
           {/* Decorative elements */}
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-10 left-10 w-40 h-40 bg-white/10 rounded-full blur-2xl" />
@@ -248,14 +300,14 @@ export default async function HomePage() {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link 
-                href="/register" 
+                href="/register?role=candidate" 
                 className="btn-shine inline-flex items-center h-14 px-10 bg-white text-primary text-lg font-bold rounded-2xl shadow-xl shadow-black/10 transition-all hover:-translate-y-1 active:scale-95"
               >
                 Đăng ký miễn phí
-                <span className="material-symbols-outlined ml-2">arrow_forward</span>
+                <ArrowRight className="ml-2 size-5" aria-hidden="true" />
               </Link>
               <Link 
-                href="/employer" 
+                href="/register?role=employer" 
                 className="inline-flex items-center h-14 px-10 border-2 border-white/30 hover:bg-white/10 text-white text-lg font-bold rounded-2xl transition-all hover:-translate-y-1"
               >
                 Dành cho nhà tuyển dụng
@@ -286,6 +338,7 @@ function Stat({ value, label }: StatProps) {
 }
 
 interface JobCardProps {
+  id?: string;
   title: string;
   company: string;
   salary: string;
@@ -294,14 +347,27 @@ interface JobCardProps {
   index: number;
 }
 
-function JobCard({ title, company, salary, location, tag, index }: JobCardProps) {
+const JOB_CARD_ANIMATION_DELAYS = [
+  "[animation-delay:0ms]",
+  "[animation-delay:100ms]",
+  "[animation-delay:200ms]",
+  "[animation-delay:300ms]",
+  "[animation-delay:400ms]",
+  "[animation-delay:500ms]",
+];
+
+function JobCard({ id, title, company, salary, location, tag, index }: JobCardProps) {
+  const href = id ? `/jobs/${id}` : "/jobs";
+
   return (
     <div 
-      className="group bg-white p-6 rounded-3xl border border-slate-100 hover:shadow-2xl hover:shadow-primary/10 hover:-translate-y-2 transition-all duration-500 relative overflow-hidden"
-      style={{ animationDelay: `${index * 100}ms` }}
+      className={[
+        "group relative overflow-hidden rounded-3xl border border-slate-100 bg-white p-6 transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl hover:shadow-primary/10",
+        JOB_CARD_ANIMATION_DELAYS[index % JOB_CARD_ANIMATION_DELAYS.length],
+      ].join(" ")}
     >
       {/* Gradient border on hover */}
-      <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/0 to-violet-500/0 group-hover:from-primary/5 group-hover:to-violet-500/5 transition-all duration-500" />
+      <div className="absolute inset-0 rounded-3xl bg-linear-to-br from-primary/0 to-violet-500/0 transition-all duration-500 group-hover:from-primary/5 group-hover:to-violet-500/5" />
       
       <div className="relative z-10">
         {/* Tag */}
@@ -314,18 +380,20 @@ function JobCard({ title, company, salary, location, tag, index }: JobCardProps)
         )}
         
         <div className="flex items-center gap-4 mb-6">
-          <div className="size-14 rounded-2xl bg-gradient-to-br from-primary/10 to-violet-500/10 flex items-center justify-center border border-primary/10 font-bold text-primary group-hover:scale-110 transition-transform duration-300">
-            <span className="material-symbols-outlined">business</span>
+          <div className="size-14 rounded-2xl bg-linear-to-br from-primary/10 to-violet-500/10 flex items-center justify-center border border-primary/10 font-bold text-primary transition-transform duration-300 group-hover:scale-110">
+            <Building2 className="size-6" aria-hidden="true" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900 line-clamp-1 group-hover:text-primary transition-colors">{title}</h3>
+            <Link href={href} className="block">
+              <h3 className="text-lg font-bold text-slate-900 line-clamp-1 group-hover:text-primary transition-colors">{title}</h3>
+            </Link>
             <p className="text-sm text-slate-500">{company}</p>
           </div>
         </div>
         
         <div className="flex flex-wrap gap-2 mb-6">
           <span className="inline-flex items-center px-3 py-1.5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">
-            <span className="material-symbols-outlined text-sm mr-1">location_on</span>
+            <MapPin className="mr-1 size-4" aria-hidden="true" />
             {location}
           </span>
           <span className="px-3 py-1.5 rounded-full bg-green-50 text-green-600 text-xs font-bold">
@@ -333,16 +401,16 @@ function JobCard({ title, company, salary, location, tag, index }: JobCardProps)
           </span>
         </div>
         
-        <button className="btn-shine w-full py-3.5 rounded-2xl border-2 border-primary/20 text-primary font-bold hover:bg-primary hover:text-white hover:border-primary transition-all duration-300">
+        <Link href={href} className="btn-shine block w-full rounded-2xl border-2 border-primary/20 py-3.5 text-center font-bold text-primary transition-all duration-300 hover:border-primary hover:bg-primary hover:text-white">
           Ứng tuyển ngay
-        </button>
+        </Link>
       </div>
     </div>
   );
 }
 
 interface StepProps {
-  icon: string;
+  icon: ReactNode;
   step: string;
   title: string;
   desc: string;
@@ -353,8 +421,8 @@ function Step({ icon, step, title, desc }: StepProps) {
     <div className="relative flex flex-col items-center text-center group">
       {/* Icon container */}
       <div className="relative mb-8">
-        <div className="size-24 rounded-3xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white shadow-xl shadow-primary/30 group-hover:scale-110 group-hover:shadow-2xl group-hover:shadow-primary/40 transition-all duration-300">
-          <span className="material-symbols-outlined text-4xl">{icon}</span>
+        <div className="size-24 rounded-3xl bg-linear-to-br from-primary to-blue-600 flex items-center justify-center text-white shadow-xl shadow-primary/30 transition-all duration-300 group-hover:scale-110 group-hover:shadow-2xl group-hover:shadow-primary/40">
+          {icon}
         </div>
         {/* Step number badge */}
         <div className="absolute -top-3 -right-3 size-10 rounded-full bg-white border-4 border-primary text-primary flex items-center justify-center font-black text-lg shadow-lg group-hover:scale-110 transition-transform">

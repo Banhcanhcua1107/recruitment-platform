@@ -164,6 +164,12 @@ export interface CVContactContentData {
 
 export interface SummarySectionData {
   text: string;
+  title?: string;
+  icon?: string;
+  items?: Array<{
+    id: string;
+    content: string;
+  }>;
 }
 
 export interface CareerObjectiveSectionData {
@@ -171,6 +177,8 @@ export interface CareerObjectiveSectionData {
 }
 
 export interface ExperienceSectionData {
+  title?: string;
+  icon?: string;
   items: ExperienceItem[];
 }
 

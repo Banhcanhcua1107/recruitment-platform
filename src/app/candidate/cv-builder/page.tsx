@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
@@ -18,18 +19,63 @@ import {
   getMyResumes,
   type ResumeRow,
 } from "./api";
-import { uploadCVImport } from "@/features/cv-import/api/client";
-import { ImportReviewOverlayModal } from "@/features/cv-import/components/ImportReviewOverlayModal";
+import { startCVImportAnalysis, uploadCVImport } from "@/features/cv-import/api/client";
 import { buildOptimisticImportReviewDetail } from "@/features/cv-import/review/import-review-detail";
-import { PaddleOcrWorkspaceModal } from "@/features/ocr-viewer";
-import type { CVDocumentDetailResponse } from "@/types/cv-import";
+import type { CVDocumentDetailResponse, CVImportSummaryResponse } from "@/types/cv-import";
 import { resolveDefaultResumeId } from "@/components/candidate/candidateWorkspaceContentModel";
 import {
   shouldLoadResumeList,
   shouldStartTemplateCreation,
 } from "./template-creation";
 
+const ImportReviewOverlayModal = dynamic(
+  () =>
+    import("@/features/cv-import/components/ImportReviewOverlayModal").then(
+      (module) => module.ImportReviewOverlayModal,
+    ),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
+
+const PaddleOcrWorkspaceModal = dynamic(
+  () => import("@/features/ocr-viewer").then((module) => module.PaddleOcrWorkspaceModal),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
+
 const DEFAULT_RESUME_STORAGE_KEY = "talentflow:candidate:default-resume-id";
+
+const IMPORT_STATUS_LABELS: Record<CVImportSummaryResponse["document"]["status"], string> = {
+  uploaded: "Đã upload",
+  queued: "Đang chờ",
+  normalizing: "Đang chuẩn hóa",
+  rendering_preview: "Đang dựng preview",
+  ocr_running: "Đang OCR",
+  layout_running: "Đang phân tích bố cục",
+  vl_running: "Đang hiểu nội dung",
+  parsing_structured: "Đang trích xuất JSON",
+  persisting: "Đang lưu kết quả",
+  ready: "Sẵn sàng review",
+  partial_ready: "Có kết quả một phần",
+  failed: "Phân tích lỗi",
+  retrying: "Đang thử lại",
+};
+
+const ACTIVE_IMPORT_STATUSES = new Set<CVImportSummaryResponse["document"]["status"]>([
+  "queued",
+  "normalizing",
+  "rendering_preview",
+  "ocr_running",
+  "layout_running",
+  "vl_running",
+  "parsing_structured",
+  "persisting",
+  "retrying",
+]);
 
 function formatAbsoluteDate(value: string) {
   const parsed = new Date(value);
@@ -41,6 +87,31 @@ function formatAbsoluteDate(value: string) {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+  });
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "Khong ro dung luong";
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function sortByUpdatedAt<T extends { updatedAt: string }>(items: T[], sortOrder: "latest" | "oldest") {
+  return [...items].sort((a, b) => {
+    const left = new Date(a.updatedAt).getTime();
+    const right = new Date(b.updatedAt).getTime();
+
+    if (sortOrder === "oldest") {
+      return left - right;
+    }
+
+    return right - left;
   });
 }
 
@@ -65,6 +136,9 @@ type CVDashboardListItem =
       updatedAt: string;
       option: CandidateCvOptionItem;
     };
+
+type BuilderDashboardListItem = Extract<CVDashboardListItem, { kind: "builder" }>;
+type ExternalDashboardListItem = Extract<CVDashboardListItem, { kind: "external" }>;
 
 async function fetchCandidateCvOptions(): Promise<CandidateCvOptionItem[]> {
   const response = await fetch("/api/candidate/cv-options", {
@@ -98,6 +172,8 @@ function CVDashboardPageContent() {
   const [templateRedirectLoading, setTemplateRedirectLoading] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [importUploading, setImportUploading] = useState(false);
+  const [importAnalyzingId, setImportAnalyzingId] = useState<string | null>(null);
+  const [uploadedImport, setUploadedImport] = useState<CVImportSummaryResponse | null>(null);
   const [optimisticReviewDetail, setOptimisticReviewDetail] =
     useState<CVDocumentDetailResponse | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -234,34 +310,37 @@ function CVDashboardPageContent() {
     });
   }, [loading, resumes]);
 
-  const displayItems = useMemo<CVDashboardListItem[]>(() => {
-    const builderItems: CVDashboardListItem[] = resumes.map((resume) => ({
+  const groupedDisplayItems = useMemo(() => {
+    const builderItems: BuilderDashboardListItem[] = resumes.map((resume) => ({
       kind: "builder",
       updatedAt: resume.updated_at,
       resume,
     }));
 
-    const externalItems: CVDashboardListItem[] = externalCvOptions.map((option, index) => ({
+    const externalItems: ExternalDashboardListItem[] = externalCvOptions.map((option, index) => ({
       kind: "external",
       id: option.path || `${option.source}:${option.label}:${option.createdAt}:${option.resumeId || index}`,
       updatedAt: option.createdAt,
       option,
     }));
 
-    const mergedItems = [...builderItems, ...externalItems];
+    const profileItems = externalItems.filter(
+      (item) => item.option.source === "profile",
+    );
+    const applicationItems = externalItems.filter(
+      (item) => item.option.source === "uploaded",
+    );
 
-    mergedItems.sort((a, b) => {
-      const left = new Date(a.updatedAt).getTime();
-      const right = new Date(b.updatedAt).getTime();
+    const builder = sortByUpdatedAt(builderItems, sortOrder);
+    const profile = sortByUpdatedAt(profileItems, sortOrder);
+    const application = sortByUpdatedAt(applicationItems, sortOrder);
 
-      if (sortOrder === "oldest") {
-        return left - right;
-      }
-
-      return right - left;
-    });
-
-    return mergedItems;
+    return {
+      builder,
+      profile,
+      application,
+      total: builder.length + profile.length + application.length,
+    };
   }, [externalCvOptions, resumes, sortOrder]);
 
   const selectedResume = resumes.find((resume) => resume.id === selectedResumeId) || null;
@@ -278,11 +357,12 @@ function CVDashboardPageContent() {
   const handleImportUpload = async (file: File) => {
     try {
       setImportUploading(true);
-      setSaveNotice("Dang dua CV vao quy trinh import...");
-      const response = await uploadCVImport(file);
+      setSaveNotice("Dang tai CV len he thong...");
+      const response = await uploadCVImport(file, { startProcessing: false });
+      setUploadedImport(response);
       setOptimisticReviewDetail(buildOptimisticImportReviewDetail(response));
-      setSaveNotice("CV da duoc tai len. Ban co the xem lai ket qua import trong hop kiem tra.");
-      setImportReviewQuery(response.document.id);
+      setSaveNotice("CV da duoc tai len. Bam Trich xuat JSON de bat dau OCR va phan tich.");
+      setImportReviewQuery(null);
     } catch (error) {
       console.error("Import CV that bai:", error);
       alert("Khong the bat dau quy trinh import CV. Vui long thu lai.");
@@ -294,6 +374,27 @@ function CVDashboardPageContent() {
       }
     }
   };
+
+  const handleStartImportAnalysis = useCallback(async () => {
+    if (!uploadedImport || uploadedImport.document.status !== "uploaded") {
+      return;
+    }
+
+    try {
+      setImportAnalyzingId(uploadedImport.document.id);
+      setSaveNotice("Dang bat dau OCR va trich xuat JSON...");
+      const response = await startCVImportAnalysis(uploadedImport.document.id);
+      setUploadedImport(response);
+      setOptimisticReviewDetail(buildOptimisticImportReviewDetail(response));
+      setImportReviewQuery(response.document.id);
+      setSaveNotice("Da bat dau phan tich CV. Ban co the theo doi tien trinh trong hop review.");
+    } catch (error) {
+      console.error("Khong the bat dau phan tich CV:", error);
+      setSaveNotice("Khong the bat dau OCR. Vui long thu lai.");
+    } finally {
+      setImportAnalyzingId(null);
+    }
+  }, [setImportReviewQuery, uploadedImport]);
 
   const handleDeleteResume = async (resumeId: string) => {
     if (!confirm("Ban chac chan muon xoa CV nay?")) {
@@ -328,6 +429,123 @@ function CVDashboardPageContent() {
     setSaveNotice("Da dat CV mac dinh cho thiet bi hien tai.");
   };
 
+  const renderSectionHeaderRow = (
+    sectionKey: string,
+    title: string,
+    description: string,
+    toneClassName: string,
+    count: number,
+  ) => (
+    <tr key={`${sectionKey}-section-header`}>
+      <td colSpan={4} className="px-7 pb-1 pt-4 first:pt-1">
+        <div className={`rounded-xl border px-4 py-3 ${toneClassName}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-slate-900">{title}</p>
+            <span className="rounded-full border border-white/70 bg-white/70 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+              {count} CV
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-slate-600">{description}</p>
+        </div>
+      </td>
+    </tr>
+  );
+
+  const renderExternalRow = (
+    item: Extract<CVDashboardListItem, { kind: "external" }>,
+    options: {
+      sourceLabel: string;
+      sourceSubLabel: string;
+      sourceToneClassName: string;
+    },
+  ) => {
+    const externalUrl =
+      item.option.downloadUrl ||
+      (item.option.source === "profile" ? "/api/candidate/profile/cv" : null);
+    const rowSurfaceClass = "bg-white group-hover:bg-blue-50/80";
+
+    return (
+      <tr key={item.id} className="group transition-colors">
+        <td className={`rounded-l-2xl border-y border-l border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
+          <div className="flex items-center gap-4">
+            <div className="flex h-11 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+              <span className="material-symbols-outlined text-[18px]">upload_file</span>
+            </div>
+            <div className="min-w-0">
+              <p className="overflow-hidden text-ellipsis text-[15px] font-bold leading-5 text-[#0052CC] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                {item.option.label}
+              </p>
+              <p className="mt-1 overflow-hidden text-ellipsis text-xs text-slate-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                {options.sourceSubLabel}
+              </p>
+            </div>
+          </div>
+        </td>
+
+        <td className={`border-y border-slate-100 px-7 py-6 text-center ${rowSurfaceClass}`}>
+          <div className="flex flex-col items-center gap-2">
+            <StatusBadge
+              label={options.sourceLabel}
+              tone="neutral"
+              className={options.sourceToneClassName}
+            />
+            <span className="text-[11px] font-medium text-slate-500">Tệp đã upload</span>
+          </div>
+        </td>
+
+        <td className={`border-y border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
+          <p className="text-sm font-medium text-slate-600">{formatAbsoluteDate(item.updatedAt)}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {formatDistanceToNow(new Date(item.updatedAt), {
+              addSuffix: true,
+              locale: vi,
+            })}
+          </p>
+        </td>
+
+        <td className={`rounded-r-2xl border-y border-r border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
+          <div className="flex justify-end">
+            <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-2 py-1 shadow-[0_6px_16px_rgba(15,23,42,0.08)]">
+              <ActionIconButton
+                icon="visibility"
+                label="Xem nhanh"
+                onClick={() => {
+                  if (!externalUrl) {
+                    setSaveNotice("Khong tim thay tep CV nay trong kho luu tru.");
+                    return;
+                  }
+
+                  window.open(externalUrl, "_blank", "noopener,noreferrer");
+                }}
+                disabled={!externalUrl}
+              />
+              <ActionIconButton
+                icon="download"
+                label="Tải xuống"
+                onClick={() => {
+                  if (!externalUrl) {
+                    setSaveNotice("Khong tim thay tep CV nay trong kho luu tru.");
+                    return;
+                  }
+
+                  window.open(externalUrl, "_blank", "noopener,noreferrer");
+                }}
+                disabled={!externalUrl}
+              />
+              {item.option.source === "profile" ? (
+                <ActionIconButton
+                  icon="person"
+                  label="Mở hồ sơ"
+                  onClick={() => router.push("/candidate/profile")}
+                />
+              ) : null}
+            </div>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="space-y-8 pb-10">
       {templateRedirectLoading ? (
@@ -357,6 +575,7 @@ function CVDashboardPageContent() {
           <ActionButton
             onClick={() => uploadInputRef.current?.click()}
             variant="secondary"
+            disabled={importUploading || importAnalyzingId !== null}
             icon={<span className="material-symbols-outlined text-[18px]">upload</span>}
           >
             Tải CV lên
@@ -370,6 +589,73 @@ function CVDashboardPageContent() {
           </ActionButton>
         </div>
       </section>
+
+      {uploadedImport ? (
+        <section className="rounded-2xl border border-cyan-200/70 bg-cyan-50/70 px-5 py-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-slate-900">CV mới tải lên</p>
+              <p className="text-sm text-slate-600">{uploadedImport.document.file_name}</p>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1">
+                  {formatFileSize(uploadedImport.document.file_size)}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1">
+                  {IMPORT_STATUS_LABELS[uploadedImport.document.status] || uploadedImport.document.status}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500">
+                {uploadedImport.document.status === "uploaded"
+                  ? "File da duoc luu. He thong se chi OCR khi ban bam Trich xuat JSON."
+                  : ACTIVE_IMPORT_STATUSES.has(uploadedImport.document.status)
+                    ? "OCR dang chay. Bam Mo review de theo doi tien trinh."
+                    : "Ket qua OCR da co san. Bam Mo review de xem toan bo parsed JSON."}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {uploadedImport.document.status === "uploaded" ? (
+                <ActionButton
+                  onClick={() => void handleStartImportAnalysis()}
+                  variant="primary"
+                  size="sm"
+                  disabled={importAnalyzingId === uploadedImport.document.id}
+                  icon={
+                    importAnalyzingId === uploadedImport.document.id ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                    )
+                  }
+                >
+                  Trích xuất JSON
+                </ActionButton>
+              ) : null}
+
+              <ActionButton
+                onClick={() => {
+                  setOptimisticReviewDetail(buildOptimisticImportReviewDetail(uploadedImport));
+                  setImportReviewQuery(uploadedImport.document.id);
+                }}
+                variant="secondary"
+                size="sm"
+                icon={<span className="material-symbols-outlined text-[18px]">visibility</span>}
+              >
+                Mở review
+              </ActionButton>
+
+              <ActionButton
+                href={uploadedImport.links.review}
+                variant="ghost"
+                size="sm"
+                icon={<span className="material-symbols-outlined text-[18px]">open_in_new</span>}
+              >
+                Trang review
+              </ActionButton>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-3">
         <DashboardCard
@@ -396,7 +682,7 @@ function CVDashboardPageContent() {
 
       <DataTableShell
         title="Danh sách CV"
-        description="CV đã lưu và tải lên từ CV Builder, hồ sơ ứng viên và các đơn ứng tuyển."
+        description="Danh sách được tách theo từng nguồn: CV tạo bằng template web, CV trong hồ sơ ứng viên và CV từ đơn ứng tuyển."
         actions={
           <div className="flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50/80 px-3 py-2 text-sm shadow-[0_4px_16px_rgba(59,130,246,0.12)]">
             <span className="font-semibold text-[#0052CC]">Sắp xếp theo:</span>
@@ -412,19 +698,6 @@ function CVDashboardPageContent() {
               <option value="oldest">Cũ nhất</option>
             </select>
           </div>
-        }
-        footer={
-          displayItems.length > 0 ? (
-            <div className="flex justify-center">
-              <button
-                type="button"
-                onClick={() => setSortOrder("latest")}
-                className="text-sm font-bold text-primary hover:underline"
-              >
-                Xem thêm danh sách
-              </button>
-            </div>
-          ) : null
         }
       >
         <div className="overflow-x-auto px-3 py-3 sm:px-4">
@@ -461,7 +734,7 @@ function CVDashboardPageContent() {
                     </td>
                   </tr>
                 ))
-              ) : displayItems.length === 0 ? (
+              ) : groupedDisplayItems.total === 0 ? (
                 <tr>
                   <td colSpan={4} className="px-7 py-8">
                     <EmptyState
@@ -472,216 +745,160 @@ function CVDashboardPageContent() {
                   </td>
                 </tr>
               ) : (
-                displayItems.map((item) => {
-                  if (item.kind === "builder") {
-                    const resume = item.resume;
-                    const isSelected = resume.id === selectedResume?.id;
-                    const isDefault = resume.id === defaultResumeId;
-                    const rowSurfaceClass = isSelected
-                      ? "bg-blue-50/80"
-                      : "bg-white group-hover:bg-blue-50/80";
-                    const rowBorderClass = isSelected ? "border-blue-200" : "border-slate-100";
+                <>
+                  {groupedDisplayItems.builder.length > 0 ? (
+                    <>
+                      {renderSectionHeaderRow(
+                        "builder",
+                        "CV tạo bằng template web",
+                        "Bao gồm các CV bạn tạo/chỉnh sửa trực tiếp trong CV Builder.",
+                        "border-blue-200 bg-blue-50/70",
+                        groupedDisplayItems.builder.length,
+                      )}
+                      {groupedDisplayItems.builder.map((item) => {
+                        const resume = item.resume;
+                        const isSelected = resume.id === selectedResume?.id;
+                        const isDefault = resume.id === defaultResumeId;
+                        const rowSurfaceClass = isSelected
+                          ? "bg-blue-50/80"
+                          : "bg-white group-hover:bg-blue-50/80";
+                        const rowBorderClass = isSelected ? "border-blue-200" : "border-slate-100";
 
-                    return (
-                      <tr key={resume.id} className="group transition-colors">
-                        <td
-                          className={`rounded-l-2xl border-y border-l px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="flex h-11 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-                              <span className="material-symbols-outlined text-[18px]">description</span>
-                            </div>
-                            <div className="min-w-0">
-                              <p className="overflow-hidden text-ellipsis text-[15px] font-bold leading-5 text-[#0052CC] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                                {resume.title}
+                        return (
+                          <tr key={resume.id} className="group transition-colors">
+                            <td
+                              className={`rounded-l-2xl border-y border-l px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="flex h-11 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                                  <span className="material-symbols-outlined text-[18px]">description</span>
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="overflow-hidden text-ellipsis text-[15px] font-bold leading-5 text-[#0052CC] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                                    {resume.title}
+                                  </p>
+                                  <p className="mt-1 overflow-hidden text-ellipsis text-xs text-slate-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                                    {resume.template?.name
+                                      ? `${resume.template.name} • CV Builder`
+                                      : "Online Editor • TalentFlow"}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className={`border-y px-7 py-6 text-center ${rowSurfaceClass} ${rowBorderClass}`}>
+                              <div className="flex flex-wrap justify-center gap-2">
+                                <StatusBadge
+                                  label="CV Builder"
+                                  tone="primary"
+                                  className="border-blue-200 bg-blue-50 text-[#0052CC]"
+                                />
+                                {isDefault ? (
+                                  <StatusBadge
+                                    label="Mặc định"
+                                    tone="primary"
+                                    className="border-cyan-200 bg-cyan-50 text-cyan-700"
+                                  />
+                                ) : null}
+                                <StatusBadge
+                                  label={resume.is_public ? "Công khai" : "Riêng tư"}
+                                  tone={resume.is_public ? "success" : "neutral"}
+                                  className={
+                                    resume.is_public
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                      : "border-slate-200 bg-slate-100 text-slate-700"
+                                  }
+                                />
+                              </div>
+                            </td>
+
+                            <td className={`border-y px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}>
+                              <p className="text-sm font-medium text-slate-600">
+                                {formatAbsoluteDate(resume.updated_at)}
                               </p>
-                              <p className="mt-1 overflow-hidden text-ellipsis text-xs text-slate-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                                {resume.template?.name
-                                  ? `${resume.template.name} • CV Builder`
-                                  : "Online Editor • TalentFlow"}
+                              <p className="mt-1 text-xs text-slate-400">
+                                {formatDistanceToNow(new Date(resume.updated_at), {
+                                  addSuffix: true,
+                                  locale: vi,
+                                })}
                               </p>
-                            </div>
-                          </div>
-                        </td>
+                            </td>
 
-                        <td className={`border-y px-7 py-6 text-center ${rowSurfaceClass} ${rowBorderClass}`}>
-                          <div className="flex flex-wrap justify-center gap-2">
-                            <StatusBadge
-                              label="CV Builder"
-                              tone="primary"
-                              className="border-blue-200 bg-blue-50 text-[#0052CC]"
-                            />
-                            {isDefault ? (
-                              <StatusBadge
-                                label="Mặc định"
-                                tone="primary"
-                                className="border-cyan-200 bg-cyan-50 text-cyan-700"
-                              />
-                            ) : null}
-                            <StatusBadge
-                              label={resume.is_public ? "Công khai" : "Riêng tư"}
-                              tone={resume.is_public ? "success" : "neutral"}
-                              className={
-                                resume.is_public
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                  : "border-slate-200 bg-slate-100 text-slate-700"
-                              }
-                            />
-                          </div>
-                        </td>
+                            <td
+                              className={`rounded-r-2xl border-y border-r px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}
+                            >
+                              <div className="flex justify-end">
+                                <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-2 py-1 shadow-[0_6px_16px_rgba(15,23,42,0.08)]">
+                                  <ActionIconButton
+                                    icon="edit"
+                                    label="Chỉnh sửa"
+                                    onClick={() => router.push(`/candidate/cv-builder/${resume.id}/edit`)}
+                                  />
+                                  <ActionIconButton
+                                    icon="visibility"
+                                    label="Xem nhanh"
+                                    onClick={() => setSelectedResumeId(resume.id)}
+                                  />
+                                  <ActionIconButton
+                                    icon="star"
+                                    label="Đặt mặc định"
+                                    onClick={() => handleSetDefaultResumeById(resume.id)}
+                                    disabled={isDefault}
+                                  />
+                                  <ActionIconButton
+                                    icon="delete"
+                                    label="Xóa"
+                                    onClick={() => void handleDeleteResume(resume.id)}
+                                    disabled={deletingId === resume.id}
+                                    tone="danger"
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
+                  ) : null}
 
-                        <td className={`border-y px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}>
-                          <p className="text-sm font-medium text-slate-600">
-                            {formatAbsoluteDate(resume.updated_at)}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            {formatDistanceToNow(new Date(resume.updated_at), {
-                              addSuffix: true,
-                              locale: vi,
-                            })}
-                          </p>
-                        </td>
+                  {groupedDisplayItems.profile.length > 0 ? (
+                    <>
+                      {renderSectionHeaderRow(
+                        "profile",
+                        "CV hồ sơ ứng viên",
+                        "CV bạn đã lưu trong hồ sơ cá nhân để dùng khi ứng tuyển.",
+                        "border-emerald-200 bg-emerald-50/70",
+                        groupedDisplayItems.profile.length,
+                      )}
+                      {groupedDisplayItems.profile.map((item) =>
+                        renderExternalRow(item, {
+                          sourceLabel: "Hồ sơ ứng viên",
+                          sourceSubLabel: "Nguồn: CV đã lưu trong hồ sơ ứng viên",
+                          sourceToneClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
+                        }),
+                      )}
+                    </>
+                  ) : null}
 
-                        <td
-                          className={`rounded-r-2xl border-y border-r px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}
-                        >
-                          <div className="flex justify-end">
-                            <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-2 py-1 shadow-[0_6px_16px_rgba(15,23,42,0.08)]">
-                              <ActionIconButton
-                                icon="edit"
-                                label="Chỉnh sửa"
-                                onClick={() => router.push(`/candidate/cv-builder/${resume.id}/edit`)}
-                              />
-                              <ActionIconButton
-                                icon="visibility"
-                                label="Xem nhanh"
-                                onClick={() => setSelectedResumeId(resume.id)}
-                              />
-                              <ActionIconButton
-                                icon="star"
-                                label="Đặt mặc định"
-                                onClick={() => handleSetDefaultResumeById(resume.id)}
-                                disabled={isDefault}
-                              />
-                              <ActionIconButton
-                                icon="delete"
-                                label="Xóa"
-                                onClick={() => void handleDeleteResume(resume.id)}
-                                disabled={deletingId === resume.id}
-                                tone="danger"
-                              />
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  const sourceLabel =
-                    item.option.source === "profile" ? "Hồ sơ ứng viên" : "Từ đơn ứng tuyển";
-                  const sourceTone = item.option.source === "profile" ? "success" : "warning";
-                  const externalUrl =
-                    item.option.downloadUrl ||
-                    (item.option.source === "profile" ? "/api/candidate/profile/cv" : null);
-                  const sourceSubLabel =
-                    item.option.source === "profile"
-                      ? "Nguồn: CV đã lưu trong hồ sơ ứng viên"
-                      : "Nguồn: CV tải từ đơn ứng tuyển";
-                  const rowSurfaceClass = "bg-white group-hover:bg-blue-50/80";
-
-                  return (
-                    <tr key={item.id} className="group transition-colors">
-                      <td className={`rounded-l-2xl border-y border-l border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
-                        <div className="flex items-center gap-4">
-                          <div className="flex h-11 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-                            <span className="material-symbols-outlined text-[18px]">upload_file</span>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="overflow-hidden text-ellipsis text-[15px] font-bold leading-5 text-[#0052CC] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                              {item.option.label}
-                            </p>
-                            <p className="mt-1 overflow-hidden text-ellipsis text-xs text-slate-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                              {sourceSubLabel}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className={`border-y border-slate-100 px-7 py-6 text-center ${rowSurfaceClass}`}>
-                        <div className="flex flex-wrap justify-center gap-2">
-                          <StatusBadge
-                            label={sourceLabel}
-                            tone={sourceTone}
-                            className={
-                              sourceTone === "success"
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-amber-200 bg-amber-50 text-amber-700"
-                            }
-                          />
-                          <StatusBadge
-                            label="Tệp đã upload"
-                            tone="neutral"
-                            className="border-slate-200 bg-slate-100 text-slate-700"
-                          />
-                        </div>
-                      </td>
-
-                      <td className={`border-y border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
-                        <p className="text-sm font-medium text-slate-600">
-                          {formatAbsoluteDate(item.updatedAt)}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-400">
-                          {formatDistanceToNow(new Date(item.updatedAt), {
-                            addSuffix: true,
-                            locale: vi,
-                          })}
-                        </p>
-                      </td>
-
-                      <td
-                        className={`rounded-r-2xl border-y border-r border-slate-100 px-7 py-6 ${rowSurfaceClass}`}
-                      >
-                        <div className="flex justify-end">
-                          <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-2 py-1 shadow-[0_6px_16px_rgba(15,23,42,0.08)]">
-                            <ActionIconButton
-                              icon="visibility"
-                              label="Xem nhanh"
-                              onClick={() => {
-                                if (!externalUrl) {
-                                  setSaveNotice("Khong tim thay tep CV nay trong kho luu tru.");
-                                  return;
-                                }
-
-                                window.open(externalUrl, "_blank", "noopener,noreferrer");
-                              }}
-                              disabled={!externalUrl}
-                            />
-                            <ActionIconButton
-                              icon="download"
-                              label="Tải xuống"
-                              onClick={() => {
-                                if (!externalUrl) {
-                                  setSaveNotice("Khong tim thay tep CV nay trong kho luu tru.");
-                                  return;
-                                }
-
-                                window.open(externalUrl, "_blank", "noopener,noreferrer");
-                              }}
-                              disabled={!externalUrl}
-                            />
-                            {item.option.source === "profile" ? (
-                              <ActionIconButton
-                                icon="person"
-                                label="Mở hồ sơ"
-                                onClick={() => router.push("/candidate/profile")}
-                              />
-                            ) : null}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                  {groupedDisplayItems.application.length > 0 ? (
+                    <>
+                      {renderSectionHeaderRow(
+                        "application",
+                        "CV từ đơn ứng tuyển",
+                        "Các tệp CV đã được đính kèm khi nộp đơn vào công việc.",
+                        "border-amber-200 bg-amber-50/70",
+                        groupedDisplayItems.application.length,
+                      )}
+                      {groupedDisplayItems.application.map((item) =>
+                        renderExternalRow(item, {
+                          sourceLabel: "Đơn ứng tuyển",
+                          sourceSubLabel: "Nguồn: CV tải từ đơn ứng tuyển",
+                          sourceToneClassName: "border-amber-200 bg-amber-50 text-amber-700",
+                        }),
+                      )}
+                    </>
+                  ) : null}
+                </>
               )}
             </tbody>
           </table>
@@ -741,7 +958,7 @@ function CVDashboardPageContent() {
             void handleImportUpload(file);
           }
         }}
-        disabled={importUploading}
+        disabled={importUploading || importAnalyzingId !== null}
       />
     </div>
   );

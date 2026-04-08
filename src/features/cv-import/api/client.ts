@@ -58,7 +58,7 @@ function createTimeoutController(timeoutMs: number) {
   };
 }
 
-function bindAbortSignal(target: AbortController, source?: AbortSignal) {
+function bindAbortSignal(target: AbortController, source?: AbortSignal | null) {
   if (!source) {
     return () => {};
   }
@@ -142,9 +142,15 @@ async function parseJSONResponse<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function uploadCVImport(file: File): Promise<CVImportSummaryResponse> {
+export async function uploadCVImport(
+  file: File,
+  options?: { startProcessing?: boolean },
+): Promise<CVImportSummaryResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  if (options?.startProcessing) {
+    formData.append("start_processing", "true");
+  }
 
   const response = await fetchWithDeadline(
     "/api/cv-imports",
@@ -156,6 +162,22 @@ export async function uploadCVImport(file: File): Promise<CVImportSummaryRespons
     {
       timeoutMs: FILE_UPLOAD_TIMEOUT_MS,
       timeoutMessage: "Upload is taking too long. Please retry.",
+    },
+  );
+
+  return parseJSONResponse<CVImportSummaryResponse>(response);
+}
+
+export async function startCVImportAnalysis(documentId: string): Promise<CVImportSummaryResponse> {
+  const response = await fetchWithDeadline(
+    `/api/cv-imports/${documentId}/analyze`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+    },
+    {
+      timeoutMs: IMPORT_MUTATION_TIMEOUT_MS,
+      timeoutMessage: "Timed out while starting OCR analysis.",
     },
   );
 

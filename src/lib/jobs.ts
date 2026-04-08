@@ -1,9 +1,49 @@
 import "server-only";
 
-import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import type { Job } from "@/types/job";
-import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+
+const PUBLIC_JOB_LIST_COLUMNS = [
+  "id",
+  "title",
+  "company_name",
+  "logo_url",
+  "cover_url",
+  "salary",
+  "location",
+  "posted_date",
+  "source_url",
+  "industry",
+  "level",
+  "employment_type",
+  "deadline",
+  "employer_id",
+].join(", ");
+
+const PUBLIC_JOB_LIST_MAX_LIMIT = 50;
+
+export type PublicJobsSort = "newest" | "oldest" | "az" | "salary-high" | "salary-low";
+
+export interface SearchPublicJobsParams {
+  q?: string;
+  location?: string;
+  company?: string;
+  page?: number;
+  limit?: number;
+  sort?: PublicJobsSort;
+  levels?: string[];
+  types?: string[];
+  industries?: string[];
+}
+
+export interface SearchPublicJobsResult {
+  items: Job[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
 
 type EmployerProfile = {
   id: string;
@@ -132,9 +172,164 @@ function applyEmployerBranding(job: Job, employerProfile?: EmployerProfile): Job
   };
 }
 
+function normalizeFilterValues(values: string[] | undefined): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return values
+    .map((value) => String(value ?? "").trim())
+    .filter(Boolean);
+}
+
+function sanitizeLikeValue(value: string): string {
+  return value.replace(/[%,_]/g, " ").trim();
+}
+
+function hasMissingColumnError(error: { message?: string } | null, columnName: string): boolean {
+  if (!error?.message) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  const target = columnName.toLowerCase();
+  return (
+    message.includes(`column \"${target}\" does not exist`) ||
+    message.includes(`column jobs.${target} does not exist`)
+  );
+}
+
+export async function searchPublicJobs(
+  params: SearchPublicJobsParams = {},
+): Promise<SearchPublicJobsResult> {
+  const supabase = createAdminClient();
+
+  const q = String(params.q ?? "").trim();
+  const location = String(params.location ?? "").trim();
+  const company = String(params.company ?? "").trim();
+  const levels = normalizeFilterValues(params.levels);
+  const types = normalizeFilterValues(params.types);
+  const industries = normalizeFilterValues(params.industries);
+  const page = Math.max(1, Number(params.page ?? 1));
+  const limit = Math.min(
+    PUBLIC_JOB_LIST_MAX_LIMIT,
+    Math.max(1, Number(params.limit ?? 12)),
+  );
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+  const sort = params.sort ?? "newest";
+
+  const buildQuery = ({
+    includeStatus,
+    includePublicVisible,
+  }: {
+    includeStatus: boolean;
+    includePublicVisible: boolean;
+  }) => {
+    let query = supabase
+      .from("jobs")
+      .select(PUBLIC_JOB_LIST_COLUMNS, { count: "exact" })
+      .not("employer_id", "is", null);
+
+    if (q) {
+      const safeQuery = sanitizeLikeValue(q);
+      query = query.or(`title.ilike.%${safeQuery}%,company_name.ilike.%${safeQuery}%`);
+    }
+
+    if (location) {
+      query = query.filter("location", "ilike", `%${sanitizeLikeValue(location)}%`);
+    }
+
+    if (company) {
+      query = query.filter("company_name", "ilike", `%${sanitizeLikeValue(company)}%`);
+    }
+
+    if (levels.length > 0) {
+      query = query.in("level", levels);
+    }
+
+    if (types.length > 0) {
+      query = query.in("employment_type", types);
+    }
+
+    if (industries.length > 0) {
+      query = query.or(
+        industries
+          .map((industry) => `industry.ilike.%${sanitizeLikeValue(industry)}%`)
+          .join(","),
+      );
+    }
+
+    if (includeStatus) {
+      query = query.eq("status", "open");
+    }
+
+    if (includePublicVisible) {
+      query = query.eq("is_public_visible", true);
+    }
+
+    if (sort === "oldest") {
+      query = query.order("posted_date", { ascending: true, nullsFirst: false });
+    } else if (sort === "az") {
+      query = query.order("title", { ascending: true });
+    } else {
+      query = query.order("posted_date", { ascending: false, nullsFirst: false });
+    }
+
+    return query.range(from, to);
+  };
+
+  let result = await buildQuery({ includeStatus: true, includePublicVisible: true });
+
+  if (result.error && hasMissingColumnError(result.error, "status")) {
+    result = await buildQuery({ includeStatus: false, includePublicVisible: false });
+  } else if (result.error && hasMissingColumnError(result.error, "is_public_visible")) {
+    result = await buildQuery({ includeStatus: true, includePublicVisible: false });
+  }
+
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
+
+  const jobs = (result.data ?? []).map((row) =>
+    toJob(row as unknown as Record<string, unknown>),
+  );
+  const employerIds = [
+    ...new Set(
+      jobs
+        .map((job) => job.employer_id)
+        .filter((employerId): employerId is string => Boolean(employerId)),
+    ),
+  ];
+  const employerProfiles = await getEmployerProfilesById(employerIds);
+  const items = jobs.map((job) =>
+    applyEmployerBranding(job, employerProfiles.get(job.employer_id ?? "")),
+  );
+
+  const total = Number(result.count ?? items.length);
+
+  return {
+    items,
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  };
+}
+
+export async function getLatestPublicJobs(limit = 12): Promise<Job[]> {
+  const result = await searchPublicJobs({
+    page: 1,
+    limit,
+    sort: "newest",
+  });
+
+  return result.items;
+}
+
 async function getSupabaseJobsImpl(): Promise<Job[]> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const query = supabase
       .from("jobs")
@@ -184,7 +379,10 @@ async function getSupabaseJobsImpl(): Promise<Job[]> {
   }
 }
 
-const getCachedSupabaseJobs = cache(getSupabaseJobsImpl);
+const getCachedSupabaseJobs = unstable_cache(getSupabaseJobsImpl, ["public-jobs"], {
+  revalidate: 60,
+  tags: ["jobs-public"],
+});
 
 /** Return every public job. */
 export async function getAllJobs(): Promise<Job[]> {

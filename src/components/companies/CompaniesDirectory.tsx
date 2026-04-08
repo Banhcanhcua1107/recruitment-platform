@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useDeferredValue, useEffect, useRef, useState } from "react";
+import { Building2, ChevronLeft, ChevronRight, Search, SearchX } from "lucide-react";
 import CompanyCard from "@/components/companies/CompanyCard";
 
 type Company = {
@@ -140,11 +141,11 @@ export function CompaniesDirectory({
   }, [deferredKeyword, page]);
 
   return (
-    <main className="min-h-[100dvh] bg-[#f6f7f8]">
+    <main className="min-h-dvh bg-[#f6f7f8]">
       <section className="relative overflow-hidden border-b border-slate-100 bg-white px-6 pb-12 pt-16">
-        <div className="pointer-events-none absolute top-0 right-0 h-[500px] w-[700px] translate-x-1/3 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl" />
+        <div className="pointer-events-none absolute top-0 right-0 h-125 w-175 translate-x-1/3 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl" />
 
-        <div className="relative z-10 mx-auto max-w-[1360px] text-center">
+        <div className="relative z-10 mx-auto max-w-340 text-center">
           <h1 className="mb-3 text-3xl font-black tracking-tight text-slate-900 md:text-4xl lg:text-5xl">
             Khám phá <span className="text-primary">công ty hàng đầu</span>
           </h1>
@@ -154,7 +155,7 @@ export function CompaniesDirectory({
 
           <div className="mx-auto flex max-w-3xl flex-col gap-3 rounded-[28px] border border-slate-100 bg-white p-3 shadow-[0_8px_30px_rgba(0,0,0,0.06)] md:flex-row">
             <div className="flex flex-1 items-center gap-4 rounded-2xl bg-slate-50 px-6">
-              <span className="material-symbols-outlined text-2xl text-primary">business</span>
+              <Building2 className="size-6 text-primary" aria-hidden="true" />
               <input
                 value={keyword}
                 onChange={(event) => {
@@ -170,14 +171,14 @@ export function CompaniesDirectory({
               onClick={() => setKeyword((currentValue) => currentValue.trim())}
               className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-primary px-10 text-lg font-black text-white shadow-lg shadow-primary/20 transition-all active:scale-95 hover:bg-primary-hover"
             >
-              <span className="material-symbols-outlined text-xl">search</span>
+              <Search className="size-5" aria-hidden="true" />
               Tìm kiếm
             </button>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1360px] px-6 py-12">
+      <section className="mx-auto max-w-340 px-6 py-12">
         <div className="mb-8 flex items-center justify-between">
           <p className="text-base font-bold text-slate-500">
             Hiển thị <span className="font-black text-slate-900">{total}</span> công ty
@@ -195,9 +196,7 @@ export function CompaniesDirectory({
           </div>
         ) : items.length === 0 ? (
           <div className="rounded-3xl border border-slate-100 bg-white py-20 text-center">
-            <span className="material-symbols-outlined mb-4 block text-5xl text-slate-200">
-              search_off
-            </span>
+            <SearchX className="mx-auto mb-4 size-12 text-slate-200" aria-hidden="true" />
             <p className="text-lg font-black text-slate-600">Không tìm thấy công ty nào</p>
             <p className="mt-1 text-sm font-medium text-slate-400">Hãy thử từ khóa khác.</p>
           </div>
@@ -229,8 +228,9 @@ export function CompaniesDirectory({
               disabled={page <= 1}
               onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
               className="flex size-11 items-center justify-center rounded-xl border-2 border-slate-100 transition-all hover:border-slate-300 hover:bg-slate-50 disabled:opacity-30"
+              aria-label="Trang trước"
             >
-              <span className="material-symbols-outlined">chevron_left</span>
+              <ChevronLeft className="size-5" aria-hidden="true" />
             </button>
 
             {Array.from({ length: totalPages }, (_, index) => index + 1)
@@ -275,8 +275,9 @@ export function CompaniesDirectory({
               disabled={page >= totalPages}
               onClick={() => setPage((currentPage) => currentPage + 1)}
               className="flex size-11 items-center justify-center rounded-xl border-2 border-slate-100 transition-all hover:border-slate-300 hover:bg-slate-50 disabled:opacity-30"
+              aria-label="Trang sau"
             >
-              <span className="material-symbols-outlined">chevron_right</span>
+              <ChevronRight className="size-5" aria-hidden="true" />
             </button>
           </div>
         ) : null}

@@ -19,7 +19,8 @@ BEGIN
   LIMIT 1;
 
   IF target_employer_id IS NULL THEN
-    RAISE EXCEPTION 'Không tìm thấy employers với email banhcanhcuah2l@gmail.com';
+    RAISE NOTICE 'Skipping seed job: employer banhcanhcuah2l@gmail.com not found';
+    RETURN;
   END IF;
 
   INSERT INTO public.jobs (

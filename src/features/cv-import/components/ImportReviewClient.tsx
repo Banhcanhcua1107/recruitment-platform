@@ -10,6 +10,7 @@ import {
   retryCVImport,
   saveEditableCV,
   saveOriginalCVFromImport,
+  startCVImportAnalysis,
 } from "@/features/cv-import/api/client";
 import { createResumeFromSections } from "@/app/candidate/cv-builder/api";
 import { ImportDocumentPreview } from "@/features/cv-import/components/ImportDocumentPreview";
@@ -19,7 +20,6 @@ import { PersistedOcrReviewPanel } from "@/features/ocr-viewer";
 import type { SaveOriginalCVResponse } from "@/types/cv-import";
 
 const ACTIVE_STATUSES = new Set<CVDocumentStatus>([
-  "uploaded",
   "queued",
   "normalizing",
   "rendering_preview",
@@ -80,6 +80,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
   const [overrideNonCv, setOverrideNonCv] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSavingOriginal, setIsSavingOriginal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
     ["ready", "partial_ready"].includes(detail.document.status) &&
     (!requiresPartial || allowPartial) &&
     (!requiresNonCv || overrideNonCv);
+  const canStartAnalysis = detail.document.status === "uploaded";
   const canOpenSourceEditor = ["ready", "partial_ready"].includes(detail.document.status);
   const eligibilityNote = localizeEligibilityReason(detail.editor_eligibility.reason);
   const failureNote = localizeFailureCode(detail.document.failure_code);
@@ -181,6 +183,37 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
       setIsRetrying(false);
     }
   }, [documentId, loadDocument]);
+
+  const handleStartAnalysis = useCallback(async () => {
+    if (!canStartAnalysis) return;
+
+    setIsAnalyzing(true);
+    setErrorMessage(null);
+    setStaleMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const payload = await startCVImportAnalysis(documentId);
+      setDetail((current) => ({
+        ...current,
+        document: {
+          ...current.document,
+          status: payload.document.status,
+          job_id: payload.document.job_id,
+          retry_count: payload.document.retry_count,
+          failure_stage: null,
+          failure_code: null,
+        },
+      }));
+      autoRefreshStartedAtRef.current = Date.now();
+      setSuccessMessage("Đã bắt đầu OCR và trích xuất JSON. Dữ liệu review sẽ tự cập nhật.");
+      await loadDocument({ silent: true });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Không thể bắt đầu phân tích CV.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [canStartAnalysis, documentId, loadDocument]);
 
   const handleSaveOriginal = useCallback(async () => {
     if (!detail.editor_eligibility.can_save_original) return;
@@ -338,6 +371,19 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                 <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-medium text-rose-700">
                   {failureNote}
                 </span>
+              ) : null}
+
+              {canStartAnalysis ? (
+                <button
+                  type="button"
+                  onClick={() => void handleStartAnalysis()}
+                  disabled={isAnalyzing}
+                  className="inline-flex h-8 items-center gap-2 rounded-2xl bg-slate-900 px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  title="Bắt đầu OCR và trích xuất JSON"
+                >
+                  {isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  Trích xuất JSON
+                </button>
               ) : null}
 
               <button

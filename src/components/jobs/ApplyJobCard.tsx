@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { ExternalLink, FileText, LogIn, Send, UserRound } from "lucide-react";
+import { scheduleIdleTask } from "@/lib/client-idle";
 import { createClient } from "@/utils/supabase/client";
 
 const ApplicationModal = dynamic(
@@ -33,20 +35,22 @@ export function ApplyJobCard({
 
   useEffect(() => {
     let isMounted = true;
+    const cancelIdleTask = scheduleIdleTask(() => {
+      void (async () => {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-    void (async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (isMounted) {
-        setIsAuthenticated(Boolean(user));
-      }
-    })();
+        if (isMounted) {
+          setIsAuthenticated(Boolean(user));
+        }
+      })();
+    }, 600);
 
     return () => {
       isMounted = false;
+      cancelIdleTask();
     };
   }, []);
 
@@ -77,14 +81,14 @@ export function ApplyJobCard({
             </div>
           </div>
 
-          <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+          <div className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-4">
             <FeatureLine
-              icon="person"
+              icon={<UserRound className="size-4.5" aria-hidden="true" />}
               title="Thông tin tự động"
               description="Lấy nhanh dữ liệu từ hồ sơ ứng viên đã lưu."
             />
             <FeatureLine
-              icon="description"
+              icon={<FileText className="size-4.5" aria-hidden="true" />}
               title="Chọn đúng CV"
               description="Dùng CV có sẵn hoặc tải lên một bản mới."
             />
@@ -99,7 +103,7 @@ export function ApplyJobCard({
                 href="/login"
                 className="mt-3 inline-flex items-center gap-2 font-semibold text-primary hover:underline"
               >
-                <span className="material-symbols-outlined text-base">login</span>
+                <LogIn className="size-4" aria-hidden="true" />
                 Đăng nhập ngay
               </Link>
             </div>
@@ -111,7 +115,7 @@ export function ApplyJobCard({
               onFocus={preloadModal}
               className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-primary px-5 text-sm font-black text-white transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-primary-hover active:translate-y-px"
             >
-              <span className="material-symbols-outlined text-[20px]">send</span>
+              <Send className="size-5" aria-hidden="true" />
               Ứng tuyển ngay
             </button>
           )}
@@ -123,7 +127,7 @@ export function ApplyJobCard({
               rel="noreferrer"
               className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-[18px] border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition-colors hover:border-primary/30 hover:text-primary"
             >
-              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              <ExternalLink className="size-4.5" aria-hidden="true" />
               Xem tin gốc
             </a>
           ) : null}
@@ -151,14 +155,14 @@ function FeatureLine({
   title,
   description,
 }: {
-  icon: string;
+  icon: ReactNode;
   title: string;
   description: string;
 }) {
   return (
     <div className="flex items-start gap-3">
       <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-2xl bg-white text-primary ring-1 ring-slate-200">
-        <span className="material-symbols-outlined text-[18px]">{icon}</span>
+        {icon}
       </span>
       <div className="space-y-1">
         <p className="text-sm font-semibold text-slate-900">{title}</p>

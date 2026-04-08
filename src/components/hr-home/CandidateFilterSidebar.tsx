@@ -7,8 +7,7 @@ export interface CandidateFilters {
   skills: string[];
   minSalary: number;
   maxSalary: number;
-  availableNow: boolean;
-  openToWork: boolean;
+  minMatchScore: number;
   sort: "latest" | "best_match";
 }
 
@@ -48,8 +47,7 @@ export default function CandidateFilterSidebar({
     filters.skills.length +
     (filters.minSalary > 0 ? 1 : 0) +
     (filters.maxSalary < 100 ? 1 : 0) +
-    (filters.availableNow ? 1 : 0) +
-    (filters.openToWork ? 1 : 0);
+    (filters.minMatchScore > 0 ? 1 : 0);
 
   return (
     <aside className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-[calc(100vh-7.5rem)] xl:overflow-y-auto">
@@ -59,7 +57,7 @@ export default function CandidateFilterSidebar({
           <p className="mt-1 text-xs font-medium text-slate-500">
             {activeCount > 0
               ? `${activeCount} bộ lọc đang áp dụng`
-              : "Lọc theo kỹ năng, kinh nghiệm và mức sẵn sàng"}
+              : "Lọc theo kỹ năng, kinh nghiệm và mức phù hợp"}
           </p>
         </div>
         {activeCount > 0 ? (
@@ -187,29 +185,31 @@ export default function CandidateFilterSidebar({
         </section>
 
         <section className="space-y-2.5 border-t border-slate-200/70 pt-4">
-          <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Trạng thái</h4>
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-slate-50">
+          <h4 className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">
+            Điểm phù hợp tối thiểu
+          </h4>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-500">
+              <span>{filters.minMatchScore}%</span>
+              <span>100%</span>
+            </div>
             <input
-              type="checkbox"
-              checked={filters.availableNow}
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={filters.minMatchScore}
+              aria-label="Điểm phù hợp tối thiểu"
+              title="Điểm phù hợp tối thiểu"
               onChange={(event) =>
-                onFiltersChange({ ...filters, availableNow: event.target.checked })
+                onFiltersChange({
+                  ...filters,
+                  minMatchScore: Number(event.target.value),
+                })
               }
-              className="size-5 accent-primary"
+              className="w-full"
             />
-            <span className="text-sm font-semibold text-slate-700">Available ngay</span>
-          </label>
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 transition hover:bg-slate-50">
-            <input
-              type="checkbox"
-              checked={filters.openToWork}
-              onChange={(event) =>
-                onFiltersChange({ ...filters, openToWork: event.target.checked })
-              }
-              className="size-5 accent-primary"
-            />
-            <span className="text-sm font-semibold text-slate-700">Open to work</span>
-          </label>
+          </div>
         </section>
       </div>
     </aside>

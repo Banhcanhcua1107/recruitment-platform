@@ -1,5 +1,7 @@
 "use server";
 
+import { fetchWithTimeout, UpstreamTimeoutError } from "@/lib/upstream-http";
+
 // ── Language detection ──────────────────────────────────────
 // Returns "vi" if the text contains Vietnamese diacritics, otherwise "en"
 function detectLanguage(text: string): "vi" | "en" {
@@ -131,6 +133,11 @@ function isTooSimilar(original: string, suggestion: string, threshold = 0.80): b
 
 import { CV_WRITER_SYSTEM_PROMPT_VI, CV_WRITER_SYSTEM_PROMPT_EN } from "./ai-config";
 
+const OLLAMA_REQUEST_TIMEOUT_MS = Number.parseInt(
+  process.env.OLLAMA_REQUEST_TIMEOUT_MS || "20000",
+  10,
+);
+
 // ── Build the system prompt ─────────────────────────────────
 function buildSystemPrompt(lang: "vi" | "en", format: ContentFormat): string {
   const formatRuleVi =
@@ -216,33 +223,48 @@ async function callOllama(
   if (prefill) messages.push({ role: "assistant", content: prefill });
 
   try {
-    const res = await fetch(`${baseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        options: { 
-          temperature: 0.2, // Quan trọng: Giảm sáng tạo thừa
-          num_predict: 500,  // Giới hạn độ dài để không viết quá dài
-          top_p: 0.5,
-          // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
-          stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"] 
+    const { response } = await fetchWithTimeout(
+      `${baseUrl}/api/chat`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Connection: "keep-alive",
         },
-        messages,
-      }),
-    });
+        body: JSON.stringify({
+          model,
+          stream: false,
+          options: {
+            temperature: 0.2, // Quan trọng: Giảm sáng tạo thừa
+            num_predict: 500, // Giới hạn độ dài để không viết quá dài
+            top_p: 0.5,
+            // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
+            stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"],
+          },
+          messages,
+        }),
+      },
+      {
+        timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
+        timeoutMessage: `Ollama request timed out after ${OLLAMA_REQUEST_TIMEOUT_MS}ms.`,
+      },
+    );
 
-    if (!res.ok) {
-      console.error(`[Ollama] HTTP ${res.status}:`, await res.text());
+    if (!response.ok) {
+      console.error(`[Ollama] HTTP ${response.status}:`, await response.text());
       return "";
     }
 
-    const body = await res.json();
+    const body = await response.json();
     const content = (body?.message?.content ?? "").trim();
     // Prepend the prefill seed back (Ollama strips it from the response)
     return prefill ? prefill + content : content;
   } catch (err) {
+    if (err instanceof UpstreamTimeoutError) {
+      console.error("[Ollama] timeout:", err.message);
+      return "";
+    }
+
     console.error("[Ollama] call failed:", err);
     return "";
   }

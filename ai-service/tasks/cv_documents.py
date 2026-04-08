@@ -17,11 +17,11 @@ from services.artifact_manifest import (
 from services.document_classifier import classify_document
 from services.document_repository import DocumentRepository, utcnow
 from services.multimodal_vl import analyze_document
-from services.ocr_pipeline import (
+from services.cv_processing import (
     _image_to_png_bytes,
     _prepare_document_pages,
     build_preview_payload,
-    process_cv,
+    process_cv_document,
 )
 from services.stage_runner import StageRunner
 from services.storage_client import StorageClient
@@ -255,7 +255,7 @@ def process_document(self, document_id: str, job_id: str) -> str:
         with stage_runner.run("ocr_running"):
             stage_started = time.perf_counter()
             repository.update_document_status(document_id, "ocr_running")
-            processed = process_cv(
+            processed = process_cv_document(
                 file_bytes,
                 content_type=document.get("mime_type"),
                 filename=document.get("file_name"),

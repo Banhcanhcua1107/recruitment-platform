@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { ActionButton, StatusBadge } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
-import { CV_TEMPLATE_LIBRARY } from "@/components/cv/templates/templateCatalog";
+import { CV_TEMPLATE_LIBRARY, CV_TEMPLATE_LIBRARY_UI } from "@/components/cv/templates/templateCatalog";
 import { EDITOR_UI_TEXTS } from "./editor-ui-texts.vi";
 
 interface SaveStateChipProps {
@@ -87,8 +87,15 @@ export function EditorTopbar({
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
 
   const activeTemplate = useMemo(() => {
-    return CV_TEMPLATE_LIBRARY.find((item) => item.id === activeTemplateId) ?? CV_TEMPLATE_LIBRARY[0];
+    return CV_TEMPLATE_LIBRARY.find((item) => item.id === activeTemplateId) ?? CV_TEMPLATE_LIBRARY[0] ?? null;
   }, [activeTemplateId]);
+
+  const templateOptions = CV_TEMPLATE_LIBRARY_UI;
+  const hasTemplateOptions = templateOptions.length > 0;
+  const activeTemplateLabel =
+    activeTemplate && templateOptions.some((template) => template.id === activeTemplate.id)
+      ? activeTemplate.name
+      : "Mẫu đang cập nhật";
 
   return (
     <header className="border-b border-[var(--app-border)] bg-white/82 backdrop-blur-xl">
@@ -110,28 +117,35 @@ export function EditorTopbar({
 
         <div className="flex flex-wrap items-center gap-2">
           <SaveStateChip saveStatus={saveStatus} isDirty={isDirty} />
-          <StatusBadge label={activeTemplate.name} tone="primary" className="normal-case tracking-normal" />
+          <StatusBadge label={activeTemplateLabel} tone="primary" className="normal-case tracking-normal" />
         </div>
 
         <div className="relative ml-auto flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setIsTemplateMenuOpen((prev) => !prev)}
-            className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50"
-            title={EDITOR_UI_TEXTS.topbar.changeTemplate}
+            onClick={() => {
+              if (!hasTemplateOptions) {
+                return;
+              }
+
+              setIsTemplateMenuOpen((prev) => !prev);
+            }}
+            disabled={!hasTemplateOptions}
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            title={hasTemplateOptions ? EDITOR_UI_TEXTS.topbar.changeTemplate : "Tạm thời chưa có mẫu để đổi"}
           >
             <span className="max-w-28 truncate">{EDITOR_UI_TEXTS.topbar.changeTemplate}</span>
             <ChevronDown size={15} />
           </button>
 
-          {isTemplateMenuOpen ? (
+          {isTemplateMenuOpen && hasTemplateOptions ? (
             <div className="absolute right-0 top-12 z-30 w-[26rem] rounded-[24px] border border-[var(--app-border)] bg-white p-3 shadow-[0_34px_90px_-54px_rgba(15,23,42,0.42)]">
               <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 {EDITOR_UI_TEXTS.topbar.selectTemplateHint}
               </p>
               <div className="grid max-h-80 grid-cols-2 gap-2 overflow-y-auto pr-1">
-                {CV_TEMPLATE_LIBRARY.map((template) => {
-                  const selected = template.id === activeTemplate.id;
+                {templateOptions.map((template) => {
+                  const selected = template.id === activeTemplate?.id;
 
                   return (
                     <button

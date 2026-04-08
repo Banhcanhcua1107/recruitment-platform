@@ -16,7 +16,8 @@ BEGIN
   LIMIT 1;
 
   IF target_user_id IS NULL THEN
-    RAISE EXCEPTION 'Không tìm thấy tài khoản profiles với email banhcanhcuah2l@gmail.com';
+    RAISE NOTICE 'Skipping seed company: profile banhcanhcuah2l@gmail.com not found';
+    RETURN;
   END IF;
 
   INSERT INTO public.employers (

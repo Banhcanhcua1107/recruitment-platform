@@ -22,13 +22,31 @@ function formatInlineMarkers(text: string) {
     .replace(/~([^~]+)~/g, "<u>$1</u>");
 }
 
-function textToPreviewHtml(input: string) {
+interface TextPreviewOptions {
+  preserveDashBullets?: boolean;
+}
+
+function textToPreviewHtml(input: string, options?: TextPreviewOptions) {
   const source = input.trim();
   if (!source) {
     return "";
   }
 
   const lines = source.split(/\r?\n/);
+
+  if (options?.preserveDashBullets) {
+    return lines
+      .map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return "<div><br/></div>";
+        }
+
+        return `<div>${formatInlineMarkers(escapeHtml(trimmed))}</div>`;
+      })
+      .join("");
+  }
+
   const allBullets = lines.length > 1 && lines.every((line) => line.trim().startsWith("- "));
 
   if (allBullets) {
@@ -166,6 +184,7 @@ interface EditableTextProps {
   showToolbar?: boolean;
   readClassName?: string;
   editClassName?: string;
+  preserveDashBullets?: boolean;
 }
 
 export function EditableText({
@@ -178,6 +197,7 @@ export function EditableText({
   showToolbar = true,
   readClassName,
   editClassName,
+  preserveDashBullets = false,
 }: EditableTextProps) {
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [draft, setDraft] = useState(value || "");
@@ -194,7 +214,10 @@ export function EditableText({
   }, [draft, mode, multiline, minRows]);
 
   const previewValue = mode === "edit" ? draft : value || "";
-  const previewHtml = useMemo(() => textToPreviewHtml(previewValue), [previewValue]);
+  const previewHtml = useMemo(
+    () => textToPreviewHtml(previewValue, { preserveDashBullets }),
+    [previewValue, preserveDashBullets],
+  );
 
   const startEditing = () => {
     if (!isSectionActive) {

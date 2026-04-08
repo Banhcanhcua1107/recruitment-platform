@@ -11,6 +11,14 @@ from services.mapped_sections import (
 )
 
 
+def _resolve_parser_model() -> str:
+    return (
+        os.getenv("CV_PARSER_MODEL")
+        or os.getenv("OLLAMA_CV_PARSER_MODEL")
+        or "qwen3:4b"
+    )
+
+
 def _normalize_correction_log(entries: Any) -> list[dict[str, str]]:
     if not isinstance(entries, list):
         return []
@@ -92,7 +100,7 @@ def build_normalized_json(processed: dict[str, Any], vl_result: dict[str, Any]) 
         "raw_ocr_blocks": processed.get("blocks") or [],
         "layout_blocks": processed.get("layout_blocks") or [],
         "_meta": {
-            "parser_model": os.getenv("CV_PARSER_MODEL", "qwen2.5-coder:7b"),
+            "parser_model": _resolve_parser_model(),
             "prompt_version": "v2",
         },
     }
@@ -100,7 +108,7 @@ def build_normalized_json(processed: dict[str, Any], vl_result: dict[str, Any]) 
 
 def build_parser_raw_response(processed: dict[str, Any], normalized_json: dict[str, Any]) -> dict[str, Any]:
     return {
-        "model": os.getenv("CV_PARSER_MODEL", "qwen2.5-coder:7b"),
+        "model": _resolve_parser_model(),
         "prompt_version": "v2",
         "input_summary": {
             "page_count": processed.get("page_count", 0),

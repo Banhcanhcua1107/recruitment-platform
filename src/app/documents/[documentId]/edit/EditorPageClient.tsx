@@ -1,11 +1,20 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import type { DocumentEditorMetadata, SupportedFileType } from "@/types/editor";
 import ImageEditor from "@/components/editor/ImageEditor";
-import PdfEditor from "@/components/editor/PdfEditor";
-import WordEditor from "@/components/editor/WordEditor";
+
+const PdfEditor = dynamic(() => import("@/components/editor/PdfEditor"), {
+  ssr: false,
+  loading: () => <EditorShellLoader label="Dang tai PDF editor..." />,
+});
+
+const WordEditor = dynamic(() => import("@/components/editor/WordEditor"), {
+  ssr: false,
+  loading: () => <EditorShellLoader label="Dang tai Word editor..." />,
+});
 
 interface EditorPageClientProps {
   documentId: string;
@@ -166,4 +175,18 @@ export default function EditorPageClient({ documentId }: EditorPageClientProps) 
   }
 
   return content;
+}
+
+function EditorShellLoader({ label }: { label: string }) {
+  return (
+    <div className="flex h-screen flex-col bg-slate-50">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
+        <div className="h-8 w-28 animate-pulse rounded-md bg-slate-100" />
+        <div className="h-8 w-20 animate-pulse rounded-md bg-slate-100" />
+      </div>
+      <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+        {label}
+      </div>
+    </div>
+  );
 }

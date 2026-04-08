@@ -33,6 +33,56 @@ function textToLines(value: string) {
     .filter(Boolean);
 }
 
+function hasMeaningfulString(value: unknown) {
+  return stripHtml(toSafeText(value)).length > 0;
+}
+
+function hasNonEmptyCustomItem(items: unknown[]) {
+  return items.some((item) => {
+    if (typeof item === "string") {
+      return hasMeaningfulString(item);
+    }
+
+    if (!item || typeof item !== "object") {
+      return false;
+    }
+
+    const record = item as Record<string, unknown>;
+    return Object.entries(record).some(([key, value]) => {
+      if (key === "id") {
+        return false;
+      }
+
+      return typeof value === "string" && hasMeaningfulString(value);
+    });
+  });
+}
+
+function shouldHideEmptyCustomSection(section: CVSection) {
+  if (section.type !== "custom_text") {
+    return false;
+  }
+
+  if (inferCustomSectionType(section.title) !== "custom") {
+    return false;
+  }
+
+  const customData = section.data as {
+    text?: unknown;
+    items?: unknown;
+  };
+
+  if (hasMeaningfulString(customData.text)) {
+    return false;
+  }
+
+  if (!Array.isArray(customData.items)) {
+    return true;
+  }
+
+  return !hasNonEmptyCustomItem(customData.items);
+}
+
 function inferCustomSectionType(title?: string): CVPreviewSectionType {
   const normalized = (title || "").trim().toLowerCase();
 
@@ -77,6 +127,22 @@ function customTextToActivities(rawText: string): ActivitiesSectionData {
       id: `activity-${index + 1}`,
       name: line,
     })),
+  };
+}
+
+function customItemsToActivities(items: unknown[]): ActivitiesSectionData {
+  return {
+    items: items.map((item, index) => {
+      const activity = item as Record<string, unknown>;
+      return {
+        id: toSafeText(activity.id) || `activity-${index + 1}`,
+        name: toSafeText(activity.name),
+        role: toSafeText(activity.role),
+        startDate: toSafeText(activity.startDate),
+        endDate: toSafeText(activity.endDate),
+        description: toSafeText(activity.description),
+      };
+    }),
   };
 }
 
@@ -146,24 +212,47 @@ function mapRegularSection(
 
   switch (section.type) {
     case "summary": {
+      const summaryData = section.data as {
+        text?: unknown;
+        title?: unknown;
+        icon?: unknown;
+        items?: unknown;
+      };
+
       return {
         ...base,
         type: "summary",
         title: defaultTitleForType("summary", section.title),
         data: {
-          text: toSafeText((section.data as { text?: unknown }).text),
+          text: toSafeText(summaryData.text),
+          title: toSafeText(summaryData.title),
+          icon: toSafeText(summaryData.icon),
+          items: Array.isArray(summaryData.items)
+            ? summaryData.items.map((item, index) => ({
+                id: toSafeText((item as { id?: unknown }).id) || `ov-${index + 1}`,
+                content: toSafeText((item as { content?: unknown }).content),
+              }))
+            : undefined,
         },
       };
     }
 
     case "experience_list": {
+      const experienceData = section.data as {
+        title?: unknown;
+        icon?: unknown;
+        items?: unknown;
+      };
+
       return {
         ...base,
         type: "experience",
         title: defaultTitleForType("experience", section.title),
         data: {
-          items: Array.isArray((section.data as { items?: unknown }).items)
-            ? ((section.data as { items: unknown[] }).items as CVPreviewSection<"experience">["data"]["items"])
+          title: toSafeText(experienceData.title),
+          icon: toSafeText(experienceData.icon),
+          items: Array.isArray(experienceData.items)
+            ? (experienceData.items as CVPreviewSection<"experience">["data"]["items"])
             : [],
         },
       };
@@ -235,7 +324,11 @@ function mapRegularSection(
     }
 
     case "custom_text": {
-      const rawText = toSafeText((section.data as { text?: unknown }).text);
+      const customData = section.data as {
+        text?: unknown;
+        items?: unknown;
+      };
+      const rawText = toSafeText(customData.text);
       const inferredType = inferCustomSectionType(section.title);
 
       if (inferredType === "career_objective") {
@@ -263,7 +356,9 @@ function mapRegularSection(
           ...base,
           type: "activities",
           title: defaultTitleForType("activities", section.title),
-          data: customTextToActivities(rawText),
+          data: Array.isArray(customData.items)
+            ? customItemsToActivities(customData.items)
+            : customTextToActivities(rawText),
         };
       }
 
@@ -305,6 +400,23 @@ function mapRegularSection(
   }
 }
 
+function shouldRenderMappedSection(section: CVPreviewSection) {
+  if (section.type !== "custom") {
+    return true;
+  }
+
+  const data = section.data as CustomSectionData;
+  if (hasMeaningfulString(data.text)) {
+    return true;
+  }
+
+  if (Array.isArray(data.items)) {
+    return hasNonEmptyCustomItem(data.items);
+  }
+
+  return false;
+}
+
 export function mapBuilderSectionsToPreviewData(sections: CVSection[]): CVPreviewDocumentData {
   const headerSection = sections.find((section) => section.type === "header");
   const contactSection = sections.find((section) => section.type === "personal_info");
@@ -336,7 +448,16 @@ export function mapBuilderSectionsToPreviewData(sections: CVSection[]): CVPrevie
       return;
     }
 
-    documentData.sections.push(mapRegularSection(section, sectionOrder));
+    if (shouldHideEmptyCustomSection(section)) {
+      return;
+    }
+
+    const mappedSection = mapRegularSection(section, sectionOrder);
+    if (!shouldRenderMappedSection(mappedSection)) {
+      return;
+    }
+
+    documentData.sections.push(mappedSection);
     sectionOrder += 1;
   });
 

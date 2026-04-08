@@ -180,34 +180,123 @@ function normalizeStringList(value: unknown): string[] {
   return value.map((item) => String(item ?? "").trim()).filter(Boolean);
 }
 
-function normalizeRecommendationItem(value: unknown): RecommendedJobItem | null {
-  if (!value || typeof value !== "object") return null;
+function toSafeString(value: unknown, fallback = "") {
+  if (typeof value === "string") {
+    return value;
+  }
 
-  const item = value as Partial<RecommendedJobItem>;
-  const fitLevel =
-    item.fitLevel === "High" || item.fitLevel === "Medium" || item.fitLevel === "Low"
-      ? item.fitLevel
-      : null;
+  if (value == null) {
+    return fallback;
+  }
 
-  if (
-    !item.jobId ||
-    typeof item.jobId !== "string" ||
-    !fitLevel ||
-    !item.job ||
-    typeof item.job !== "object" ||
-    typeof item.job.id !== "string"
-  ) {
+  return String(value);
+}
+
+function toSafeOptionalString(value: unknown): string | null {
+  const normalized = toSafeString(value, "").trim();
+  return normalized ? normalized : null;
+}
+
+function normalizeMatchScore(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function normalizeFitLevel(value: unknown, score: number): "High" | "Medium" | "Low" {
+  const normalized = toSafeString(value).trim().toLowerCase();
+  if (normalized === "high") return "High";
+  if (normalized === "medium") return "Medium";
+  if (normalized === "low") return "Low";
+
+  if (score >= 80) return "High";
+  if (score >= 60) return "Medium";
+  return "Low";
+}
+
+function normalizeJobLike(value: unknown, fallbackJobId: string): Job | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const job = value as Partial<Job>;
+  const id = toSafeString(job.id, fallbackJobId).trim();
+  if (!id) {
     return null;
   }
 
   return {
-    jobId: item.jobId,
-    matchScore: Number.isFinite(item.matchScore) ? Number(item.matchScore) : 0,
+    id,
+    title: toSafeString(job.title, "Cơ hội việc làm"),
+    company_name: toSafeString(job.company_name, "Doanh nghiệp"),
+    logo_url: toSafeString(job.logo_url),
+    cover_url: toSafeString(job.cover_url),
+    salary: toSafeString(job.salary, "Thỏa thuận"),
+    location: toSafeString(job.location, "Toàn quốc"),
+    posted_date: toSafeString(job.posted_date),
+    source_url: toSafeString(job.source_url),
+    description: normalizeStringList(job.description),
+    requirements: normalizeStringList(job.requirements),
+    benefits: normalizeStringList(job.benefits),
+    industry: normalizeStringList(job.industry),
+    experience_level: toSafeOptionalString(job.experience_level),
+    level: toSafeString(job.level),
+    employment_type: toSafeString(job.employment_type),
+    deadline: toSafeString(job.deadline),
+    education_level: toSafeString(job.education_level),
+    age_range: toSafeString(job.age_range),
+    full_address: toSafeString(job.full_address),
+    employer_id: toSafeOptionalString(job.employer_id),
+  };
+}
+
+function normalizeRecommendationItem(value: unknown): RecommendedJobItem | null {
+  if (!value || typeof value !== "object") return null;
+
+  const item = value as Partial<RecommendedJobItem> & Record<string, unknown>;
+  const jobId =
+    typeof item.jobId === "string"
+      ? item.jobId
+      : typeof item.job_id === "string"
+        ? item.job_id
+        : typeof item.job === "object" && item.job && typeof (item.job as { id?: unknown }).id === "string"
+          ? ((item.job as { id: string }).id)
+          : "";
+
+  if (!jobId) {
+    return null;
+  }
+
+  const matchScore = normalizeMatchScore(item.matchScore ?? item.score);
+  const fitLevel = normalizeFitLevel(item.fitLevel, matchScore);
+  const normalizedJob = normalizeJobLike(item.job, jobId);
+
+  const fallbackJob =
+    normalizedJob ||
+    normalizeJobLike(
+      {
+        id: jobId,
+        title: item.jobTitle,
+        company_name: item.companyName,
+      },
+      jobId,
+    );
+
+  if (!fallbackJob) {
+    return null;
+  }
+
+  return {
+    jobId,
+    matchScore,
     fitLevel,
     reasons: normalizeStringList(item.reasons),
     matchedSkills: normalizeStringList(item.matchedSkills),
     missingSkills: normalizeStringList(item.missingSkills),
-    job: item.job as Job,
+    job: fallbackJob,
   };
 }
 

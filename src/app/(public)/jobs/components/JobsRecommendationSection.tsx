@@ -1,303 +1,174 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
-import type { ResolvedRecommendedJobsData } from "../jobs-page.types";
+import { Sparkles } from "lucide-react";
+import type { JobCardMatchMeta, ResolvedRecommendedJobsData } from "../jobs-page.types";
+import { UnifiedJobCard } from "./UnifiedJobCard";
 
 interface JobsRecommendationSectionProps {
   status: "loading" | "ready" | "empty";
   data: ResolvedRecommendedJobsData | null;
   error: string | null;
-  isAnalyzing: boolean;
-  isAuthenticated: boolean;
-  onAnalyze: () => void;
   onBrowseAll: () => void;
 }
 
-function fitLevelLabel(level: "High" | "Medium" | "Low") {
-  switch (level) {
-    case "High":
-      return "Rất phù hợp";
-    case "Medium":
-      return "Phù hợp";
-    default:
-      return "Cần bổ sung thêm";
-  }
-}
-
-function scoreBadgeClasses(score: number) {
-  if (score >= 85) return "bg-emerald-500";
-  if (score >= 65) return "bg-amber-500";
-  return "bg-slate-500";
-}
-
-function RecommendationSkeletonCard() {
+function RecommendationCardSkeleton() {
   return (
-    <div className="animate-pulse rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <div className="mb-5 flex items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
+    <div className="animate-pulse rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm md:p-5">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.6fr)_auto] md:items-center">
+        <div className="flex items-center gap-3">
           <div className="size-14 rounded-2xl bg-slate-100" />
-          <div className="space-y-2">
-            <div className="h-5 w-40 rounded bg-slate-100" />
-            <div className="h-4 w-24 rounded bg-slate-50" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-4 w-3/4 rounded bg-slate-100" />
+            <div className="h-3 w-2/3 rounded bg-slate-50" />
           </div>
         </div>
-        <div className="h-7 w-16 rounded-full bg-slate-100" />
-      </div>
-      <div className="mb-4 h-4 w-28 rounded bg-slate-100" />
-      <div className="space-y-3">
-        <div className="h-4 w-full rounded bg-slate-50" />
-        <div className="h-4 w-5/6 rounded bg-slate-50" />
-      </div>
-      <div className="mt-6 flex gap-2">
-        <div className="h-7 w-24 rounded-full bg-slate-100" />
-        <div className="h-7 w-20 rounded-full bg-slate-100" />
+
+        <div className="space-y-2">
+          <div className="h-6 w-28 rounded-xl bg-slate-100" />
+          <div className="h-6 w-full rounded-xl bg-slate-50" />
+        </div>
+
+        <div className="space-y-2 md:text-right">
+          <div className="h-7 w-24 rounded bg-slate-100 md:ml-auto" />
+          <div className="h-6 w-28 rounded-full bg-slate-50 md:ml-auto" />
+          <div className="h-10 w-44 rounded-xl bg-slate-100 md:ml-auto" />
+        </div>
       </div>
     </div>
   );
 }
 
-function RecommendationCard({
-  item,
-}: {
-  item: ResolvedRecommendedJobsData["items"][number];
-}) {
-  const hasLogo =
-    item.job.logo_url &&
-    item.job.logo_url !== "https://via.placeholder.com/150" &&
-    !item.job.logo_url.includes("placeholder");
-  const initial = item.job.company_name?.charAt(0) ?? "?";
-  const summaryTag = item.reasons[0] || fitLevelLabel(item.fitLevel);
-
-  return (
-    <Link
-      href={`/jobs/${item.job.id}`}
-      className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl hover:shadow-blue-900/5"
-    >
-      <div
-        className={`absolute right-0 top-0 rounded-bl-2xl px-3 py-1 text-[11px] font-black uppercase tracking-[0.2em] text-white ${scoreBadgeClasses(
-          item.matchScore,
-        )}`}
-      >
-        {item.matchScore}% Match
-      </div>
-
-      <div className="mb-5 flex items-start gap-4">
-        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-slate-100">
-          {hasLogo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={item.job.logo_url}
-              alt={item.job.company_name}
-              className="size-11 object-contain"
-            />
-          ) : (
-            <span className="text-lg font-black text-primary">{initial}</span>
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="line-clamp-2 text-lg font-black text-slate-900 transition group-hover:text-primary">
-            {item.job.title}
-          </h3>
-          <p className="mt-1 line-clamp-1 text-sm font-semibold text-slate-500">
-            {item.job.company_name}
-          </p>
-        </div>
-      </div>
-
-      <div className="space-y-3 text-sm text-slate-600">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-lg text-primary">
-            payments
-          </span>
-          <span className="font-bold">{item.job.salary || "Thỏa thuận"}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-lg text-primary">
-            location_on
-          </span>
-          <span>{item.job.location || "Toàn quốc"}</span>
-        </div>
-      </div>
-
-      <div className="mt-6 flex items-center justify-between gap-4 border-t border-slate-100 pt-4">
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-primary">
-          {summaryTag}
-        </span>
-        <span className="text-sm font-black text-primary transition group-hover:translate-x-1">
-          Ứng tuyển ngay
-        </span>
-      </div>
-    </Link>
-  );
+function toMatchMeta(item: ResolvedRecommendedJobsData["items"][number]): JobCardMatchMeta {
+  return {
+    matchScore: item.matchScore,
+    fitLevel: item.fitLevel,
+    badge: item.fitLevel === "High" ? "Top match" : "Recommended",
+    matchedSkills: item.matchedSkills,
+  };
 }
 
 export function JobsRecommendationSection({
   status,
   data,
   error,
-  isAnalyzing,
-  isAuthenticated,
-  onAnalyze,
   onBrowseAll,
 }: JobsRecommendationSectionProps) {
-  const visibleItems = data?.items.slice(0, 3) ?? [];
+  const [expanded, setExpanded] = React.useState(false);
+  const collapsedLimit = 4;
+  const visibleItems = React.useMemo(() => {
+    if (!data) {
+      return [];
+    }
+
+    return expanded ? data.items : data.items.slice(0, collapsedLimit);
+  }, [collapsedLimit, data, expanded]);
+
+  const totalRecommendations = data?.items.length ?? 0;
+  const canExpand = totalRecommendations > collapsedLimit;
+
   const sourceLabel =
     data?.source === "local"
       ? "Đang dùng gợi ý đã lưu gần nhất"
       : "Đồng bộ từ hồ sơ và cache hiện tại";
 
   return (
-    <section className="space-y-6">
+    <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm md:p-5">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-2xl font-black tracking-tight text-slate-900 md:text-3xl">
-            Việc làm đề xuất cho bạn
+          <p className="text-[11px] font-black uppercase tracking-[0.2em] text-primary">
+            AI recommendations
+          </p>
+          <h2 className="mt-1 text-xl font-black tracking-tight text-slate-900 md:text-2xl">
+            Gợi ý việc làm cho bạn
           </h2>
-          <p className="mt-2 text-sm font-medium text-slate-500 md:text-base">
-            Ưu tiên hiển thị các cơ hội phù hợp với hồ sơ, CV và dữ liệu gợi ý đã
-            lưu từ khu vực ứng viên.
+          <p className="mt-1 text-sm font-medium text-slate-500">
+            Gợi ý nhanh 4 cơ hội nổi bật dựa trên hồ sơ, hiển thị gọn để so sánh trong vài giây.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onBrowseAll}
-          className="inline-flex items-center gap-1 self-start text-sm font-black text-primary transition hover:gap-2"
-        >
-          Xem tất cả việc làm
-          <span className="material-symbols-outlined text-base">arrow_forward</span>
-        </button>
       </div>
 
       {status === "loading" && (
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          {[1, 2, 3].map((item) => (
-            <RecommendationSkeletonCard key={item} />
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {[1, 2, 3, 4].map((item) => (
+            <RecommendationCardSkeleton key={item} />
           ))}
         </div>
       )}
 
       {status === "ready" && data && (
-        <div className="space-y-5">
-          <div className="rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="space-y-2">
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-primary">
-                  {sourceLabel}
-                </p>
-                {data.candidateSummary ? (
-                  <p className="max-w-4xl text-sm font-medium leading-relaxed text-slate-600">
-                    {data.candidateSummary}
-                  </p>
-                ) : (
-                  <p className="text-sm font-medium text-slate-500">
-                    Các công việc bên dưới được ưu tiên từ nguồn gợi ý hiện có và
-                    không làm thay đổi danh sách tất cả việc làm.
-                  </p>
-                )}
-              </div>
-              {isAuthenticated && (
-                <button
-                  type="button"
-                  onClick={onAnalyze}
-                  disabled={isAnalyzing}
-                  className="inline-flex h-11 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 px-5 text-sm font-black text-primary transition hover:bg-blue-100 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {isAnalyzing ? "Đang làm mới..." : "Phân tích lại"}
-                </button>
-              )}
+        <div className="space-y-3">
+          <div className="rounded-xl border border-blue-100 bg-white px-4 py-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-black uppercase tracking-[0.22em] text-primary">
+                {sourceLabel}
+              </span>
+              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-primary">
+                {totalRecommendations} job liên quan
+              </span>
             </div>
 
-            {(data.suggestedRoles.length > 0 || data.suggestedCompanies.length > 0) && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {data.suggestedRoles.map((role) => (
-                  <span
-                    key={`role-${role}`}
-                    className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-primary"
-                  >
-                    {role}
-                  </span>
-                ))}
-                {data.suggestedCompanies.map((company) => (
-                  <span
-                    key={`company-${company}`}
-                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"
-                  >
-                    {company}
-                  </span>
-                ))}
-              </div>
-            )}
+            {data.candidateSummary ? (
+              <p className="mt-2 line-clamp-1 text-sm font-medium text-slate-600">{data.candidateSummary}</p>
+            ) : null}
           </div>
 
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {visibleItems.map((item) => (
-              <RecommendationCard key={`${item.jobId}-${item.matchScore}`} item={item} />
+              <UnifiedJobCard
+                key={`${item.jobId}-${item.matchScore}`}
+                job={item.job}
+                matchMeta={toMatchMeta(item)}
+                variant="compact"
+              />
             ))}
           </div>
+
+          {canExpand && !expanded ? (
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 transition hover:border-primary/30 hover:text-primary"
+              >
+                Xem thêm
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
       {status === "empty" && (
-        <div className="rounded-[32px] border border-dashed border-blue-200 bg-white px-6 py-10 text-center shadow-sm md:px-10">
-          <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-blue-50 text-primary">
-            <span className="material-symbols-outlined text-3xl">auto_awesome</span>
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-6 shadow-sm">
+          <div className="mb-2 flex items-center gap-2 text-primary">
+            <Sparkles className="size-4.5" aria-hidden="true" />
+            <span className="text-xs font-black uppercase tracking-[0.18em]">AI recommendations</span>
           </div>
-          <h3 className="text-xl font-black text-slate-900">
-            Chưa có gợi ý đủ tốt để hiển thị
+          <h3 className="text-base font-black text-slate-900">
+            Chưa có gợi ý AI khả dụng, bạn vẫn duyệt toàn bộ việc làm bình thường bên dưới.
           </h3>
-          <p className="mx-auto mt-3 max-w-3xl text-sm font-medium leading-relaxed text-slate-500">
-            Hệ thống chưa tìm thấy recommendation usable từ hồ sơ hoặc cache hiện
-            tại. Bạn vẫn có thể tiếp tục xem toàn bộ việc làm ngay bên dưới, hoặc
-            cập nhật hồ sơ để nhận gợi ý sát hơn.
-          </p>
 
           {error && (
-            <div className="mx-auto mt-4 max-w-2xl rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+            <div className="mt-3 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
               {error}
             </div>
           )}
 
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            {isAuthenticated ? (
-              <>
-                <button
-                  type="button"
-                  onClick={onAnalyze}
-                  disabled={isAnalyzing}
-                  className="inline-flex h-12 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-black text-white transition hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {isAnalyzing ? "Đang phân tích..." : "Phân tích từ hồ sơ"}
-                </button>
-                <Link
-                  href="/candidate/profile"
-                  className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 px-6 text-sm font-black text-slate-700 transition hover:border-primary/30 hover:text-primary"
-                >
-                  Cập nhật hồ sơ
-                </Link>
-                <Link
-                  href="/candidate/cv-builder"
-                  className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 px-6 text-sm font-black text-slate-700 transition hover:border-primary/30 hover:text-primary"
-                >
-                  Cập nhật CV
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link
-                  href="/login"
-                  className="inline-flex h-12 items-center justify-center rounded-2xl bg-primary px-6 text-sm font-black text-white transition hover:bg-blue-700"
-                >
-                  Đăng nhập để nhận gợi ý
-                </Link>
-                <button
-                  type="button"
-                  onClick={onBrowseAll}
-                  className="inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 px-6 text-sm font-black text-slate-700 transition hover:border-primary/30 hover:text-primary"
-                >
-                  Xem tất cả việc làm
-                </button>
-              </>
-            )}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={onBrowseAll}
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-xs font-black uppercase tracking-[0.12em] text-slate-700 transition hover:border-primary/30 hover:text-primary"
+            >
+              Xem tất cả việc làm
+            </button>
+            <Link
+              href="/candidate/profile"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-xs font-black uppercase tracking-[0.12em] text-slate-700 transition hover:border-primary/30 hover:text-primary"
+            >
+              Cập nhật hồ sơ
+            </Link>
           </div>
         </div>
       )}
