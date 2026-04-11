@@ -6,19 +6,26 @@ import type { CVTemplateConfig } from "./schema-driven-preview/types";
 
 interface CVPaperProps {
   template: CVTemplateConfig;
+  fontFamilyClassName?: string;
+  bodyTextClassName?: string;
   children: ReactNode;
 }
 
-export function CVPaper({ template, children }: CVPaperProps) {
+export function CVPaper({ template, fontFamilyClassName, bodyTextClassName, children }: CVPaperProps) {
   const isTealTimeline = template.id === "teal-timeline";
 
   if (isTealTimeline) {
     return (
       <div
         className={cn(
-          "mx-auto h-280.5 w-full max-w-198.5 overflow-hidden bg-white px-4 py-3 sm:px-6 sm:py-4 print:h-[297mm] print:w-[210mm] print:max-w-none print:bg-white print:px-0 print:py-0",
+          "mx-auto h-280.5 w-full max-w-198.5 overflow-hidden bg-white print:h-[297mm] print:w-[210mm] print:max-w-none print:border-0 print:bg-white print:px-0 print:py-0 print:shadow-none",
+          template.pageSettings.paperFrameClassName,
+          template.pageSettings.paperPatternClassName,
+          template.pageSettings.paperPaddingClassName,
           template.typographySettings.bodyFontClassName,
           template.typographySettings.bodyTextClassName,
+          fontFamilyClassName,
+          bodyTextClassName,
           template.colorPalette.pageTextClassName,
         )}
       >
@@ -42,6 +49,8 @@ export function CVPaper({ template, children }: CVPaperProps) {
           template.pageSettings.paperPaddingClassName,
           template.typographySettings.bodyFontClassName,
           template.typographySettings.bodyTextClassName,
+          fontFamilyClassName,
+          bodyTextClassName,
           template.colorPalette.pageTextClassName,
         )}
       >

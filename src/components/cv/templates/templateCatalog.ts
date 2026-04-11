@@ -423,6 +423,147 @@ function buildTealTimelinePageOneSections(): TemplateSectionDraft[] {
         ],
       },
     },
+    {
+      type: "skill_list",
+      title: "Skills",
+      isVisible: true,
+      data: {
+        items: [
+          {
+            id: "skill-main-1",
+            name: "HTML, CSS, JavaScript (ReactJS, React-Native, Lib)",
+            group: "main",
+            level: 90,
+          },
+          {
+            id: "skill-main-2",
+            name: "PHP (Laravel, Symfony, CodeIgniter, Yii)",
+            group: "main",
+            level: 88,
+          },
+          {
+            id: "skill-main-3",
+            name: "Node (ExpressJS)",
+            group: "main",
+            level: 84,
+          },
+          {
+            id: "skill-main-4",
+            name: "RESTful API, GraphQL",
+            group: "main",
+            level: 82,
+          },
+          {
+            id: "skill-main-5",
+            name: "MySQL, PostgreSQL, NoSQL (MongoDB)",
+            group: "main",
+            level: 81,
+          },
+          {
+            id: "skill-main-6",
+            name: "Server (Apache, Nginx, Redis, Memcached, Queue, Log, Cronjob...), Rancher, K8S, Docker",
+            group: "main",
+            level: 79,
+          },
+          {
+            id: "skill-main-7",
+            name: "AWS (Load balancing, EC2, ECS, Router 53, RDS, S3)",
+            group: "main",
+            level: 78,
+          },
+          {
+            id: "skill-other-1",
+            name: "Ruby (Ruby on Rails)",
+            group: "other",
+            level: 74,
+          },
+          {
+            id: "skill-other-2",
+            name: "SVN, GIT",
+            group: "other",
+            level: 76,
+          },
+          {
+            id: "skill-other-3",
+            name: "Python (selenium automation test, crawler)",
+            group: "other",
+            level: 73,
+          },
+          {
+            id: "skill-other-4",
+            name: "Elasticsearch",
+            group: "other",
+            level: 70,
+          },
+          {
+            id: "skill-other-5",
+            name: "Tensorflow",
+            group: "other",
+            level: 69,
+          },
+        ],
+      },
+    },
+    {
+      type: "award_list",
+      title: "Awards",
+      isVisible: true,
+      data: {
+        items: [
+          {
+            id: "award-0",
+            title: '1st place in 2 "North - South - Central POLY & FE Creabtion" contests',
+            date: "",
+            issuer: "",
+            description: "",
+          },
+          {
+            id: "award-1",
+            title: "Poly Creative Competition 2016",
+            date: "06/2016",
+            issuer: "",
+            description: "Poly creation contest: https://goo.gl/BVP5kE",
+          },
+          {
+            id: "award-2",
+            title: "FE Creative Competition 2016",
+            date: "08/2016",
+            issuer: "",
+            description: "FE creation contest: https://goo.gl/86ULiw",
+          },
+          {
+            id: "award-3",
+            title: "AI&T JSC Employee Award",
+            date: "02/2016",
+            issuer: "",
+            description: "",
+          },
+        ],
+      },
+    },
+    {
+      type: "project_list",
+      title: "Projects",
+      isVisible: true,
+      data: {
+        items: [
+          {
+            id: "project-f8-1",
+            name: "FULLSTACK.EDU.VN",
+            role: "Product Owner, BA, Developer, Tester, Video Editor",
+            startDate: "01/2019",
+            endDate: "Present",
+            customer: "F8 TECHNOLOGY EDUCATION.,JSC",
+            teamSize: 6,
+            description: "Learn programming online (https://f8.edu.vn)",
+            responsibilities:
+              "- Developer\n- Solution architect\n- Frontend: ReactJS\n- Backend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, Mongodb, MariaDB, Redis, Docker, AWS EC2, AWS S3\n- Architecture: Microservice - Event driven (deploy with K8S), Websocket, SSO",
+            technologies:
+              "- Frontend: ReactJS\n- Backend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, MongoDB, MariaDB\n- Infra: Redis, Docker, AWS EC2, AWS S3, K8S",
+          },
+        ],
+      },
+    },
   ];
 }
 

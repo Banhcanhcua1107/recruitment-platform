@@ -355,19 +355,19 @@ const ELEGANT_SIDEBAR_RENDER_CONFIG: CVTemplateConfig = {
 const TEAL_TIMELINE_RENDER_CONFIG: CVTemplateConfig = {
   id: "teal-timeline",
   name: "Teal Timeline",
-  description: "Mẫu CV trang 1 gọn gàng, thẳng hàng và ưu tiên đọc nhanh với tông teal nhẹ.",
+  description: "Mẫu CV nhiều trang phong cách F8 với nhịp đọc rõ ràng, section tiêu đề xanh và khối bảng dự án.",
   pageSettings: {
     pageSize: "A4",
     outerFrameClassName: "",
-    paperFrameClassName: "border-0 bg-white rounded-none shadow-none",
-    paperPaddingClassName: "px-3 py-2 sm:px-4 sm:py-3",
+    paperFrameClassName: "rounded-none border border-slate-300 bg-[#f7f8f7] shadow-[0_22px_45px_-30px_rgba(15,23,42,0.42)]",
+    paperPaddingClassName: "px-5 py-4 sm:px-6 sm:py-5",
     paperMinHeightClassName: "min-h-[1160px]",
-    paperPatternClassName: "",
+    paperPatternClassName: "cv-f8-page-pattern",
   },
   typographySettings: {
     headingFontClassName: "font-semibold",
     bodyFontClassName: "font-sans",
-    bodyTextClassName: "text-[12px] leading-[1.45]",
+    bodyTextClassName: "text-[12.5px] leading-[1.52]",
   },
   colorPalette: {
     pageTextClassName: "text-slate-900",
@@ -376,7 +376,7 @@ const TEAL_TIMELINE_RENDER_CONFIG: CVTemplateConfig = {
     hiddenSectionBorderClassName: "border-slate-300",
   },
   spacingRules: {
-    sectionGapClassName: "space-y-0.5",
+    sectionGapClassName: "space-y-1",
   },
   sectionStyleRules: createSectionStyles({
     accentTextClassName: "text-teal-700",
@@ -408,7 +408,19 @@ const TEAL_TIMELINE_RENDER_CONFIG: CVTemplateConfig = {
     infoLabelTextClassName: "text-slate-900",
     infoValueTextClassName: "text-slate-800",
   },
-  sectionOrder: ["summary", "activities", "experience"],
+  sectionOrder: [
+    "summary",
+    "activities",
+    "experience",
+    "skills",
+    "awards",
+    "projects",
+    "education",
+    "languages",
+    "certificates",
+    "career_objective",
+    "custom",
+  ],
 };
 
 export const DEFAULT_CV_TEMPLATE_ID = "professional-green";

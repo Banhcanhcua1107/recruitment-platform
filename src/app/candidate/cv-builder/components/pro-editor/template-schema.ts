@@ -527,11 +527,13 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
     presetTitle: "Kiến thức & Kỹ năng",
     presetData: {
       items: [
-        { id: "skill-default-modal-1", name: "Frontend: HTML, CSS, JavaScript, ReactJS, React Native, DOM manipulation", level: 90 },
-        { id: "skill-default-modal-2", name: "Backend: PHP, RESTful APIs, GraphQL, JSON API integration", level: 88 },
-        { id: "skill-default-modal-3", name: "Database: MySQL, NoSQL, Redis", level: 82 },
-        { id: "skill-default-modal-4", name: "DevOps: Docker, Kubernetes, Rancher, AWS services", level: 80 },
-        { id: "skill-default-modal-5", name: "Tools: Git, SVN", level: 78 },
+        { id: "skill-default-modal-1", name: "HTML, CSS, JavaScript (ReactJS, React-Native, Lib)", level: 90, group: "main" },
+        { id: "skill-default-modal-2", name: "PHP (Laravel, Symfony, CodeIgniter, Yii)", level: 88, group: "main" },
+        { id: "skill-default-modal-3", name: "Node (ExpressJS)", level: 84, group: "main" },
+        { id: "skill-default-modal-4", name: "RESTful API, GraphQL", level: 82, group: "main" },
+        { id: "skill-default-modal-5", name: "MySQL, PostgreSQL, NoSQL (MongoDB)", level: 81, group: "main" },
+        { id: "skill-default-modal-6", name: "SVN, GIT", level: 76, group: "other" },
+        { id: "skill-default-modal-7", name: "Python (selenium automation test, crawler)", level: 73, group: "other" },
       ],
     },
   },
@@ -559,47 +561,17 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
       items: [
         {
           id: "project-default-modal-1",
-          name: "MYCV.VN",
-          role: "Developer",
-          startDate: "06/2018",
+          name: "FULLSTACK.EDU.VN",
+          role: "Product Owner, BA, Developer, Tester, Video Editor",
+          startDate: "01/2019",
           endDate: "Present",
-          description: "Standard CV writing application with free PDF download support. Responsibilities: Developer, Solution architect.",
-          technologies: "ReactJS, PHP (Laravel, Lumen), NodeJS, Apache Kafka, WebSocket, MongoDB, MariaDB, Redis, Docker, AWS EC2, AWS S3, Microservice architecture, Event-driven architecture, SSO, K8S",
-          customer: "MyCV JSC",
-          teamSize: 1,
-        },
-        {
-          id: "project-default-modal-2",
-          name: "BOTAYRA.FULLSTACK.EDU.VN",
-          role: "Developer",
-          startDate: "05/2020",
-          endDate: "06/2020",
-          description: "A machine learning based application that helps users avoid touching their face using webcam tracking. Responsibilities: Developer.",
-          technologies: "ReactJS, TensorFlow",
-          customer: "MyCV JSC",
-          teamSize: 1,
-        },
-        {
-          id: "project-default-modal-3",
-          name: "FOODHUB.VN",
-          role: "Fullstack Developer",
-          startDate: "10/2017",
-          endDate: "01/2018",
-          description: "Application for connecting organic food store chains. Responsibilities: Built frontend, Built backend.",
-          technologies: "React Native, PHP, CodeIgniter, MariaDB, Memcached",
-          customer: "O'Green Food",
-          teamSize: 2,
-        },
-        {
-          id: "project-default-modal-4",
-          name: "SIEU-DAO-CHICH GAME",
-          role: "Developer",
-          startDate: "09/2016",
-          endDate: "12/2016",
-          description: "Remote control online game via computer using IoT. Responsibilities: Built frontend, Built backend, Built hardware integration.",
-          technologies: "HTML, CSS, jQuery, PHP, Symfony, MariaDB, Memcached, Raspberry Pi 2, IP Camera, Sensors",
-          customer: "Personal project",
-          teamSize: 1,
+          description: "Learn programming online (https://f8.edu.vn)",
+          responsibilities:
+            "- Developer\n- Solution architect\n- Frontend: ReactJS\n- Backend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, Mongodb, MariaDB, Redis, Docker, AWS EC2, AWS S3\n- Architecture: Microservice - Event driven (deploy with K8S), Websocket, SSO",
+          technologies:
+            "- Frontend: ReactJS\n- Backend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, MongoDB, MariaDB\n- Infra: Redis, Docker, AWS EC2, AWS S3, K8S",
+          customer: "F8 TECHNOLOGY EDUCATION.,JSC",
+          teamSize: 6,
         },
       ],
     },
@@ -635,11 +607,32 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
     presetData: {
       items: [
         {
+          id: "award-default-modal-0",
+          title: '1st place in 2 "North - South - Central POLY & FE Creabtion" contests',
+          date: "",
+          issuer: "",
+          description: "",
+        },
+        {
           id: "award-default-modal-1",
-          title: "Top Engineering Impact Q3",
-          date: "2024",
-          issuer: "MyCV JSC",
-          description: "Được vinh danh cho đóng góp tối ưu CV Builder với tác động trực tiếp đến conversion.",
+          title: "Poly Creative Competition 2016",
+          date: "06/2016",
+          issuer: "",
+          description: "Poly creation contest: https://goo.gl/BVP5kE",
+        },
+        {
+          id: "award-default-modal-2",
+          title: "FE Creative Competition 2016",
+          date: "08/2016",
+          issuer: "",
+          description: "FE creation contest: https://goo.gl/86ULiw",
+        },
+        {
+          id: "award-default-modal-3",
+          title: "AI&T JSC Employee Award",
+          date: "02/2016",
+          issuer: "",
+          description: "",
         },
       ],
     },
@@ -671,7 +664,31 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
 ];
 
 function normalizeTitle(value?: string) {
-  return (value || "").trim().toLowerCase();
+  return (value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+type CustomCatalogIdentity = "objective" | "language" | "activity" | "custom";
+
+function inferCustomCatalogIdentity(title?: string): CustomCatalogIdentity {
+  const normalized = normalizeTitle(title);
+
+  if (normalized.includes("muc tieu") || normalized.includes("objective")) {
+    return "objective";
+  }
+
+  if (normalized.includes("ngon ngu") || normalized.includes("language")) {
+    return "language";
+  }
+
+  if (normalized.includes("hoat dong") || normalized.includes("activity")) {
+    return "activity";
+  }
+
+  return "custom";
 }
 
 export function getModalSectionCatalog(currentSections: CVSection[]): ModalSectionCatalogState[] {
@@ -681,7 +698,21 @@ export function getModalSectionCatalog(currentSections: CVSection[]): ModalSecti
         return false;
       }
 
-      if (catalogItem.type !== "custom_text" || !catalogItem.presetTitle) {
+      if (catalogItem.type !== "custom_text") {
+        return true;
+      }
+
+      const customIdentity = inferCustomCatalogIdentity(section.title);
+
+      if (catalogItem.id === "custom") {
+        return customIdentity === "custom";
+      }
+
+      if (catalogItem.id === "objective" || catalogItem.id === "language" || catalogItem.id === "activity") {
+        return customIdentity === catalogItem.id;
+      }
+
+      if (!catalogItem.presetTitle) {
         return true;
       }
 

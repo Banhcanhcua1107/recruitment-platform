@@ -94,7 +94,7 @@ export function CVHeader({
     : "grid grid-cols-1 gap-4";
 
   const nameTextClassName = isTealTimeline
-    ? "text-[52px] font-semibold leading-[0.98] tracking-[-0.02em]"
+    ? "text-[52px] font-semibold leading-[1.04] tracking-[-0.02em]"
     : isCompact
       ? "text-[34px] font-semibold leading-[1.1] tracking-[-0.02em]"
       : isModernBand
@@ -102,7 +102,7 @@ export function CVHeader({
         : "text-[40px] font-semibold leading-[1.08] tracking-[-0.02em]";
 
   const roleTextClassName = isTealTimeline
-    ? "mt-0.5 text-[16px] leading-[1.2]"
+    ? "mt-2 text-[16px] leading-[1.35]"
     : isCompact
       ? "mt-1 text-[20px] leading-[1.2]"
       : "mt-1.5 text-[22px] leading-[1.2]";
@@ -130,6 +130,7 @@ export function CVHeader({
   return (
     <div
       role="button"
+      data-cv-editor-selectable="true"
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(event) => {

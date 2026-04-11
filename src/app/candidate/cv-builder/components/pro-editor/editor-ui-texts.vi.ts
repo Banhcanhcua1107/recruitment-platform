@@ -7,7 +7,7 @@ export const EDITOR_UI_TEXTS = {
     redo: "Làm lại",
     addSection: "Thêm mục",
     importCv: "Nhập CV",
-    exportPdf: "Xuất PDF",
+    exportPdf: "Xuất JSON",
     saveCv: "Lưu CV",
   },
   saveState: {

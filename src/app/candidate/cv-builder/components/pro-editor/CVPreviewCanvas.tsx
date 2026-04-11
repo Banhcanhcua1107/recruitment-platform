@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";
 import type { CVSection } from "../../types";
 import { CVHeader } from "./CVHeader";
@@ -8,14 +8,16 @@ import { CVPaper } from "./CVPaper";
 import { CVSectionRenderer } from "./CVSectionRenderer";
 import { mapBuilderSectionsToPreviewData, orderPreviewSections } from "./schema-driven-preview/adapters";
 import { resolveSectionStyleConfig } from "./schema-driven-preview/section-renderers";
+import type { SectionRenderMode } from "./schema-driven-preview/SectionRenderer";
 import type { CVPreviewSection } from "./schema-driven-preview/types";
 import { getTemplateConfig } from "@/app/candidate/cv-builder/components/pro-editor/schema-driven-preview/template-config";
+import { useCVStore } from "../../store";
 
 const A4_HEIGHT_PX = 1122;
 const PAGE_FOOTER_RESERVE_PX = 44;
 const HEADER_SECTION_GAP_PX = 20;
 const SINGLE_PAGE_ZOOM_DEFAULT_CLASS = "[zoom:1]";
-const MIN_READABLE_SINGLE_PAGE_ZOOM = 0.9;
+const MIN_READABLE_SINGLE_PAGE_ZOOM = 0.96;
 
 function resolveSinglePageZoomClass(zoomValue: number) {
   if (zoomValue >= 0.985) {
@@ -37,10 +39,69 @@ function resolveSinglePageZoomClass(zoomValue: number) {
   return "[zoom:0.9]";
 }
 
+function resolvePreviewFontFamilyClass(fontName: string) {
+  const normalized = fontName.trim().toLowerCase();
+
+  if (normalized.includes("times")) {
+    return "cv-preview-font-times";
+  }
+
+  if (normalized.includes("courier")) {
+    return "cv-preview-font-courier";
+  }
+
+  if (normalized.includes("amiri")) {
+    return "cv-preview-font-amiri";
+  }
+
+  if (normalized.includes("cairo")) {
+    return "cv-preview-font-cairo";
+  }
+
+  if (normalized.includes("ubuntu")) {
+    return "cv-preview-font-ubuntu";
+  }
+
+  if (normalized.includes("roboto")) {
+    return "cv-preview-font-roboto";
+  }
+
+  if (normalized.includes("inter")) {
+    return "cv-preview-font-inter";
+  }
+
+  if (normalized.includes("manrope")) {
+    return "cv-preview-font-manrope";
+  }
+
+  return "cv-preview-font-arial";
+}
+
+function resolvePreviewTextSizeClass(spacingValue: number) {
+  if (!Number.isFinite(spacingValue)) {
+    return "cv-preview-text-medium";
+  }
+
+  if (spacingValue <= 3.85) {
+    return "cv-preview-text-small";
+  }
+
+  if (spacingValue >= 4.2) {
+    return "cv-preview-text-large";
+  }
+
+  return "cv-preview-text-medium";
+}
+
 interface RenderSectionBlock {
   id: string;
   section: CVPreviewSection;
   height: number;
+  splitMeta?: {
+    sectionBaseHeight: number;
+    itemGap: number;
+    itemHeights: number[];
+  };
 }
 
 interface PreviewPage {
@@ -77,12 +138,17 @@ function getSectionItems(section: CVPreviewSection): unknown[] | null {
   return Array.isArray(maybeItems) ? maybeItems : null;
 }
 
-function cloneSectionWithItems(section: CVPreviewSection, items: unknown[], chunkIndex: number): CVPreviewSection {
+function cloneSectionWithItems(
+  section: CVPreviewSection,
+  items: unknown[],
+  chunkIndex: number,
+  customId?: string,
+): CVPreviewSection {
   const sectionData = section.data as unknown as Record<string, unknown>;
 
   return {
     ...section,
-    id: `${section.id}__chunk_${chunkIndex + 1}`,
+    id: customId ?? `${section.id}__chunk_${chunkIndex + 1}`,
     data: {
       ...sectionData,
       items,
@@ -91,12 +157,7 @@ function cloneSectionWithItems(section: CVPreviewSection, items: unknown[], chun
 }
 
 function findListRootForItems(contentElement: HTMLElement, expectedItemCount: number) {
-  const firstChild = contentElement.firstElementChild;
-  if (!(firstChild instanceof HTMLElement)) {
-    return null;
-  }
-
-  const queue: HTMLElement[] = [firstChild];
+  const queue: HTMLElement[] = [contentElement];
   const visited = new Set<HTMLElement>();
 
   while (queue.length > 0) {
@@ -123,6 +184,178 @@ function findListRootForItems(contentElement: HTMLElement, expectedItemCount: nu
   }
 
   return null;
+}
+
+function calculateChunkHeight(itemHeights: number[], sectionBaseHeight: number, itemGap: number) {
+  const itemsHeight = itemHeights.reduce((total, height) => total + height, 0);
+  const gapsHeight = itemHeights.length > 1 ? itemGap * (itemHeights.length - 1) : 0;
+
+  return sectionBaseHeight + itemsHeight + gapsHeight;
+}
+
+function createItemChunkBlock(input: {
+  sourceSection: CVPreviewSection;
+  items: unknown[];
+  itemHeights: number[];
+  sectionBaseHeight: number;
+  itemGap: number;
+  blockId: string;
+}): RenderSectionBlock {
+  const { sourceSection, items, itemHeights, sectionBaseHeight, itemGap, blockId } = input;
+
+  return {
+    id: blockId,
+    section: cloneSectionWithItems(sourceSection, items, 0, blockId),
+    height: calculateChunkHeight(itemHeights, sectionBaseHeight, itemGap),
+    splitMeta: {
+      sectionBaseHeight,
+      itemGap,
+      itemHeights: [...itemHeights],
+    },
+  };
+}
+
+function createItemChunkBlocks(input: {
+  sourceSection: CVPreviewSection;
+  items: unknown[];
+  itemHeights: number[];
+  sectionBaseHeight: number;
+  itemGap: number;
+  maxChunkHeight: number;
+  idPrefix: string;
+}): RenderSectionBlock[] {
+  const {
+    sourceSection,
+    items,
+    itemHeights,
+    sectionBaseHeight,
+    itemGap,
+    maxChunkHeight,
+    idPrefix,
+  } = input;
+
+  const blocks: RenderSectionBlock[] = [];
+  let currentItems: unknown[] = [];
+  let currentItemHeights: number[] = [];
+
+  const pushChunk = () => {
+    if (currentItems.length === 0) {
+      return;
+    }
+
+    blocks.push(
+      createItemChunkBlock({
+        sourceSection,
+        items: currentItems,
+        itemHeights: currentItemHeights,
+        sectionBaseHeight,
+        itemGap,
+        blockId: `${idPrefix}__chunk_${blocks.length + 1}`,
+      }),
+    );
+
+    currentItems = [];
+    currentItemHeights = [];
+  };
+
+  items.forEach((item, itemIndex) => {
+    const nextItemHeight = itemHeights[itemIndex] ?? 1;
+    const projectedItemHeights = [...currentItemHeights, nextItemHeight];
+    const projectedHeight = calculateChunkHeight(projectedItemHeights, sectionBaseHeight, itemGap);
+
+    if (currentItems.length > 0 && projectedHeight > maxChunkHeight) {
+      pushChunk();
+    }
+
+    currentItems.push(item);
+    currentItemHeights.push(nextItemHeight);
+  });
+
+  pushChunk();
+
+  if (blocks.length > 0) {
+    return blocks;
+  }
+
+  return [
+    createItemChunkBlock({
+      sourceSection,
+      items,
+      itemHeights,
+      sectionBaseHeight,
+      itemGap,
+      blockId: `${idPrefix}__chunk_1`,
+    }),
+  ];
+}
+
+function splitBlockToFitRemaining(input: {
+  block: RenderSectionBlock;
+  availableHeight: number;
+  maxPageContentHeight: number;
+}): { headBlock: RenderSectionBlock; tailBlocks: RenderSectionBlock[] } | null {
+  const { block, availableHeight, maxPageContentHeight } = input;
+
+  if (!block.splitMeta || availableHeight <= 0) {
+    return null;
+  }
+
+  const blockItems = getSectionItems(block.section);
+  if (!blockItems || blockItems.length <= 1) {
+    return null;
+  }
+
+  const { itemHeights, itemGap, sectionBaseHeight } = block.splitMeta;
+  let fittingCount = 0;
+
+  for (let index = 0; index < blockItems.length - 1; index += 1) {
+    const projectedHeights = itemHeights.slice(0, index + 1);
+    const projectedHeight = calculateChunkHeight(projectedHeights, sectionBaseHeight, itemGap);
+
+    if (projectedHeight <= availableHeight) {
+      fittingCount = index + 1;
+      continue;
+    }
+
+    break;
+  }
+
+  if (fittingCount === 0) {
+    return null;
+  }
+
+  const headItems = blockItems.slice(0, fittingCount);
+  const headHeights = itemHeights.slice(0, fittingCount);
+  const tailItems = blockItems.slice(fittingCount);
+  const tailHeights = itemHeights.slice(fittingCount);
+
+  if (tailItems.length === 0) {
+    return null;
+  }
+
+  const headBlock = createItemChunkBlock({
+    sourceSection: block.section,
+    items: headItems,
+    itemHeights: headHeights,
+    sectionBaseHeight,
+    itemGap,
+    blockId: `${block.id}__split_head`,
+  });
+
+  const tailBlocks = createItemChunkBlocks({
+    sourceSection: block.section,
+    items: tailItems,
+    itemHeights: tailHeights,
+    sectionBaseHeight,
+    itemGap,
+    maxChunkHeight: maxPageContentHeight,
+    idPrefix: `${block.id}__split_tail`,
+  });
+
+  return {
+    headBlock,
+    tailBlocks,
+  };
 }
 
 function measureListItemLayout(sectionNode: HTMLDivElement | null, expectedItemCount: number) {
@@ -218,69 +451,28 @@ function buildSectionBlocks(input: {
   const itemGap = sectionItems.length > 1 ? listLayout.totalGap / (sectionItems.length - 1) : 0;
   const sectionBaseHeight = Math.max(0, sectionHeight - sumItemHeights - listLayout.totalGap);
 
-  const blocks: RenderSectionBlock[] = [];
-  let currentItems: unknown[] = [];
-  let currentItemHeights: number[] = [];
-
-  const pushChunk = () => {
-    if (currentItems.length === 0) {
-      return;
-    }
-
-    const chunkItemTotal = currentItemHeights.reduce((total, height) => total + height, 0);
-    const chunkGapTotal = currentItems.length > 1 ? itemGap * (currentItems.length - 1) : 0;
-    const chunkHeight = sectionBaseHeight + chunkItemTotal + chunkGapTotal;
-
-    blocks.push({
-      id: `${section.id}__chunk_${blocks.length + 1}`,
-      section: cloneSectionWithItems(section, currentItems, blocks.length),
-      height: chunkHeight,
-    });
-
-    currentItems = [];
-    currentItemHeights = [];
-  };
-
-  sectionItems.forEach((item, itemIndex) => {
-    const nextItemHeight = listLayout.itemHeights[itemIndex] ?? 1;
-
-    const currentItemsHeight = currentItemHeights.reduce((total, height) => total + height, 0);
-    const currentGaps = currentItems.length > 0 ? itemGap * (currentItems.length - 1) : 0;
-    const projectedGap = currentItems.length > 0 ? itemGap : 0;
-
-    const projectedHeight =
-      sectionBaseHeight + currentItemsHeight + currentGaps + projectedGap + nextItemHeight;
-
-    if (currentItems.length > 0 && projectedHeight > maxPageContentHeight) {
-      pushChunk();
-    }
-
-    currentItems.push(item);
-    currentItemHeights.push(nextItemHeight);
+  return createItemChunkBlocks({
+    sourceSection: section,
+    items: sectionItems,
+    itemHeights: listLayout.itemHeights,
+    sectionBaseHeight,
+    itemGap,
+    maxChunkHeight: maxPageContentHeight,
+    idPrefix: section.id,
   });
-
-  pushChunk();
-
-  if (blocks.length === 0) {
-    return [
-      {
-        id: section.id,
-        section,
-        height: sectionHeight,
-      },
-    ];
-  }
-
-  return blocks;
 }
 
 interface CVPreviewCanvasProps {
   sections: CVSection[];
   selectedSectionId: string | null;
-  onSelectSection: (id: string) => void;
+  onSelectSection: (id: string | null) => void;
   onUpdateSectionData: (sectionId: string, updates: Record<string, unknown>) => void;
   onRequestAddSection?: (sectionId: string, position: "above" | "below") => void;
+  onRemoveSection?: (sectionId: string) => void;
+  onMoveSectionUp?: (sectionId: string) => void;
+  onMoveSectionDown?: (sectionId: string) => void;
   templateId?: string;
+  mode?: SectionRenderMode;
 }
 
 export function CVPreviewCanvas({
@@ -289,10 +481,30 @@ export function CVPreviewCanvas({
   onSelectSection,
   onUpdateSectionData,
   onRequestAddSection,
+  onRemoveSection,
+  onMoveSectionUp,
+  onMoveSectionDown,
   templateId,
+  mode = "edit",
 }: CVPreviewCanvasProps) {
+  const themeBodyFont = useCVStore((state) => state.cv.theme.fonts.body);
+  const themeSpacing = useCVStore((state) => state.cv.theme.spacing);
   const template = useMemo(() => getTemplateConfig(templateId), [templateId]);
-  const forceSinglePage = template.id === "teal-timeline";
+  const visibleContentSectionCount = useMemo(
+    () => sections.filter((section) => section.isVisible && section.type !== "header" && section.type !== "personal_info").length,
+    [sections],
+  );
+  const forceSinglePage = template.id === "teal-timeline" && visibleContentSectionCount <= 3;
+  const headerSectionGapPx = template.id === "teal-timeline" ? 10 : HEADER_SECTION_GAP_PX;
+  const headerSectionGapClassName = template.id === "teal-timeline" ? "mt-2.5" : "mt-5";
+  const previewFontFamilyClassName = useMemo(
+    () => resolvePreviewFontFamilyClass(String(themeBodyFont || "Arial")),
+    [themeBodyFont],
+  );
+  const previewBodyTextClassName = useMemo(
+    () => resolvePreviewTextSizeClass(Number(themeSpacing)),
+    [themeSpacing],
+  );
   const previewData = useMemo(() => mapBuilderSectionsToPreviewData(sections), [sections]);
   const orderedSections = useMemo(
     () => orderPreviewSections(previewData.sections, template.sectionOrder),
@@ -353,7 +565,7 @@ export function CVPreviewCanvas({
       const borderTop = Number.parseFloat(paperStyles.borderTopWidth || "0") || 0;
       const borderBottom = Number.parseFloat(paperStyles.borderBottomWidth || "0") || 0;
 
-      const footerReservePx = forceSinglePage ? 8 : PAGE_FOOTER_RESERVE_PX;
+      const footerReservePx = forceSinglePage ? 34 : PAGE_FOOTER_RESERVE_PX;
       const maxPageContentHeight = Math.max(
         280,
         A4_HEIGHT_PX - paddingTop - paddingBottom - borderTop - borderBottom - footerReservePx,
@@ -389,7 +601,7 @@ export function CVPreviewCanvas({
           (total, block, blockIndex) => total + block.height + (blockIndex > 0 ? sectionGap : 0),
           0,
         );
-        const totalContentHeight = totalBlocksHeight + (hasHeader ? headerHeight + HEADER_SECTION_GAP_PX : 0);
+        const totalContentHeight = totalBlocksHeight + (hasHeader ? headerHeight + headerSectionGapPx : 0);
 
         const nextZoom = totalContentHeight > maxPageContentHeight
           ? Math.max(0.72, maxPageContentHeight / totalContentHeight)
@@ -436,13 +648,43 @@ export function CVPreviewCanvas({
         blocks: [],
       };
       let remainingHeight =
-        maxPageContentHeight - (hasHeader ? headerHeight + HEADER_SECTION_GAP_PX : 0);
+        maxPageContentHeight - (hasHeader ? headerHeight + headerSectionGapPx : 0);
       remainingHeight = Math.max(80, remainingHeight);
 
-      for (const block of blocks) {
-        const requiredHeight = block.height + (currentPage.blocks.length > 0 ? sectionGap : 0);
+      const blockQueue = [...blocks];
+
+      while (blockQueue.length > 0) {
+        const block = blockQueue.shift();
+        if (!block) {
+          continue;
+        }
+
+        const sectionGapBeforeBlock = currentPage.blocks.length > 0 ? sectionGap : 0;
+        const requiredHeight = block.height + sectionGapBeforeBlock;
 
         if (currentPage.blocks.length > 0 && requiredHeight > remainingHeight) {
+          const availableBlockHeight = Math.max(0, remainingHeight - sectionGapBeforeBlock);
+          const splitResult = splitBlockToFitRemaining({
+            block,
+            availableHeight: availableBlockHeight,
+            maxPageContentHeight,
+          });
+
+          if (splitResult) {
+            currentPage.blocks.push(splitResult.headBlock);
+            remainingHeight -= splitResult.headBlock.height + sectionGapBeforeBlock;
+
+            computedPages.push(currentPage);
+            currentPage = {
+              includeHeader: false,
+              blocks: [],
+            };
+            remainingHeight = maxPageContentHeight;
+
+            blockQueue.unshift(...splitResult.tailBlocks);
+            continue;
+          }
+
           computedPages.push(currentPage);
           currentPage = {
             includeHeader: false,
@@ -451,8 +693,9 @@ export function CVPreviewCanvas({
           remainingHeight = maxPageContentHeight;
         }
 
+        const appliedGap = currentPage.blocks.length > 0 ? sectionGap : 0;
         currentPage.blocks.push(block);
-        remainingHeight -= requiredHeight;
+        remainingHeight -= block.height + appliedGap;
       }
 
       if (currentPage.blocks.length > 0 || currentPage.includeHeader || computedPages.length === 0) {
@@ -470,7 +713,7 @@ export function CVPreviewCanvas({
     return () => {
       window.removeEventListener("resize", recalculatePages);
     };
-  }, [forceSinglePage, hasHeader, orderedSections, sections, template]);
+  }, [forceSinglePage, hasHeader, headerSectionGapPx, orderedSections, sections, template]);
 
   const handleHeaderEdit = (field: "fullName" | "headline", value: string) => {
     if (!headerSection) {
@@ -512,16 +755,34 @@ export function CVPreviewCanvas({
   const pageListClassName = shouldUseSinglePageMode ? "space-y-0" : "space-y-6";
   const measurePaperClassName = "mx-auto h-280.5 w-198.5 max-w-full overflow-hidden";
 
+  const handleCanvasPointerDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (mode !== "edit") {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+
+    if (target.closest("[data-cv-editor-selectable='true']")) {
+      return;
+    }
+
+    onSelectSection(null);
+  };
+
   return (
     <>
-      <div className={pageListClassName}>
+      <div className={pageListClassName} onMouseDown={handleCanvasPointerDown}>
         {pages.map((page, pageIndex) => (
           <div
             key={`cv-page-${pageIndex + 1}`}
             className="print:break-after-page last:print:break-after-auto"
           >
-            <CVPaper template={template}>
-              <div className="flex h-full flex-col">
+            <CVPaper
+              template={template}
+              fontFamilyClassName={previewFontFamilyClassName}
+              bodyTextClassName={previewBodyTextClassName}
+            >
+              <div className="relative flex h-full flex-col">
                 <div
                   className={cn(
                     "flex-1 origin-top-left",
@@ -543,7 +804,7 @@ export function CVPreviewCanvas({
                   {page.blocks.length > 0 ? (
                     <div
                       className={cn(
-                        page.includeHeader ? "mt-5" : "",
+                        page.includeHeader ? headerSectionGapClassName : "",
                         template.spacingRules.sectionGapClassName,
                       )}
                     >
@@ -565,10 +826,14 @@ export function CVPreviewCanvas({
                               section={blockSection}
                               styleConfig={styleConfig}
                               template={template}
+                              mode={mode}
                               isActive={isActive}
                               onSelectSection={onSelectSection}
                               onUpdateSectionData={onUpdateSectionData}
                               onRequestAddSection={onRequestAddSection}
+                              onRemoveSection={onRemoveSection}
+                              onMoveSectionUp={onMoveSectionUp}
+                              onMoveSectionDown={onMoveSectionDown}
                             />
                           </div>
                         );
@@ -577,14 +842,26 @@ export function CVPreviewCanvas({
                   ) : null}
                 </div>
 
-                {!shouldUseSinglePageMode ? (
-                  <footer className="mt-6 flex items-center justify-between border-t border-slate-200 pt-3 text-[11px] font-semibold text-slate-500">
-                    <span className="tracking-[0.14em]">TalentFlow</span>
-                    <span className="font-medium tracking-normal">
-                      Trang {pageIndex + 1} / {totalPages}
-                    </span>
+                {template.id === "teal-timeline" ? (
+                  <footer
+                    className={cn(
+                      "pointer-events-none absolute inset-x-3 bottom-2 flex items-end justify-between text-[11px] font-semibold",
+                      template.colorPalette.mutedTextClassName,
+                    )}
+                  >
+                    <span className="text-[10px]">© f8.edu.vn</span>
+                    <span>Trang {pageIndex + 1}/{totalPages}</span>
                   </footer>
-                ) : null}
+                ) : (
+                  <footer
+                    className={cn(
+                      "pointer-events-none absolute bottom-2 right-3 text-[11px] font-semibold",
+                      template.colorPalette.mutedTextClassName,
+                    )}
+                  >
+                    Trang {pageIndex + 1} / {totalPages}
+                  </footer>
+                )}
               </div>
             </CVPaper>
           </div>
@@ -620,7 +897,7 @@ export function CVPreviewCanvas({
 
           <div
             ref={measureSectionsContainerRef}
-            className={cn(hasHeader ? "mt-5" : "", template.spacingRules.sectionGapClassName)}
+            className={cn(hasHeader ? headerSectionGapClassName : "", template.spacingRules.sectionGapClassName)}
           >
             {orderedSections.map((section) => {
               const styleConfig = resolveSectionStyleConfig(template, section.type, section.title);
@@ -636,10 +913,14 @@ export function CVPreviewCanvas({
                     section={section}
                     styleConfig={styleConfig}
                     template={template}
+                    mode="preview"
                     isActive={false}
                     onSelectSection={() => undefined}
                     onUpdateSectionData={() => undefined}
                     onRequestAddSection={undefined}
+                    onRemoveSection={undefined}
+                    onMoveSectionUp={undefined}
+                    onMoveSectionDown={undefined}
                   />
                 </div>
               );

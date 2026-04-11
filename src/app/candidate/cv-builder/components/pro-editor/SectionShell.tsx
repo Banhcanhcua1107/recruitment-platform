@@ -114,18 +114,30 @@ interface SectionShellProps {
   isActive: boolean;
   onAddAbove: () => void;
   onAddBelow: () => void;
+  showAddButtons?: boolean;
+  disableInteractions?: boolean;
   children: ReactNode;
 }
 
-export function SectionShell({ styleConfig, isActive, onAddAbove, onAddBelow, children }: SectionShellProps) {
+export function SectionShell({
+  styleConfig,
+  isActive,
+  onAddAbove,
+  onAddBelow,
+  showAddButtons = true,
+  disableInteractions = false,
+  children,
+}: SectionShellProps) {
   return (
     <div className="group relative break-inside-avoid-page transition-all print:break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showAddButtons ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
@@ -134,7 +146,9 @@ export function SectionShell({ styleConfig, isActive, onAddAbove, onAddBelow, ch
           styleConfig.backgroundClassName,
           isActive
             ? "border-emerald-400/70 bg-emerald-50/30 shadow-[0_0_0_1px_rgba(16,185,129,0.14),0_16px_30px_-24px_rgba(15,23,42,0.35)]"
-            : "hover:border-slate-400/80 hover:bg-slate-50/60",
+            : disableInteractions
+              ? ""
+              : "hover:border-slate-400/80 hover:bg-slate-50/60",
         )}
       >
         <SectionTitle styleConfig={styleConfig} />

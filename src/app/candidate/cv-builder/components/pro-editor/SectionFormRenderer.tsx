@@ -63,7 +63,7 @@ interface SectionFormRendererProps {
   selectedSection: CVSection | null;
   onUpdateSectionData: (sectionId: string, updates: Record<string, unknown>) => void;
   onAddListItem: (sectionId: string) => void;
-  onRemoveListItem: (sectionId: string, itemIndex: number) => void;
+  onRemoveListItem: (sectionId: string, itemRef: number | string) => void;
 }
 
 export function SectionFormRenderer({
@@ -118,6 +118,7 @@ export function SectionFormRenderer({
           {Array.isArray(sectionData.items) && sectionData.items.length > 0 ? (
             sectionData.items.map((rawItem, itemIndex) => {
               const item = (rawItem ?? {}) as Record<string, unknown>;
+              const itemRef = typeof item.id === "string" ? item.id : itemIndex;
               return (
                 <div key={String(item.id ?? itemIndex)} className="space-y-2.5 rounded-xl border border-slate-200 bg-white p-3.5 shadow-[0_14px_26px_-22px_rgba(15,23,42,0.2)]">
                   <div className="flex items-center justify-between">
@@ -126,7 +127,7 @@ export function SectionFormRenderer({
                     </p>
                     <button
                       type="button"
-                      onClick={() => onRemoveListItem(selectedSection.id, itemIndex)}
+                      onClick={() => onRemoveListItem(selectedSection.id, itemRef)}
                       className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition-all duration-200 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
                     >
                       <Trash2 size={11} />

@@ -2,14 +2,48 @@
 
 import { useMemo, useState } from "react";
 import { AddSectionModal } from "@/app/candidate/cv-builder/components/pro-editor/AddSectionModal";
-import { CVCanvas } from "@/app/candidate/cv-builder/components/pro-editor/CVCanvas";
 import { EditorTopbar } from "@/app/candidate/cv-builder/components/pro-editor/EditorTopbar";
-import { RightEditPanel } from "@/app/candidate/cv-builder/components/pro-editor/RightEditPanel";
-import { EDITOR_UI_TEXTS } from "@/app/candidate/cv-builder/components/pro-editor/editor-ui-texts.vi";
+import {
+  PreviewPanel,
+  type PreviewToolbarAction,
+} from "@/app/candidate/cv-builder/components/pro-editor/PreviewPanel";
+import { TemplateList } from "@/app/candidate/cv-builder/components/pro-editor/TemplateList";
+import { JsonDebugPanel } from "@/app/candidate/cv-builder/components/pro-editor/JsonDebugPanel";
+import type { TemplateListItem } from "@/app/candidate/cv-builder/components/pro-editor/TemplateCard";
 import type { ModalSectionCatalogItem } from "@/app/candidate/cv-builder/components/pro-editor/template-schema";
 import { CV_TEMPLATE_LIBRARY_UI } from "@/components/cv/templates/templateCatalog";
 import type { SectionType } from "../../types";
 import { useCVStore } from "../../store";
+
+const PREVIEW_ZOOM_STEPS = [
+  { className: "scale-75", percent: 75 },
+  { className: "scale-90", percent: 90 },
+  { className: "scale-100", percent: 100 },
+  { className: "scale-110", percent: 110 },
+  { className: "scale-125", percent: 125 },
+] as const;
+
+const FONT_CHOICES = ["Arial", "Times New Roman", "Courier New", "Ubuntu", "Amiri", "Cairo"] as const;
+
+const FONT_SIZE_BY_MODE = {
+  small: 3.7,
+  medium: 4,
+  large: 4.4,
+} as const;
+
+type FontSizeMode = keyof typeof FONT_SIZE_BY_MODE;
+
+function resolveFontSizeMode(spacing: number): FontSizeMode {
+  if (spacing <= 3.85) {
+    return "small";
+  }
+
+  if (spacing >= 4.2) {
+    return "large";
+  }
+
+  return "medium";
+}
 
 export interface EditorLayoutProps {
   resumeTitle: string;
@@ -44,25 +78,34 @@ export function EditorLayout({
     updateSectionData,
     addSection,
     reorderSections,
-    addListItem,
-    removeListItem,
+    removeSection,
+    moveSectionUp,
+    moveSectionDown,
     setMeta,
     updateTheme,
   } = useCVStore();
   const [isOpen, setIsOpen] = useState(false);
+  const [zoomStepIndex, setZoomStepIndex] = useState(2);
   const [insertPosition, setInsertPosition] = useState<{
     sectionId: string;
     position: "above" | "below";
   } | null>(null);
   const [selectedSectionType, setSelectedSectionType] = useState<SectionType | null>(null);
 
-  const sectionStats = useMemo(() => {
-    const visible = cv.sections.filter((section) => section.isVisible).length;
-    return {
-      visible,
-      total: cv.sections.length,
-    };
-  }, [cv.sections]);
+  const activeTemplateId = cv.meta.templateId ?? CV_TEMPLATE_LIBRARY_UI[0]?.id;
+  const activeFontFamily = String(cv.theme.fonts.body || FONT_CHOICES[0]);
+  const fontSizeMode = resolveFontSizeMode(Number(cv.theme.spacing || FONT_SIZE_BY_MODE.medium));
+
+  const templateItems = useMemo<TemplateListItem[]>(
+    () =>
+      CV_TEMPLATE_LIBRARY_UI.map((template) => ({
+        id: template.id,
+        name: template.name,
+        thumbnail: template.thumbnail,
+        category: template.category,
+      })),
+    [],
+  );
 
   const openGeneralAddModal = () => {
     setInsertPosition(null);
@@ -95,6 +138,27 @@ export function EditorLayout({
       });
     }
   };
+
+  const handleSelectFontFamily = (fontFamily: string) => {
+    updateTheme({
+      fonts: {
+        ...cv.theme.fonts,
+        body: fontFamily,
+        heading: fontFamily,
+      },
+    });
+  };
+
+  const handleSelectFontSizeMode = (mode: FontSizeMode) => {
+    updateTheme({
+      spacing: FONT_SIZE_BY_MODE[mode],
+    });
+  };
+
+  const canZoomOut = zoomStepIndex > 0;
+  const canZoomIn = zoomStepIndex < PREVIEW_ZOOM_STEPS.length - 1;
+
+  const previewToolbarActions: PreviewToolbarAction[] = [];
 
   const handleAddSectionFromCatalog = (item: ModalSectionCatalogItem) => {
     setSelectedSectionType(item.type);
@@ -137,14 +201,17 @@ export function EditorLayout({
   };
 
   return (
-    <div className="flex min-h-[calc(100dvh-64px)] flex-col bg-transparent text-slate-900">
+    <div className="flex min-h-[calc(100dvh-64px)] flex-col bg-[#f5f6fa] text-slate-900">
       <EditorTopbar
         resumeTitle={resumeTitle}
         saveStatus={saveStatus}
         isDirty={isDirty}
         canUndo={canUndo}
         canRedo={canRedo}
-        activeTemplateId={cv.meta.templateId}
+        activeTemplateId={activeTemplateId}
+        fontFamily={activeFontFamily}
+        fontOptions={[...FONT_CHOICES]}
+        fontSizeMode={fontSizeMode}
         onUndo={onUndo}
         onRedo={onRedo}
         onSave={onSave}
@@ -152,50 +219,45 @@ export function EditorLayout({
         onDownload={onDownload}
         onOpenAddSection={openGeneralAddModal}
         onChangeTemplate={handleChangeTemplate}
+        onChangeFontFamily={handleSelectFontFamily}
+        onChangeFontSizeMode={handleSelectFontSizeMode}
       />
 
-      <div className="mx-auto grid w-full max-w-[1760px] flex-1 min-h-0 grid-cols-1 gap-6 px-4 pb-8 pt-6 sm:px-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:px-8">
-        <main className="min-h-0 overflow-auto rounded-[28px] border border-[var(--app-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] px-5 py-5 shadow-[var(--app-shadow-soft)] sm:px-6">
-          <div className="mb-5 flex flex-wrap items-center gap-2 rounded-[20px] border border-slate-200 bg-slate-50/90 px-4 py-3.5 text-[12px] text-slate-600">
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold tracking-[0.02em] text-slate-700">
-              {EDITOR_UI_TEXTS.preview.badge}
-            </span>
-            <span>
-              {sectionStats.visible}/{sectionStats.total} {EDITOR_UI_TEXTS.preview.visibleSuffix}
-            </span>
-            <span className="text-slate-500">{EDITOR_UI_TEXTS.preview.hint}</span>
+      <div className="grid w-full flex-1 min-h-0 grid-cols-1 gap-3 px-3 pb-6 pt-4 sm:px-4 lg:grid-cols-[minmax(0,62%)_minmax(0,38%)] lg:gap-3 lg:px-5">
+        <div className="min-h-0">
+          <div className="sticky top-0 h-full min-h-0">
+            <PreviewPanel
+              controls={previewToolbarActions}
+              zoomPercent={PREVIEW_ZOOM_STEPS[zoomStepIndex].percent}
+              canZoomIn={canZoomIn}
+              canZoomOut={canZoomOut}
+              zoomClassName={PREVIEW_ZOOM_STEPS[zoomStepIndex].className}
+              onZoomIn={() => {
+                setZoomStepIndex((current) =>
+                  current >= PREVIEW_ZOOM_STEPS.length - 1 ? current : current + 1,
+                );
+              }}
+              onZoomOut={() => {
+                setZoomStepIndex((current) => (current <= 0 ? current : current - 1));
+              }}
+              sections={cv.sections}
+              selectedSectionId={selectedSectionId}
+              onSelectSection={setSelectedSection}
+              onUpdateSectionData={updateSectionData}
+              onRequestAddSection={openInsertModal}
+              onRemoveSection={removeSection}
+              onMoveSectionUp={moveSectionUp}
+              onMoveSectionDown={moveSectionDown}
+              templateId={activeTemplateId}
+            />
           </div>
-
-          <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_100%)] px-3 py-4 sm:px-5">
-            <div className="pb-6">
-              <CVCanvas
-                sections={cv.sections}
-                selectedSectionId={selectedSectionId}
-                onSelectSection={setSelectedSection}
-                onUpdateSectionData={updateSectionData}
-                onRequestAddSection={openInsertModal}
-                templateId={cv.meta.templateId}
-              />
-            </div>
-          </div>
-        </main>
+        </div>
 
         <div className="min-h-0">
-          <RightEditPanel
-            sections={cv.sections}
-            selectedSectionId={selectedSectionId}
-            onSelectSection={setSelectedSection}
-            onToggleVisibility={(sectionId: string) => {
-              const section = cv.sections.find((item) => item.id === sectionId);
-              if (!section) {
-                return;
-              }
-              updateSection(sectionId, { isVisible: !section.isVisible });
-            }}
-            onUpdateSectionData={updateSectionData}
-            onAddListItem={addListItem}
-            onRemoveListItem={removeListItem}
-            onOpenAddSection={openGeneralAddModal}
+          <TemplateList
+            templates={templateItems}
+            activeTemplateId={activeTemplateId}
+            onSelectTemplate={handleChangeTemplate}
           />
         </div>
       </div>
@@ -209,6 +271,8 @@ export function EditorLayout({
         onSelectSectionType={setSelectedSectionType}
         onAddSection={handleAddSectionFromCatalog}
       />
+
+      <JsonDebugPanel />
     </div>
   );
 }

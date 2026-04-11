@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { CVContent, CVSection, CVMode, SectionType, CVProfile, AnySectionData } from './types';
 import { normalizeCvSections, normalizeSectionDataIds } from './section-normalization';
+import { appendDefaultItemToSection, createSectionFromSchema, exportCVRootJson, type CVRootJsonDocument } from './cv-json-system';
+import { validateListSectionItem, validateSectionDataShape, validateSectionPayload } from './cv-json-validation';
+
+interface CVJsonDebugSnapshot {
+  action: string;
+  timestamp: string;
+  before: CVRootJsonDocument;
+  after: CVRootJsonDocument;
+}
 
 // Redefine EditorState with new actions
 interface EditorState {
@@ -19,6 +28,8 @@ interface EditorState {
   history: CVContent[]; // Simple history stack for undo
   historyIndex: number;
   aiSuggestions: string[]; // For the AI panel
+  jsonDebugEnabled: boolean;
+  jsonDebugSnapshot: CVJsonDebugSnapshot | null;
 
   // Actions
   initCV: (mode: CVMode, templateId?: string) => void;
@@ -34,7 +45,7 @@ interface EditorState {
   moveSectionUp: (sectionId: string) => void;
   moveSectionDown: (sectionId: string) => void;
   addListItem: (sectionId: string) => void;
-  removeListItem: (sectionId: string, itemIndex: number) => void;
+  removeListItem: (sectionId: string, itemRef: number | string) => void;
   
   // Theme & Global
   updateTheme: (themeUpdates: Partial<CVContent['theme']>) => void;
@@ -45,8 +56,20 @@ interface EditorState {
   toggleSidebar: () => void;
   setScale: (scale: number) => void;
   setAISuggestions: (suggestions: string[]) => void;
+  setJsonDebugEnabled: (enabled: boolean) => void;
+  clearJsonDebugSnapshot: () => void;
+  exportRootJson: () => CVRootJsonDocument;
   undo: () => void;
   redo: () => void;
+}
+
+function buildJsonDebugSnapshot(action: string, beforeCV: CVContent, afterCV: CVContent): CVJsonDebugSnapshot {
+  return {
+    action,
+    timestamp: new Date().toISOString(),
+    before: exportCVRootJson(beforeCV),
+    after: exportCVRootJson(afterCV),
+  };
 }
 
 const DEFAULT_THEME = {
@@ -220,6 +243,8 @@ export const useCVStore = create<EditorState>((set, get) => ({
   history: [],
   historyIndex: -1,
   aiSuggestions: [],
+  jsonDebugEnabled: false,
+  jsonDebugSnapshot: null,
 
   loadResumeIntoStore: (sections, styling, templateId) => {
     const normalizedSections = normalizeCvSections(sections);
@@ -266,52 +291,45 @@ export const useCVStore = create<EditorState>((set, get) => ({
   },
 
   addSection: (type) => {
-    const DEFAULT_DATA: Record<string, unknown> = {
-      header: { fullName: '', title: '', avatarUrl: '' },
-      personal_info: { email: '', phone: '', address: '', dob: '' },
-      summary: { text: '' },
-      rich_outline: { nodes: [] },
-      experience_list: { items: [{ id: uuidv4(), company: '', position: '', startDate: '', endDate: '', description: '' }] },
-      education_list: { items: [{ id: uuidv4(), institution: '', degree: '', startDate: '', endDate: '' }] },
-      skill_list: { items: [{ id: uuidv4(), name: '', level: 50 }] },
-      project_list: { items: [{ id: uuidv4(), name: '', role: '', startDate: '', endDate: '', description: '', technologies: '', customer: '', teamSize: 1 }] },
-      award_list: { items: [{ id: uuidv4(), title: '', date: '', issuer: '', description: '' }] },
-      certificate_list: { items: [{ id: uuidv4(), name: '', issuer: '', date: '', url: '' }] },
-      custom_text: { text: '' },
-    };
+    const stateBefore = get();
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[CVBuilder:addSection] Before:', {
+        sectionType: type,
+        sectionCount: stateBefore.cv.sections.length,
+      });
+    }
 
-    const SECTION_TITLES: Record<string, string> = {
-      rich_outline: 'Structured Outline',
-      header: '',
-      personal_info: '',
-      summary: 'Tổng quan',
-      experience_list: 'Kinh nghiệm làm việc',
-      education_list: 'Học vấn',
-      skill_list: 'Kỹ năng',
-      project_list: 'Dự án',
-      award_list: 'Giải thưởng',
-      certificate_list: 'Chứng chỉ',
-      custom_text: 'Mục tùy chỉnh',
-    };
-
-    const newSection: CVSection = {
-      id: uuidv4(),
-      type,
-      title: SECTION_TITLES[type] || '',
-      isVisible: true,
-      containerId: 'main-column',
-      data: (DEFAULT_DATA[type] || {}) as AnySectionData,
-    };
+    const newSection = createSectionFromSchema(type);
+    if (!validateSectionPayload(newSection) && process.env.NODE_ENV !== 'production') {
+      console.warn('[CVBuilder:addSection] Created section payload does not match expected schema', {
+        sectionType: type,
+        sectionId: newSection.id,
+        data: newSection.data,
+      });
+    }
     
     set((state) => {
         const newCV = { ...state.cv, sections: [...state.cv.sections, newSection] };
         const newHistory = [...state.history.slice(0, state.historyIndex + 1), newCV];
+        const nextDebugSnapshot = state.jsonDebugEnabled
+          ? buildJsonDebugSnapshot('addSection', state.cv, newCV)
+          : state.jsonDebugSnapshot;
+
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[CVBuilder:addSection] After:', {
+            sectionType: type,
+            insertedSectionId: newSection.id,
+            sectionCount: newCV.sections.length,
+          });
+        }
+
         return {
             cv: newCV,
             selectedSectionId: newSection.id,
             isDirty: true,
             history: newHistory,
-            historyIndex: newHistory.length - 1
+            historyIndex: newHistory.length - 1,
+            jsonDebugSnapshot: nextDebugSnapshot,
         };
     });
   },
@@ -364,18 +382,30 @@ export const useCVStore = create<EditorState>((set, get) => ({
   }),
 
   removeSection: (sectionId) => set((state) => {
+    const sectionToRemove = state.cv.sections.find((s) => s.id === sectionId);
+    if (!sectionToRemove) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[CVBuilder:removeSection] Invalid sectionId: section not found', { sectionId });
+      }
+      return {};
+    }
+
     const newCV = {
       ...state.cv,
       sections: state.cv.sections.filter((s) => s.id !== sectionId),
     };
     const newHistory = [...state.history.slice(0, state.historyIndex + 1), newCV];
+    const nextDebugSnapshot = state.jsonDebugEnabled
+      ? buildJsonDebugSnapshot('removeSection', state.cv, newCV)
+      : state.jsonDebugSnapshot;
     
     return {
       cv: newCV,
       selectedSectionId: state.selectedSectionId === sectionId ? null : state.selectedSectionId,
       isDirty: true,
       history: newHistory,
-      historyIndex: newHistory.length - 1
+      historyIndex: newHistory.length - 1,
+      jsonDebugSnapshot: nextDebugSnapshot,
     };
   }),
 
@@ -420,46 +450,170 @@ export const useCVStore = create<EditorState>((set, get) => ({
   addListItem: (sectionId) => {
     const state = get();
     const section = state.cv.sections.find(s => s.id === sectionId);
-    if (!section) return;
-    const data = section.data as Record<string, unknown>;
-    if (!data.items || !Array.isArray(data.items)) return;
+    if (!section) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[CVBuilder:addListItem] Invalid sectionId: section not found', { sectionId });
+      }
+      return;
+    }
 
-    const newItemMap: Record<string, () => Record<string, unknown>> = {
-      experience_list: () => ({ id: uuidv4(), company: '', position: '', startDate: '', endDate: '', description: '' }),
-      education_list: () => ({ id: uuidv4(), institution: '', degree: '', startDate: '', endDate: '' }),
-      skill_list: () => ({ id: uuidv4(), name: '', level: 50 }),
-      project_list: () => ({ id: uuidv4(), name: '', role: '', startDate: '', endDate: '', description: '', technologies: '', customer: '', teamSize: 1 }),
-      award_list: () => ({ id: uuidv4(), title: '', date: '', issuer: '', description: '' }),
-      certificate_list: () => ({ id: uuidv4(), name: '', issuer: '', date: '', url: '' }),
-    };
+    const currentData = section.data as Record<string, unknown>;
+    const currentItemsCount = Array.isArray(currentData.items) ? currentData.items.length : 0;
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[CVBuilder:addListItem] Before:', {
+        sectionId,
+        sectionType: section.type,
+        itemsCount: currentItemsCount,
+        hasValidItemsArray: Array.isArray(currentData.items),
+      });
+    }
 
-    const factory = newItemMap[section.type];
-    if (!factory) return;
+    const updatedSection = appendDefaultItemToSection(section);
+    if (!updatedSection) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[CVBuilder:addListItem] Unable to append item for section', {
+          sectionId,
+          sectionType: section.type,
+        });
+      }
+      return;
+    }
 
-    const newItems = [...(data.items as Record<string, unknown>[]), factory()];
+    if (!validateSectionDataShape(section.type, section.data) && process.env.NODE_ENV !== 'production') {
+      console.warn('[CVBuilder:addListItem] Section data is malformed before append', {
+        sectionId,
+        sectionType: section.type,
+        data: section.data,
+      });
+    }
+
+    const updatedData = updatedSection.data as Record<string, unknown>;
+    const updatedItemsCount = Array.isArray(updatedData.items) ? updatedData.items.length : 0;
+    const lastItem = Array.isArray(updatedData.items) && updatedData.items.length > 0
+      ? updatedData.items[updatedData.items.length - 1]
+      : null;
+    if (lastItem && !validateListSectionItem(updatedSection.type, lastItem) && process.env.NODE_ENV !== 'production') {
+      console.warn('[CVBuilder:addListItem] Added item payload is malformed', {
+        sectionId,
+        sectionType: updatedSection.type,
+        item: lastItem,
+      });
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[CVBuilder:addListItem] After:', {
+        sectionId,
+        sectionType: section.type,
+        itemsCount: updatedItemsCount,
+      });
+    }
+
     const newCV = {
       ...state.cv,
-      sections: state.cv.sections.map(s => s.id === sectionId ? { ...s, data: { ...s.data, items: newItems } } : s),
+      sections: state.cv.sections.map(s => s.id === sectionId ? updatedSection : s),
     };
     const newHistory = [...state.history.slice(0, state.historyIndex + 1), newCV];
-    set({ cv: newCV, isDirty: true, history: newHistory, historyIndex: newHistory.length - 1 });
+    const nextDebugSnapshot = state.jsonDebugEnabled
+      ? buildJsonDebugSnapshot('addListItem', state.cv, newCV)
+      : state.jsonDebugSnapshot;
+    set({
+      cv: newCV,
+      isDirty: true,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      jsonDebugSnapshot: nextDebugSnapshot,
+    });
   },
 
-  removeListItem: (sectionId, itemIndex) => {
+  removeListItem: (sectionId, itemRef) => {
     const state = get();
     const section = state.cv.sections.find(s => s.id === sectionId);
-    if (!section) return;
+    if (!section) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[CVBuilder:removeListItem] Invalid sectionId: section not found', { sectionId, itemRef });
+      }
+      return;
+    }
+
     const data = section.data as Record<string, unknown>;
-    if (!data.items || !Array.isArray(data.items)) return;
+    if (!data.items || !Array.isArray(data.items)) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[CVBuilder:removeListItem] Section has no removable items[]', {
+          sectionId,
+          sectionType: section.type,
+          data,
+        });
+      }
+      return;
+    }
+
     const items = [...(data.items as Record<string, unknown>[])];
-    if (items.length <= 1) return; // Don't remove last item
-    items.splice(itemIndex, 1);
+    if (items.length <= 1) {
+      return;
+    }
+
+    const removeIndex = typeof itemRef === 'number'
+      ? itemRef
+      : items.findIndex((item) => {
+          const rawId = item && typeof item === 'object' ? (item as Record<string, unknown>).id : undefined;
+          return typeof rawId === 'string' && rawId === itemRef;
+        });
+
+    if (removeIndex < 0 || removeIndex >= items.length) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[CVBuilder:removeListItem] Invalid item reference for removal', {
+          sectionId,
+          itemRef,
+          itemsLength: items.length,
+        });
+      }
+      return;
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[CVBuilder:removeListItem] Before:', {
+        sectionId,
+        sectionType: section.type,
+        itemRef,
+        removeIndex,
+        itemsCount: items.length,
+      });
+    }
+
+    items.splice(removeIndex, 1);
+    if (!validateSectionDataShape(section.type, { ...section.data, items }) && process.env.NODE_ENV !== 'production') {
+      console.warn('[CVBuilder:removeListItem] Section data malformed after remove operation', {
+        sectionId,
+        sectionType: section.type,
+        items,
+      });
+    }
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[CVBuilder:removeListItem] After:', {
+        sectionId,
+        sectionType: section.type,
+        itemRef,
+        removeIndex,
+        itemsCount: items.length,
+      });
+    }
+
     const newCV = {
       ...state.cv,
       sections: state.cv.sections.map(s => s.id === sectionId ? { ...s, data: { ...s.data, items } } : s),
     };
     const newHistory = [...state.history.slice(0, state.historyIndex + 1), newCV];
-    set({ cv: newCV, isDirty: true, history: newHistory, historyIndex: newHistory.length - 1 });
+    const nextDebugSnapshot = state.jsonDebugEnabled
+      ? buildJsonDebugSnapshot('removeListItem', state.cv, newCV)
+      : state.jsonDebugSnapshot;
+    set({
+      cv: newCV,
+      isDirty: true,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      jsonDebugSnapshot: nextDebugSnapshot,
+    });
   },
 
   updateTheme: (themeUpdates) => set((state) => ({
@@ -476,6 +630,12 @@ export const useCVStore = create<EditorState>((set, get) => ({
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   setScale: (scale) => set({ scale }),
   setAISuggestions: (suggestions) => set({ aiSuggestions: suggestions }),
+  setJsonDebugEnabled: (enabled) => set((state) => ({
+    jsonDebugEnabled: enabled,
+    jsonDebugSnapshot: enabled ? state.jsonDebugSnapshot : null,
+  })),
+  clearJsonDebugSnapshot: () => set({ jsonDebugSnapshot: null }),
+  exportRootJson: () => exportCVRootJson(get().cv),
 
   undo: () => set((state) => {
       if (state.historyIndex > 0) {

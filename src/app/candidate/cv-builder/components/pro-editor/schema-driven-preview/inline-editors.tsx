@@ -334,7 +334,7 @@ export function EditableText({
             onKeyDown={handleKeyDown}
             onBlur={commitChanges}
             placeholder={placeholder}
-            className="w-full resize-none bg-transparent px-1 py-1 text-[13px] leading-[1.65] text-slate-800 outline-none placeholder:text-slate-400"
+            className="w-full resize-none bg-transparent px-1 py-1 text-[1em] leading-[1.65] text-slate-800 outline-none placeholder:text-slate-400"
             aria-label={placeholder}
           />
         ) : (
@@ -344,7 +344,7 @@ export function EditableText({
             onKeyDown={handleKeyDown}
             onBlur={commitChanges}
             placeholder={placeholder}
-            className="h-8 w-full bg-transparent px-1 text-[13px] leading-6 text-slate-800 outline-none placeholder:text-slate-400"
+            className="h-8 w-full bg-transparent px-1 text-[1em] leading-6 text-slate-800 outline-none placeholder:text-slate-400"
             aria-label={placeholder}
             autoFocus
           />
@@ -372,9 +372,9 @@ export function EditableText({
       }}
     >
       {previewHtml ? (
-        <div className="text-[13px] leading-[1.65] text-slate-800" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+        <div className="text-[1em] leading-[1.65] text-slate-800" dangerouslySetInnerHTML={{ __html: previewHtml }} />
       ) : (
-        <span className="text-[13px] italic leading-6 text-slate-400">{placeholder}</span>
+        <span className="text-[1em] italic leading-6 text-slate-400">{placeholder}</span>
       )}
     </button>
   );

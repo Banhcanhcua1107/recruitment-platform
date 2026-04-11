@@ -5,7 +5,6 @@ import type { CVSection } from "../../types";
 import { EDITOR_UI_TEXTS } from "./editor-ui-texts.vi";
 import { OutlinePanel } from "./OutlinePanel";
 import { RightGuidancePanel } from "./RightGuidancePanel";
-import { SectionFormRenderer } from "./SectionFormRenderer";
 import { getSectionSchema } from "./template-schema";
 
 export interface EditorRightPanelProps {
@@ -15,7 +14,7 @@ export interface EditorRightPanelProps {
   onToggleVisibility: (sectionId: string) => void;
   onUpdateSectionData: (sectionId: string, updates: Record<string, unknown>) => void;
   onAddListItem: (sectionId: string) => void;
-  onRemoveListItem: (sectionId: string, itemIndex: number) => void;
+  onRemoveListItem: (sectionId: string, itemRef: number | string) => void;
   onOpenAddSection: () => void;
 }
 
@@ -61,9 +60,6 @@ export function EditorRightPanel({
   selectedSectionId,
   onSelectSection,
   onToggleVisibility,
-  onUpdateSectionData,
-  onAddListItem,
-  onRemoveListItem,
   onOpenAddSection,
 }: EditorRightPanelProps) {
   const selectedSection = sections.find((section) => section.id === selectedSectionId) ?? null;
@@ -79,7 +75,7 @@ export function EditorRightPanel({
   }, [sections]);
 
   return (
-    <aside className="flex h-full min-h-0 flex-col rounded-[28px] border border-[var(--app-border)] bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] shadow-[var(--app-shadow-soft)]">
+    <aside className="flex h-full min-h-0 flex-col rounded-[28px] border border-(--app-border) bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] shadow-(--app-shadow-soft)">
       <div className="border-b border-slate-100 px-5 py-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">
           {EDITOR_UI_TEXTS.rightPanel.guideTitle}
@@ -112,14 +108,11 @@ export function EditorRightPanel({
           <RightGuidancePanel activeSection={selectedSection} />
         </section>
 
-        <div className="mt-8">
-          <SectionFormRenderer
-            selectedSection={selectedSection}
-            onUpdateSectionData={onUpdateSectionData}
-            onAddListItem={onAddListItem}
-            onRemoveListItem={onRemoveListItem}
-          />
-        </div>
+        <section className="mt-8 rounded-2xl border border-slate-200 bg-white/70 px-4 py-3">
+          <p className="text-[12px] leading-5 text-slate-600">
+            Chinh sua noi dung truc tiep tren khung preview de giu bo cuc va giao dien trung khop voi mau CV.
+          </p>
+        </section>
       </div>
     </aside>
   );

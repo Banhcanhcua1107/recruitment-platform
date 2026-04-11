@@ -46,7 +46,7 @@ const SECTION_TITLES: Record<string, string> = {
 
 export default function EditCVPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { loadResumeIntoStore, cv, undo, redo, historyIndex, history, isDirty } = useCVStore();
+  const { loadResumeIntoStore, cv, undo, redo, historyIndex, history, isDirty, exportRootJson } = useCVStore();
 
   const [resume, setResume] = useState<ResumeRow | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -138,6 +138,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
 
     autoSaveTimer.current = setTimeout(async () => {
       try {
+        const rootJson = exportRootJson();
         setSaveStatus("saving");
         await saveResume(resume.id, {
           resume_data: cv.sections.map((section) => ({
@@ -150,6 +151,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
             colors: cv.theme.colors,
             spacing: cv.theme.spacing,
             editorTemplateId: cv.meta.templateId ?? null,
+            editorRootJson: rootJson,
           },
         });
 
@@ -166,7 +168,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
         clearTimeout(autoSaveTimer.current);
       }
     };
-  }, [cv, isDirty, resume]);
+  }, [cv, exportRootJson, isDirty, resume]);
 
   const handleManualSave = useCallback(async () => {
     if (!resume || !cv) {
@@ -174,6 +176,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
     }
 
     try {
+      const rootJson = exportRootJson();
       setSaveStatus("saving");
 
       if (autoSaveTimer.current) {
@@ -191,6 +194,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
           colors: cv.theme.colors,
           spacing: cv.theme.spacing,
           editorTemplateId: cv.meta.templateId ?? null,
+          editorRootJson: rootJson,
         },
       });
 
@@ -200,7 +204,25 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
       console.error("Manual save thất bại:", error);
       setSaveStatus("idle");
     }
-  }, [cv, resume]);
+  }, [cv, exportRootJson, resume]);
+
+  const handleExportRootJson = useCallback(() => {
+    if (!cv) {
+      return;
+    }
+
+    const rootJson = exportRootJson();
+    const timestamp = new Date().toISOString().replace(/[.:]/g, "-");
+    const baseTitle = (resume?.title || "cv").trim().replace(/\s+/g, "-").toLowerCase();
+    const fileName = `${baseTitle || "cv"}-root-json-${timestamp}.json`;
+    const blob = new Blob([JSON.stringify(rootJson, null, 2)], { type: "application/json" });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = fileName;
+    anchor.click();
+    URL.revokeObjectURL(objectUrl);
+  }, [cv, exportRootJson, resume?.title]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -264,7 +286,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
         onRedo={redo}
         onSave={() => void handleManualSave()}
         onOpenOCR={() => setOcrModalOpen(true)}
-        onDownload={() => window.print()}
+        onDownload={handleExportRootJson}
       />
 
       <OCRPreviewModal

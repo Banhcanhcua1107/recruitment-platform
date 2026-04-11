@@ -15,7 +15,8 @@
         "perf:budgets": "node scripts/perf/budgets.mjs",
         "perf:baseline": "npm run perf:autocannon && npm run perf:lighthouse",
         "seed:jobs": "tsx scripts/seed_jobs.ts",
-        "import:real-jobs": "tsx scripts/import-real-jobs.ts"
+        "import:real-jobs": "tsx scripts/import-real-jobs.ts",
+        "test:cv-builder-json": "tsx src/app/candidate/cv-builder/json-first-store.test.ts"
     },
     "dependencies": {
         "@dnd-kit/core": "^6.3.1",

@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
-import { FileText, Loader2, UploadCloud } from "lucide-react";
+import { FileText, Loader2, Search, UploadCloud } from "lucide-react";
 import {
   ActionButton,
   DashboardCard,
@@ -102,19 +102,6 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function sortByUpdatedAt<T extends { updatedAt: string }>(items: T[], sortOrder: "latest" | "oldest") {
-  return [...items].sort((a, b) => {
-    const left = new Date(a.updatedAt).getTime();
-    const right = new Date(b.updatedAt).getTime();
-
-    if (sortOrder === "oldest") {
-      return left - right;
-    }
-
-    return right - left;
-  });
-}
-
 type CandidateCvOptionItem = {
   path: string;
   label: string;
@@ -136,6 +123,8 @@ type CVDashboardListItem =
       updatedAt: string;
       option: CandidateCvOptionItem;
     };
+
+type CVSourceFilter = "all" | "template" | "profile" | "application";
 
 type BuilderDashboardListItem = Extract<CVDashboardListItem, { kind: "builder" }>;
 type ExternalDashboardListItem = Extract<CVDashboardListItem, { kind: "external" }>;
@@ -166,7 +155,9 @@ function CVDashboardPageContent() {
   const [loading, setLoading] = useState(true);
   const [defaultResumeId, setDefaultResumeId] = useState<string | null>(null);
   const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
-  const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
+  const [sourceFilter, setSourceFilter] = useState<CVSourceFilter>("all");
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [sortMode, setSortMode] = useState<"latest" | "name">("latest");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [templateRedirectLoading, setTemplateRedirectLoading] = useState(false);
@@ -310,7 +301,7 @@ function CVDashboardPageContent() {
     });
   }, [loading, resumes]);
 
-  const groupedDisplayItems = useMemo(() => {
+  const allDisplayItems = useMemo(() => {
     const builderItems: BuilderDashboardListItem[] = resumes.map((resume) => ({
       kind: "builder",
       updatedAt: resume.updated_at,
@@ -324,26 +315,78 @@ function CVDashboardPageContent() {
       option,
     }));
 
-    const profileItems = externalItems.filter(
-      (item) => item.option.source === "profile",
-    );
-    const applicationItems = externalItems.filter(
-      (item) => item.option.source === "uploaded",
-    );
+    return [...builderItems, ...externalItems];
+  }, [externalCvOptions, resumes]);
 
-    const builder = sortByUpdatedAt(builderItems, sortOrder);
-    const profile = sortByUpdatedAt(profileItems, sortOrder);
-    const application = sortByUpdatedAt(applicationItems, sortOrder);
+  const sourceCounts = useMemo(() => {
+    const templateCount = allDisplayItems.filter((item) => item.kind === "builder").length;
+    const profileCount = allDisplayItems.filter(
+      (item) => item.kind === "external" && item.option.source === "profile",
+    ).length;
+    const applicationCount = allDisplayItems.filter(
+      (item) => item.kind === "external" && item.option.source === "uploaded",
+    ).length;
 
     return {
-      builder,
-      profile,
-      application,
-      total: builder.length + profile.length + application.length,
+      all: allDisplayItems.length,
+      template: templateCount,
+      profile: profileCount,
+      application: applicationCount,
     };
-  }, [externalCvOptions, resumes, sortOrder]);
+  }, [allDisplayItems]);
 
-  const selectedResume = resumes.find((resume) => resume.id === selectedResumeId) || null;
+  const filteredDisplayItems = useMemo(() => {
+    const keyword = searchKeyword.trim().toLowerCase();
+
+    const sourceFiltered = allDisplayItems.filter((item) => {
+      if (sourceFilter === "all") {
+        return true;
+      }
+
+      if (sourceFilter === "template") {
+        return item.kind === "builder";
+      }
+
+      if (sourceFilter === "profile") {
+        return item.kind === "external" && item.option.source === "profile";
+      }
+
+      return item.kind === "external" && item.option.source === "uploaded";
+    });
+
+    const keywordFiltered = sourceFiltered.filter((item) => {
+      const title = item.kind === "builder" ? item.resume.title : item.option.label;
+      const sourceLabel = item.kind === "builder" ? "template" : item.option.source;
+
+      if (!keyword) {
+        return true;
+      }
+
+      return `${title} ${sourceLabel}`.toLowerCase().includes(keyword);
+    });
+
+    return [...keywordFiltered].sort((left, right) => {
+      if (sortMode === "name") {
+        const leftName = left.kind === "builder" ? left.resume.title : left.option.label;
+        const rightName = right.kind === "builder" ? right.resume.title : right.option.label;
+        return leftName.localeCompare(rightName, "vi", { sensitivity: "base" });
+      }
+
+      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+    });
+  }, [allDisplayItems, searchKeyword, sortMode, sourceFilter]);
+
+  const primaryResume = useMemo(() => {
+    const fallbackResume = [...resumes].sort(
+      (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+    )[0];
+
+    if (!defaultResumeId) {
+      return fallbackResume || null;
+    }
+
+    return resumes.find((resume) => resume.id === defaultResumeId) || fallbackResume || null;
+  }, [defaultResumeId, resumes]);
 
   const stats = useMemo(
     () => ({
@@ -429,120 +472,179 @@ function CVDashboardPageContent() {
     setSaveNotice("Da dat CV mac dinh cho thiet bi hien tai.");
   };
 
-  const renderSectionHeaderRow = (
-    sectionKey: string,
-    title: string,
-    description: string,
-    toneClassName: string,
-    count: number,
-  ) => (
-    <tr key={`${sectionKey}-section-header`}>
-      <td colSpan={4} className="px-7 pb-1 pt-4 first:pt-1">
-        <div className={`rounded-xl border px-4 py-3 ${toneClassName}`}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-bold text-slate-900">{title}</p>
-            <span className="rounded-full border border-white/70 bg-white/70 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
-              {count} CV
-            </span>
-          </div>
-          <p className="mt-1 text-xs text-slate-600">{description}</p>
-        </div>
-      </td>
-    </tr>
-  );
+  const openExternalCv = (externalUrl: string | null) => {
+    if (!externalUrl) {
+      setSaveNotice("Khong tim thay tep CV nay trong kho luu tru.");
+      return;
+    }
 
-  const renderExternalRow = (
-    item: Extract<CVDashboardListItem, { kind: "external" }>,
-    options: {
-      sourceLabel: string;
-      sourceSubLabel: string;
-      sourceToneClassName: string;
-    },
-  ) => {
+    window.open(externalUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const sourceFilterOptions: Array<{ value: CVSourceFilter; label: string; count: number }> = [
+    { value: "all", label: "Tất cả", count: sourceCounts.all },
+    { value: "template", label: "Template web", count: sourceCounts.template },
+    { value: "profile", label: "Hồ sơ ứng viên", count: sourceCounts.profile },
+    { value: "application", label: "Đơn ứng tuyển", count: sourceCounts.application },
+  ];
+
+  const renderUnifiedCard = (item: CVDashboardListItem) => {
+    const isBuilder = item.kind === "builder";
+    const title = isBuilder ? item.resume.title : item.option.label;
+    const subtitle = isBuilder
+      ? item.resume.template?.name
+        ? `${item.resume.template.name} • CV Builder`
+        : "Online Editor • TalentFlow"
+      : item.option.source === "profile"
+        ? "Nguồn: CV đã lưu trong hồ sơ ứng viên"
+        : "Nguồn: CV từ đơn ứng tuyển";
+    const icon = isBuilder ? "description" : item.option.source === "profile" ? "person" : "upload_file";
+    const sourceBadge = isBuilder
+      ? {
+          label: "Template web",
+          className: "border-blue-200 bg-blue-50 text-[#0052CC]",
+        }
+      : item.option.source === "profile"
+        ? {
+            label: "Hồ sơ ứng viên",
+            className: "border-emerald-200 bg-emerald-50 text-emerald-700",
+          }
+        : {
+            label: "Đơn ứng tuyển",
+            className: "border-amber-200 bg-amber-50 text-amber-700",
+          };
     const externalUrl =
-      item.option.downloadUrl ||
-      (item.option.source === "profile" ? "/api/candidate/profile/cv" : null);
-    const rowSurfaceClass = "bg-white group-hover:bg-blue-50/80";
+      item.kind === "external"
+        ? item.option.downloadUrl ||
+          (item.option.source === "profile" ? "/api/candidate/profile/cv" : null)
+        : null;
+    const isDefault = isBuilder && item.resume.id === defaultResumeId;
+    const isSelected = isBuilder && item.resume.id === selectedResumeId;
+    const isRecent = Date.now() - new Date(item.updatedAt).getTime() < 1000 * 60 * 60 * 24 * 7;
 
     return (
-      <tr key={item.id} className="group transition-colors">
-        <td className={`rounded-l-2xl border-y border-l border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
-          <div className="flex items-center gap-4">
-            <div className="flex h-11 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-              <span className="material-symbols-outlined text-[18px]">upload_file</span>
+      <article
+        key={isBuilder ? item.resume.id : item.id}
+        className={`rounded-2xl border px-4 py-3 transition-all sm:px-5 ${
+          isSelected
+            ? "border-blue-200 bg-blue-50/60 shadow-[0_12px_30px_rgba(37,99,235,0.14)]"
+            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-[0_14px_34px_rgba(15,23,42,0.09)]"
+        }`}
+      >
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                <span className="material-symbols-outlined text-[20px]">{icon}</span>
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="overflow-hidden text-ellipsis text-[16px] font-bold leading-6 text-[#0052CC] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                  {title}
+                </p>
+                <p className="mt-1 overflow-hidden text-sm leading-5 text-slate-500 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                  {subtitle}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="overflow-hidden text-ellipsis text-[15px] font-bold leading-5 text-[#0052CC] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                {item.option.label}
-              </p>
-              <p className="mt-1 overflow-hidden text-ellipsis text-xs text-slate-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                {options.sourceSubLabel}
+
+            <div className="shrink-0 text-left lg:text-right">
+              <p className="text-sm font-semibold text-slate-700">{formatAbsoluteDate(item.updatedAt)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">
+                {formatDistanceToNow(new Date(item.updatedAt), {
+                  addSuffix: true,
+                  locale: vi,
+                })}
               </p>
             </div>
           </div>
-        </td>
 
-        <td className={`border-y border-slate-100 px-7 py-6 text-center ${rowSurfaceClass}`}>
-          <div className="flex flex-col items-center gap-2">
-            <StatusBadge
-              label={options.sourceLabel}
-              tone="neutral"
-              className={options.sourceToneClassName}
-            />
-            <span className="text-[11px] font-medium text-slate-500">Tệp đã upload</span>
-          </div>
-        </td>
-
-        <td className={`border-y border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
-          <p className="text-sm font-medium text-slate-600">{formatAbsoluteDate(item.updatedAt)}</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {formatDistanceToNow(new Date(item.updatedAt), {
-              addSuffix: true,
-              locale: vi,
-            })}
-          </p>
-        </td>
-
-        <td className={`rounded-r-2xl border-y border-r border-slate-100 px-7 py-6 ${rowSurfaceClass}`}>
-          <div className="flex justify-end">
-            <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-2 py-1 shadow-[0_6px_16px_rgba(15,23,42,0.08)]">
-              <ActionIconButton
-                icon="visibility"
-                label="Xem nhanh"
-                onClick={() => {
-                  if (!externalUrl) {
-                    setSaveNotice("Khong tim thay tep CV nay trong kho luu tru.");
-                    return;
+          <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge label={sourceBadge.label} tone="neutral" className={sourceBadge.className} />
+              {isDefault ? (
+                <StatusBadge
+                  label="CV chính"
+                  tone="primary"
+                  className="border-cyan-200 bg-cyan-50 text-cyan-700"
+                />
+              ) : null}
+              {isRecent ? (
+                <StatusBadge
+                  label="Mới cập nhật"
+                  tone="primary"
+                  className="border-sky-200 bg-sky-50 text-sky-700"
+                />
+              ) : null}
+              {isBuilder ? (
+                <StatusBadge
+                  label={item.resume.is_public ? "Công khai" : "Riêng tư"}
+                  tone={item.resume.is_public ? "success" : "neutral"}
+                  className={
+                    item.resume.is_public
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-slate-100 text-slate-700"
                   }
-
-                  window.open(externalUrl, "_blank", "noopener,noreferrer");
-                }}
-                disabled={!externalUrl}
-              />
-              <ActionIconButton
-                icon="download"
-                label="Tải xuống"
-                onClick={() => {
-                  if (!externalUrl) {
-                    setSaveNotice("Khong tim thay tep CV nay trong kho luu tru.");
-                    return;
-                  }
-
-                  window.open(externalUrl, "_blank", "noopener,noreferrer");
-                }}
-                disabled={!externalUrl}
-              />
-              {item.option.source === "profile" ? (
-                <ActionIconButton
-                  icon="person"
-                  label="Mở hồ sơ"
-                  onClick={() => router.push("/candidate/profile")}
                 />
               ) : null}
             </div>
+
+            <div className="flex lg:justify-end">
+              <div className="inline-flex items-center justify-end gap-1 rounded-xl border border-slate-200 bg-white/95 px-2 py-1 shadow-[0_6px_16px_rgba(15,23,42,0.08)]">
+                {item.kind === "builder" ? (
+                  <>
+                    <ActionIconButton
+                      icon="edit"
+                      label="Chỉnh sửa"
+                      onClick={() => router.push(`/candidate/cv-builder/${item.resume.id}/edit`)}
+                    />
+                    <ActionIconButton
+                      icon="visibility"
+                      label="Xem nhanh"
+                      onClick={() => setSelectedResumeId(item.resume.id)}
+                    />
+                    <ActionIconButton
+                      icon="star"
+                      label="Đặt mặc định"
+                      onClick={() => handleSetDefaultResumeById(item.resume.id)}
+                      disabled={isDefault}
+                    />
+                    <ActionIconButton
+                      icon="delete"
+                      label="Xóa"
+                      onClick={() => void handleDeleteResume(item.resume.id)}
+                      disabled={deletingId === item.resume.id}
+                      tone="danger"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <ActionIconButton
+                      icon="visibility"
+                      label="Xem nhanh"
+                      onClick={() => openExternalCv(externalUrl)}
+                      disabled={!externalUrl}
+                    />
+                    <ActionIconButton
+                      icon="download"
+                      label="Tải xuống"
+                      onClick={() => openExternalCv(externalUrl)}
+                      disabled={!externalUrl}
+                    />
+                    {item.option.source === "profile" ? (
+                      <ActionIconButton
+                        icon="person"
+                        label="Mở hồ sơ"
+                        onClick={() => router.push("/candidate/profile")}
+                      />
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-        </td>
-      </tr>
+        </div>
+      </article>
     );
   };
 
@@ -680,228 +782,212 @@ function CVDashboardPageContent() {
         />
       </section>
 
+      <section className="relative overflow-hidden rounded-[28px] border border-blue-200/70 bg-linear-to-br from-[#0E2D79] via-[#1849AE] to-[#0B265F] px-6 py-6 text-white shadow-[0_18px_48px_rgba(15,23,42,0.28)]">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-10 h-52 w-52 rounded-full bg-cyan-300/20 blur-2xl" />
+
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0 space-y-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-white/90">
+              <span className="material-symbols-outlined text-[16px]">verified</span>
+              CV chính / mặc định
+            </span>
+
+            {primaryResume ? (
+              <>
+                <h2 className="overflow-hidden text-ellipsis text-2xl font-bold leading-tight [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                  {primaryResume.title}
+                </h2>
+                <p className="text-sm text-white/80">
+                  {primaryResume.template?.name
+                    ? `${primaryResume.template.name} • CV Builder`
+                    : "Online Editor • TalentFlow"}
+                </p>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge
+                    label="Template web"
+                    tone="neutral"
+                    className="border-white/25 bg-white/10 text-white"
+                  />
+                  {defaultResumeId === primaryResume.id ? (
+                    <StatusBadge
+                      label="Đang là CV chính"
+                      tone="neutral"
+                      className="border-cyan-200/70 bg-cyan-100/20 text-cyan-100"
+                    />
+                  ) : (
+                    <StatusBadge
+                      label="Đề xuất làm CV chính"
+                      tone="neutral"
+                      className="border-amber-200/70 bg-amber-100/20 text-amber-100"
+                    />
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold leading-tight">Chưa có CV builder để đặt làm CV chính</h2>
+                <p className="text-sm text-white/80">
+                  Tạo CV mới từ template để mở khóa chỉnh sửa online và đặt CV mặc định nhanh hơn.
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-2 text-left lg:text-right">
+            {primaryResume ? (
+              <>
+                <p className="text-sm font-semibold text-white">{formatAbsoluteDate(primaryResume.updated_at)}</p>
+                <p className="text-xs font-medium text-white/80">
+                  {formatDistanceToNow(new Date(primaryResume.updated_at), {
+                    addSuffix: true,
+                    locale: vi,
+                  })}
+                </p>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <ActionButton
+                    href={`/candidate/cv-builder/${primaryResume.id}/edit`}
+                    size="sm"
+                    variant="secondary"
+                    icon={<span className="material-symbols-outlined text-[18px]">edit</span>}
+                  >
+                    Chỉnh sửa CV chính
+                  </ActionButton>
+                  <ActionButton
+                    onClick={() => handleSetDefaultResumeById(primaryResume.id)}
+                    size="sm"
+                    variant="primary"
+                    disabled={defaultResumeId === primaryResume.id}
+                    icon={<span className="material-symbols-outlined text-[18px]">star</span>}
+                  >
+                    {defaultResumeId === primaryResume.id ? "Đã là mặc định" : "Đặt làm mặc định"}
+                  </ActionButton>
+                </div>
+              </>
+            ) : (
+              <ActionButton
+                href="/candidate/templates"
+                size="sm"
+                variant="primary"
+                icon={<span className="material-symbols-outlined text-[18px]">add</span>}
+              >
+                Tạo CV đầu tiên
+              </ActionButton>
+            )}
+          </div>
+        </div>
+      </section>
+
       <DataTableShell
-        title="Danh sách CV"
-        description="Danh sách được tách theo từng nguồn: CV tạo bằng template web, CV trong hồ sơ ứng viên và CV từ đơn ứng tuyển."
+        title="Kho CV đồng bộ"
+        description="Toàn bộ CV được gom vào một danh sách duy nhất để tìm nhanh, lọc theo nguồn và thao tác trực tiếp."
         actions={
-          <div className="flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50/80 px-3 py-2 text-sm shadow-[0_4px_16px_rgba(59,130,246,0.12)]">
-            <span className="font-semibold text-[#0052CC]">Sắp xếp theo:</span>
+          <div className="flex flex-wrap items-center gap-2 rounded-full border border-blue-100 bg-blue-50/80 px-3 py-2 text-sm shadow-[0_4px_16px_rgba(59,130,246,0.12)]">
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-[#0052CC]">
+              {filteredDisplayItems.length}/{sourceCounts.all} CV
+            </span>
             <select
               aria-label="Sắp xếp CV"
-              value={sortOrder}
-              onChange={(event) =>
-                setSortOrder(event.target.value === "oldest" ? "oldest" : "latest")
-              }
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value === "name" ? "name" : "latest")}
               className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-sm font-bold text-[#0052CC] outline-none transition-colors focus:border-[#0052CC]"
             >
               <option value="latest">Mới nhất</option>
-              <option value="oldest">Cũ nhất</option>
+              <option value="name">Tên A-Z</option>
             </select>
           </div>
         }
       >
-        <div className="overflow-x-auto px-3 py-3 sm:px-4">
-          <table className="min-w-245 w-full border-separate border-spacing-y-2 text-left">
-            <colgroup>
-              <col className="w-[46%]" />
-              <col className="w-[22%]" />
-              <col className="w-[18%]" />
-              <col className="w-[14%]" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th className="px-7 py-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Tên CV
-                </th>
-                <th className="px-7 py-3 text-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Trạng thái
-                </th>
-                <th className="px-7 py-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Cập nhật lần cuối
-                </th>
-                <th className="px-7 py-3 text-right text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Thao tác
-                </th>
-              </tr>
-            </thead>
+        <div className="space-y-4 px-3 py-3 sm:px-4">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <label className="relative block">
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={searchKeyword}
+                onChange={(event) => setSearchKeyword(event.target.value)}
+                placeholder="Tìm theo tên CV hoặc nguồn..."
+                className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-700 outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+              />
+            </label>
 
-            <tbody>
-              {loading ? (
-                Array.from({ length: 3 }).map((_, index) => (
-                  <tr key={`loading-${index}`}>
-                    <td colSpan={4} className="px-7 py-4">
-                      <div className="h-20 animate-pulse rounded-xl bg-slate-100" />
-                    </td>
-                  </tr>
-                ))
-              ) : groupedDisplayItems.total === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-7 py-8">
-                    <EmptyState
-                      icon={<FileText size={28} />}
-                      title="Bạn chưa có CV nào"
-                      description="Bắt đầu từ thư viện mẫu hoặc tải CV sẵn có để đưa nội dung vào hệ thống."
-                    />
-                  </td>
-                </tr>
-              ) : (
-                <>
-                  {groupedDisplayItems.builder.length > 0 ? (
-                    <>
-                      {renderSectionHeaderRow(
-                        "builder",
-                        "CV tạo bằng template web",
-                        "Bao gồm các CV bạn tạo/chỉnh sửa trực tiếp trong CV Builder.",
-                        "border-blue-200 bg-blue-50/70",
-                        groupedDisplayItems.builder.length,
-                      )}
-                      {groupedDisplayItems.builder.map((item) => {
-                        const resume = item.resume;
-                        const isSelected = resume.id === selectedResume?.id;
-                        const isDefault = resume.id === defaultResumeId;
-                        const rowSurfaceClass = isSelected
-                          ? "bg-blue-50/80"
-                          : "bg-white group-hover:bg-blue-50/80";
-                        const rowBorderClass = isSelected ? "border-blue-200" : "border-slate-100";
+            <div className="flex items-center gap-2 lg:justify-end">
+              <ActionButton
+                href="/candidate/templates"
+                variant="secondary"
+                size="sm"
+                icon={<span className="material-symbols-outlined text-[18px]">auto_awesome</span>}
+              >
+                Mở thư viện template
+              </ActionButton>
+            </div>
+          </div>
 
-                        return (
-                          <tr key={resume.id} className="group transition-colors">
-                            <td
-                              className={`rounded-l-2xl border-y border-l px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className="flex h-11 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-                                  <span className="material-symbols-outlined text-[18px]">description</span>
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="overflow-hidden text-ellipsis text-[15px] font-bold leading-5 text-[#0052CC] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                                    {resume.title}
-                                  </p>
-                                  <p className="mt-1 overflow-hidden text-ellipsis text-xs text-slate-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                                    {resume.template?.name
-                                      ? `${resume.template.name} • CV Builder`
-                                      : "Online Editor • TalentFlow"}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
+          <div className="flex flex-wrap gap-2">
+            {sourceFilterOptions.map((option) => {
+              const isActive = option.value === sourceFilter;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setSourceFilter(option.value)}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold transition ${
+                    isActive
+                      ? "border-[#0B3A98] bg-[#0B3A98] text-white shadow-[0_8px_20px_rgba(11,58,152,0.26)]"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                  }`}
+                >
+                  {option.label}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {option.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-                            <td className={`border-y px-7 py-6 text-center ${rowSurfaceClass} ${rowBorderClass}`}>
-                              <div className="flex flex-wrap justify-center gap-2">
-                                <StatusBadge
-                                  label="CV Builder"
-                                  tone="primary"
-                                  className="border-blue-200 bg-blue-50 text-[#0052CC]"
-                                />
-                                {isDefault ? (
-                                  <StatusBadge
-                                    label="Mặc định"
-                                    tone="primary"
-                                    className="border-cyan-200 bg-cyan-50 text-cyan-700"
-                                  />
-                                ) : null}
-                                <StatusBadge
-                                  label={resume.is_public ? "Công khai" : "Riêng tư"}
-                                  tone={resume.is_public ? "success" : "neutral"}
-                                  className={
-                                    resume.is_public
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                      : "border-slate-200 bg-slate-100 text-slate-700"
-                                  }
-                                />
-                              </div>
-                            </td>
-
-                            <td className={`border-y px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}>
-                              <p className="text-sm font-medium text-slate-600">
-                                {formatAbsoluteDate(resume.updated_at)}
-                              </p>
-                              <p className="mt-1 text-xs text-slate-400">
-                                {formatDistanceToNow(new Date(resume.updated_at), {
-                                  addSuffix: true,
-                                  locale: vi,
-                                })}
-                              </p>
-                            </td>
-
-                            <td
-                              className={`rounded-r-2xl border-y border-r px-7 py-6 ${rowSurfaceClass} ${rowBorderClass}`}
-                            >
-                              <div className="flex justify-end">
-                                <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-2 py-1 shadow-[0_6px_16px_rgba(15,23,42,0.08)]">
-                                  <ActionIconButton
-                                    icon="edit"
-                                    label="Chỉnh sửa"
-                                    onClick={() => router.push(`/candidate/cv-builder/${resume.id}/edit`)}
-                                  />
-                                  <ActionIconButton
-                                    icon="visibility"
-                                    label="Xem nhanh"
-                                    onClick={() => setSelectedResumeId(resume.id)}
-                                  />
-                                  <ActionIconButton
-                                    icon="star"
-                                    label="Đặt mặc định"
-                                    onClick={() => handleSetDefaultResumeById(resume.id)}
-                                    disabled={isDefault}
-                                  />
-                                  <ActionIconButton
-                                    icon="delete"
-                                    label="Xóa"
-                                    onClick={() => void handleDeleteResume(resume.id)}
-                                    disabled={deletingId === resume.id}
-                                    tone="danger"
-                                  />
-                                </div>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </>
-                  ) : null}
-
-                  {groupedDisplayItems.profile.length > 0 ? (
-                    <>
-                      {renderSectionHeaderRow(
-                        "profile",
-                        "CV hồ sơ ứng viên",
-                        "CV bạn đã lưu trong hồ sơ cá nhân để dùng khi ứng tuyển.",
-                        "border-emerald-200 bg-emerald-50/70",
-                        groupedDisplayItems.profile.length,
-                      )}
-                      {groupedDisplayItems.profile.map((item) =>
-                        renderExternalRow(item, {
-                          sourceLabel: "Hồ sơ ứng viên",
-                          sourceSubLabel: "Nguồn: CV đã lưu trong hồ sơ ứng viên",
-                          sourceToneClassName: "border-emerald-200 bg-emerald-50 text-emerald-700",
-                        }),
-                      )}
-                    </>
-                  ) : null}
-
-                  {groupedDisplayItems.application.length > 0 ? (
-                    <>
-                      {renderSectionHeaderRow(
-                        "application",
-                        "CV từ đơn ứng tuyển",
-                        "Các tệp CV đã được đính kèm khi nộp đơn vào công việc.",
-                        "border-amber-200 bg-amber-50/70",
-                        groupedDisplayItems.application.length,
-                      )}
-                      {groupedDisplayItems.application.map((item) =>
-                        renderExternalRow(item, {
-                          sourceLabel: "Đơn ứng tuyển",
-                          sourceSubLabel: "Nguồn: CV tải từ đơn ứng tuyển",
-                          sourceToneClassName: "border-amber-200 bg-amber-50 text-amber-700",
-                        }),
-                      )}
-                    </>
-                  ) : null}
-                </>
-              )}
-            </tbody>
-          </table>
+          {loading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <div key={`list-loading-${index}`} className="h-28 animate-pulse rounded-2xl bg-slate-100" />
+            ))
+          ) : filteredDisplayItems.length === 0 ? (
+            <div className="rounded-2xl border border-slate-100 bg-white px-5 py-8">
+              <EmptyState
+                icon={<FileText size={28} />}
+                title={
+                  sourceFilter !== "all" || searchKeyword.trim().length > 0
+                    ? "Không tìm thấy CV phù hợp"
+                    : "Bạn chưa có CV nào"
+                }
+                description={
+                  sourceFilter !== "all" || searchKeyword.trim().length > 0
+                    ? "Thử đổi bộ lọc hoặc từ khóa để mở rộng kết quả."
+                    : "Bắt đầu từ thư viện mẫu hoặc tải CV sẵn có để đưa nội dung vào hệ thống."
+                }
+              />
+              {sourceFilter !== "all" || searchKeyword.trim().length > 0 ? (
+                <div className="mt-4 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSourceFilter("all");
+                      setSearchKeyword("");
+                    }}
+                    className="inline-flex items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:text-slate-900"
+                  >
+                    Xóa bộ lọc
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-3">{filteredDisplayItems.map((item) => renderUnifiedCard(item))}</div>
+          )}
         </div>
       </DataTableShell>
 

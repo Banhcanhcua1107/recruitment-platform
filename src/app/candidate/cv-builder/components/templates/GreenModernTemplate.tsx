@@ -76,12 +76,12 @@ const AddItemBtn = ({ sectionId, label }: { sectionId: string; label: string }) 
   );
 };
 
-const RemoveItemBtn = ({ sectionId, index }: { sectionId: string; index: number }) => {
+const RemoveItemBtn = ({ sectionId, itemRef }: { sectionId: string; itemRef: number | string }) => {
   const { removeListItem } = useCVStore();
   return (
     <button
       type="button"
-      onClick={(e) => { e.stopPropagation(); removeListItem(sectionId, index); }}
+      onClick={(e) => { e.stopPropagation(); removeListItem(sectionId, itemRef); }}
       title="Xóa mục này"
       className="absolute -right-1 -top-1 size-5 flex items-center justify-center rounded-full bg-red-100 text-red-500 hover:bg-red-200 opacity-0 group-hover/item:opacity-100 transition-opacity print:hidden z-10"
     >
@@ -208,7 +208,7 @@ function ExperienceSection({ section }: { section: CVSection }) {
         <div className="space-y-2.5">
           {data.items.map((item, idx) => (
             <div key={item.id} className="group/item relative grid grid-cols-[135px_1fr] gap-x-4">
-              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <RemoveItemBtn sectionId={section.id} itemRef={item.id || idx} />
               <div className="text-[12px] font-bold pt-0.5 cv-date-accent">
                 <InlineText value={item.startDate} onChange={(v) => updateItem(data.items, idx, "startDate", v)} placeholder="MM/YYYY" />
                 <span className="mx-0.5">-</span>
@@ -252,7 +252,7 @@ function EducationSection({ section }: { section: CVSection }) {
         <div className="space-y-2">
           {data.items.map((item, idx) => (
             <div key={item.id} className="group/item relative grid grid-cols-[135px_1fr] gap-x-4">
-              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <RemoveItemBtn sectionId={section.id} itemRef={item.id || idx} />
               <div className="text-[12px] font-bold pt-0.5 text-gray-700">
                 <InlineText value={item.startDate} onChange={(v) => updateItem(data.items, idx, "startDate", v)} placeholder="YYYY" />
                 <span className="mx-0.5">–</span>
@@ -381,7 +381,7 @@ function AwardSection({ section }: { section: CVSection }) {
         <div className="space-y-2.5 pl-1">
           {data.items.map((item, idx) => (
             <div key={item.id} className="group/item relative grid grid-cols-[80px_1fr] gap-x-4 text-[12.5px]">
-              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <RemoveItemBtn sectionId={section.id} itemRef={item.id || idx} />
               <div className="font-bold text-gray-900">
                 <InlineText value={item.date} onChange={(v) => updateItem(data.items, idx, "date", v)} placeholder="MM/YYYY" />
               </div>
@@ -430,7 +430,7 @@ const ProjectBlock = ({ item, idx, sectionId, allItems, updateListItem }: Projec
 
   return (
     <div className="group/item relative text-[12.5px]">
-      <RemoveItemBtn sectionId={sectionId} index={idx} />
+      <RemoveItemBtn sectionId={sectionId} itemRef={item.id || idx} />
 
       <div className="font-bold text-[13px] text-gray-900 uppercase mb-0.5">
         <InlineText value={item.name} onChange={(v) => updateListItem(sectionId, allItems, idx, "name", v)} placeholder="TÊN DỰ ÁN" />
@@ -542,7 +542,7 @@ function CertificateSection({ section }: { section: CVSection }) {
         <div className="space-y-2 pl-1">
           {data.items.map((item, idx) => (
             <div key={item.id} className="group/item relative grid grid-cols-[80px_1fr] gap-x-4 text-[12.5px]">
-              <RemoveItemBtn sectionId={section.id} index={idx} />
+              <RemoveItemBtn sectionId={section.id} itemRef={item.id || idx} />
               <div className="font-bold text-gray-900">
                 <InlineText value={item.date} onChange={(v) => updateItem(data.items, idx, "date", v)} placeholder="MM/YYYY" />
               </div>
