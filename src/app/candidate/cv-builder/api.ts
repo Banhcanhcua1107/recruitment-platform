@@ -4,6 +4,7 @@
  */
 
 import { createClient } from "@/utils/supabase/client";
+import type { CVSection } from "./types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,96 @@ export function mapSectionsToResumeBlocks(
   }));
 }
 
+const RESUME_BLOCK_TO_SECTION_TYPE: Record<string, CVSection["type"]> = {
+  header: "header",
+  contact: "personal_info",
+  personal_info: "personal_info",
+  summary: "summary",
+  experience: "experience_list",
+  experience_list: "experience_list",
+  education: "education_list",
+  education_list: "education_list",
+  skills: "skill_list",
+  skill_list: "skill_list",
+  awards: "award_list",
+  award_list: "award_list",
+  projects: "project_list",
+  project_list: "project_list",
+  certificates: "certificate_list",
+  certificate_list: "certificate_list",
+};
+
+const DEFAULT_SECTION_TITLES: Partial<Record<CVSection["type"], string>> = {
+  header: "",
+  personal_info: "",
+  summary: "Tổng quan",
+  experience_list: "Kinh nghiệm làm việc",
+  education_list: "Học vấn",
+  skill_list: "Kỹ năng",
+  award_list: "Giải thưởng",
+  project_list: "Dự án",
+  certificate_list: "Chứng chỉ",
+};
+
+function createFallbackSectionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `section-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+export function mapResumeBlocksToSections(
+  blocks: ResumeBlock[],
+  options?: {
+    containerId?: string;
+    createId?: () => string;
+  },
+): CVSection[] {
+  const containerId = options?.containerId ?? "main-column";
+  const createId = options?.createId ?? createFallbackSectionId;
+
+  return blocks.map((block) => {
+    const mappedType = (RESUME_BLOCK_TO_SECTION_TYPE[block.block_id] ?? block.block_id) as CVSection["type"];
+
+    return {
+      id: createId(),
+      type: mappedType,
+      title: DEFAULT_SECTION_TITLES[mappedType] ?? "",
+      isVisible: block.is_visible,
+      containerId,
+      data: (block.data ?? {}) as CVSection["data"],
+    };
+  });
+}
+
+async function requestCvBuilderApi<T>(
+  input: string,
+  init?: RequestInit & {
+    errorMessage?: string;
+  }
+): Promise<T> {
+  const response = await fetch(input, {
+    cache: "no-store",
+    credentials: "same-origin",
+    ...init,
+    headers: {
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.headers ?? {}),
+    },
+  });
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string;
+  } & T;
+
+  if (!response.ok) {
+    throw new Error(payload.error || init?.errorMessage || "Khong the xu ly yeu cau CV.");
+  }
+
+  return payload;
+}
+
 // ─── Templates ────────────────────────────────────────────────────────────────
 
 /** Lấy tất cả templates hệ thống */
@@ -103,31 +194,28 @@ export async function getTemplateById(id: string): Promise<TemplateRow | null> {
 
 /** Lấy danh sách CV của user hiện tại */
 export async function getMyResumes(): Promise<ResumeRow[]> {
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-
-  const { data, error } = await supabase
-    .from("resumes")
-    .select("*, template:templates(name, structure_schema, default_styling, thumbnail_url)")
-    .eq("user_id", user.id)
-    .order("updated_at", { ascending: false });
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const payload = await requestCvBuilderApi<{ items?: ResumeRow[] }>("/api/cv-builder/resumes", {
+    errorMessage: "Khong the tai danh sach CV.",
+  });
+  return Array.isArray(payload.items) ? payload.items : [];
 }
 
 /** Lấy một resume theo ID */
 export async function getResumeById(id: string): Promise<ResumeRow | null> {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("resumes")
-    .select("*, template:templates(name, structure_schema, default_styling, thumbnail_url)")
-    .eq("id", id)
-    .single();
-
-  if (error) return null;
-  return data;
+  try {
+    const payload = await requestCvBuilderApi<{ item?: ResumeRow | null }>(
+      `/api/cv-builder/resumes/${encodeURIComponent(id)}`,
+      {
+        errorMessage: "Khong the tai CV da chon.",
+      }
+    );
+    return payload.item ?? null;
+  } catch (error) {
+    if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 // ─── Sample data for known templates ───────────────────────────────────────

@@ -3,7 +3,7 @@
 import type { LucideIcon } from "lucide-react";
 import { CVCanvas } from "@/app/candidate/cv-builder/components/pro-editor/CVCanvas";
 import { ZoomControls } from "@/app/candidate/cv-builder/components/pro-editor/ZoomControls";
-import type { CVSection } from "../../types";
+import type { CVSection, CVSelectedSectionItem } from "../../types";
 
 export interface PreviewToolbarAction {
   id: string;
@@ -23,6 +23,7 @@ interface PreviewPanelProps {
   sections: CVSection[];
   selectedSectionId: string | null;
   onSelectSection: (id: string | null) => void;
+  onSelectSectionItem?: (selection: CVSelectedSectionItem | null) => void;
   onUpdateSectionData: (sectionId: string, updates: Record<string, unknown>) => void;
   onRequestAddSection?: (sectionId: string, position: "above" | "below") => void;
   onRemoveSection?: (sectionId: string) => void;
@@ -42,6 +43,7 @@ export function PreviewPanel({
   sections,
   selectedSectionId,
   onSelectSection,
+  onSelectSectionItem,
   onUpdateSectionData,
   onRequestAddSection,
   onRemoveSection,
@@ -50,7 +52,10 @@ export function PreviewPanel({
   templateId,
 }: PreviewPanelProps) {
   return (
-    <section className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_20px_45px_-40px_rgba(15,23,42,0.55)]">
+    <section
+      data-editor-pane="preview"
+      className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_20px_45px_-40px_rgba(15,23,42,0.55)]"
+    >
       <div className="border-b border-slate-100 px-4 py-3 sm:px-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -78,7 +83,10 @@ export function PreviewPanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f5f6fa] px-3 py-4 sm:px-5 sm:py-5">
+      <div
+        data-editor-preview-scroll="true"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#f5f6fa] px-3 py-4 sm:px-5 sm:py-5"
+      >
         <div className="mx-auto flex w-full justify-center">
           <div className="w-fit transform-gpu origin-top transition-transform duration-200 ease-out">
             <div className={zoomClassName}>
@@ -86,6 +94,7 @@ export function PreviewPanel({
                 sections={sections}
                 selectedSectionId={selectedSectionId}
                 onSelectSection={onSelectSection}
+                onSelectSectionItem={onSelectSectionItem}
                 onUpdateSectionData={onUpdateSectionData}
                 onRequestAddSection={onRequestAddSection}
                 onRemoveSection={onRemoveSection}

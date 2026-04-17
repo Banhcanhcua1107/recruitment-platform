@@ -12,9 +12,9 @@ interface CVPaperProps {
 }
 
 export function CVPaper({ template, fontFamilyClassName, bodyTextClassName, children }: CVPaperProps) {
-  const isTealTimeline = template.id === "teal-timeline";
+  const isTealFamily = template.visualFamily === "teal";
 
-  if (isTealTimeline) {
+  if (isTealFamily) {
     return (
       <div
         className={cn(

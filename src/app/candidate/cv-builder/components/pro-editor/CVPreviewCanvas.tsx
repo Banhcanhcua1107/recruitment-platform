@@ -1,15 +1,19 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { cn } from "@/lib/utils";
-import type { CVSection } from "../../types";
+import type { CVSection, CVSelectedSectionItem } from "../../types";
 import { CVHeader } from "./CVHeader";
 import { CVPaper } from "./CVPaper";
 import { CVSectionRenderer } from "./CVSectionRenderer";
 import { mapBuilderSectionsToPreviewData, orderPreviewSections } from "./schema-driven-preview/adapters";
 import { resolveSectionStyleConfig } from "./schema-driven-preview/section-renderers";
 import type { SectionRenderMode } from "./schema-driven-preview/SectionRenderer";
-import type { CVPreviewSection } from "./schema-driven-preview/types";
+import type {
+  CVHeaderSummaryContentData,
+  CVPreviewSection,
+  CVTemplateBodyLayout,
+} from "./schema-driven-preview/types";
 import { getTemplateConfig } from "@/app/candidate/cv-builder/components/pro-editor/schema-driven-preview/template-config";
 import { useCVStore } from "../../store";
 
@@ -74,6 +78,22 @@ function resolvePreviewFontFamilyClass(fontName: string) {
     return "cv-preview-font-manrope";
   }
 
+  if (normalized.includes("ibm plex")) {
+    return "cv-preview-font-ibm-plex-sans";
+  }
+
+  if (normalized.includes("jakarta")) {
+    return "cv-preview-font-plus-jakarta-sans";
+  }
+
+  if (normalized.includes("source sans")) {
+    return "cv-preview-font-source-sans-3";
+  }
+
+  if (normalized.includes("lora")) {
+    return "cv-preview-font-lora";
+  }
+
   return "cv-preview-font-arial";
 }
 
@@ -93,6 +113,88 @@ function resolvePreviewTextSizeClass(spacingValue: number) {
   return "cv-preview-text-medium";
 }
 
+type BodyColumn = "left" | "right";
+
+function normalizeSummaryLine(line: string) {
+  return line.replace(/^[-*\u2022]+\s*/, "").trim();
+}
+
+function splitSummaryTextToLines(rawText: string) {
+  return rawText
+    .split(/\r?\n/)
+    .map(normalizeSummaryLine)
+    .filter(Boolean);
+}
+
+function extractSummaryForHeader(input: {
+  section: CVPreviewSection;
+  layout: {
+    summaryTitle?: string;
+    summaryMaxBullets?: number;
+  };
+}): CVHeaderSummaryContentData | null {
+  const { section, layout } = input;
+  const summaryData = section.data as {
+    text?: unknown;
+    title?: unknown;
+    items?: unknown;
+  };
+
+  const linesFromText = typeof summaryData.text === "string"
+    ? splitSummaryTextToLines(summaryData.text)
+    : [];
+
+  const linesFromItems = Array.isArray(summaryData.items)
+    ? summaryData.items
+      .map((item) => normalizeSummaryLine(String((item as { content?: unknown }).content ?? "")))
+      .filter(Boolean)
+    : [];
+
+  const mergedLines: string[] = [];
+  const seen = new Set<string>();
+  [...linesFromText, ...linesFromItems].forEach((line) => {
+    const normalized = line.toLowerCase();
+    if (seen.has(normalized)) {
+      return;
+    }
+
+    seen.add(normalized);
+    mergedLines.push(line);
+  });
+
+  if (mergedLines.length === 0) {
+    return null;
+  }
+
+  const maxBullets = Number.isFinite(layout.summaryMaxBullets)
+    ? Math.max(1, Math.floor(layout.summaryMaxBullets ?? 4))
+    : 4;
+  const intro = mergedLines[0] || "";
+  const bullets = mergedLines.slice(1, 1 + maxBullets);
+
+  return {
+    title: String(summaryData.title || "").trim() || layout.summaryTitle || "Tổng quan",
+    intro,
+    bullets,
+  };
+}
+
+function resolveTwoColumnGridClass(layout: CVTemplateBodyLayout | undefined) {
+  if (!layout || layout.mode !== "two-column") {
+    return "grid-cols-1";
+  }
+
+  if (layout.columnRatio === "left-narrow") {
+    return "grid-cols-[0.78fr_1.22fr]";
+  }
+
+  if (layout.columnRatio === "left-wide") {
+    return "grid-cols-[1.2fr_0.8fr]";
+  }
+
+  return "grid-cols-2";
+}
+
 interface RenderSectionBlock {
   id: string;
   section: CVPreviewSection;
@@ -101,7 +203,37 @@ interface RenderSectionBlock {
     sectionBaseHeight: number;
     itemGap: number;
     itemHeights: number[];
+    itemStartIndex: number;
+    totalItemsCount: number;
+    sourceItems: unknown[];
   };
+}
+
+interface SectionSplitContext {
+  startIndex: number;
+  itemCount: number;
+  totalCount: number;
+  isContinuation: boolean;
+  sourceItems: unknown[];
+}
+
+export function mergeSplitChunkItems(input: {
+  sourceItems: unknown[];
+  splitContext: {
+    startIndex: number;
+    itemCount: number;
+  };
+  chunkItems: unknown[];
+}) {
+  const { sourceItems, splitContext, chunkItems } = input;
+  const safeStartIndex = Math.min(Math.max(splitContext.startIndex, 0), sourceItems.length);
+  const tailStartIndex = Math.min(safeStartIndex + Math.max(splitContext.itemCount, 0), sourceItems.length);
+
+  return [
+    ...sourceItems.slice(0, safeStartIndex),
+    ...chunkItems,
+    ...sourceItems.slice(tailStartIndex),
+  ];
 }
 
 interface PreviewPage {
@@ -109,7 +241,31 @@ interface PreviewPage {
   blocks: RenderSectionBlock[];
 }
 
-function arePagesEqual(left: PreviewPage[], right: PreviewPage[]) {
+export function isPreviewBlockActive(
+  selectedSectionId: string | null,
+  blockSection: Pick<CVPreviewSection, "sourceSectionId">,
+) {
+  return selectedSectionId === blockSection.sourceSectionId;
+}
+
+function serializePageBlockSection(block: RenderSectionBlock) {
+  const section = block.section;
+
+  try {
+    return JSON.stringify({
+      sourceSectionId: section.sourceSectionId,
+      type: section.type,
+      title: section.title,
+      visible: section.visible,
+      order: section.order,
+      data: section.data,
+    });
+  } catch {
+    return "";
+  }
+}
+
+export function shouldReusePaginatedPages(left: PreviewPage[], right: PreviewPage[]) {
   if (left.length !== right.length) {
     return false;
   }
@@ -124,7 +280,14 @@ function arePagesEqual(left: PreviewPage[], right: PreviewPage[]) {
     }
 
     for (let j = 0; j < left[i].blocks.length; j += 1) {
-      if (left[i].blocks[j].id !== right[i].blocks[j].id) {
+      const leftBlock = left[i].blocks[j];
+      const rightBlock = right[i].blocks[j];
+
+      if (leftBlock.id !== rightBlock.id) {
+        return false;
+      }
+
+      if (serializePageBlockSection(leftBlock) !== serializePageBlockSection(rightBlock)) {
         return false;
       }
     }
@@ -138,21 +301,136 @@ function getSectionItems(section: CVPreviewSection): unknown[] | null {
   return Array.isArray(maybeItems) ? maybeItems : null;
 }
 
+function resolveSourceItemIdByIndex(section: CVSection | undefined, itemIndex: number) {
+  if (!section) {
+    return null;
+  }
+
+  const sectionData = section.data as Record<string, unknown>;
+  const rawItems = Array.isArray(sectionData.items) ? sectionData.items : null;
+  if (!rawItems) {
+    return null;
+  }
+
+  const rawItem = rawItems[itemIndex];
+  if (!rawItem || typeof rawItem !== "object") {
+    return null;
+  }
+
+  const rawId = (rawItem as Record<string, unknown>).id;
+  return typeof rawId === "string" && rawId.trim().length > 0 ? rawId.trim() : null;
+}
+
+function resolveItemSelectionFromTarget(input: {
+  target: EventTarget | null;
+  sectionContainer: HTMLElement;
+  blockSection: CVPreviewSection;
+  sourceSection: CVSection | undefined;
+}): CVSelectedSectionItem | null {
+  const { target, sectionContainer, blockSection, sourceSection } = input;
+
+  if (!(target instanceof HTMLElement)) {
+    return null;
+  }
+
+  const itemElement = target.closest<HTMLElement>("[data-cv-split-item='true']");
+  if (!itemElement || !sectionContainer.contains(itemElement)) {
+    return null;
+  }
+
+  const localIndexFromDataset = Number(itemElement.dataset.cvItemIndex);
+  const localIndex = Number.isFinite(localIndexFromDataset)
+    ? Math.floor(localIndexFromDataset)
+    : Array.from(sectionContainer.querySelectorAll<HTMLElement>("[data-cv-split-item='true']")).indexOf(itemElement);
+
+  if (localIndex < 0) {
+    return null;
+  }
+
+  const splitContext = getSectionSplitContext(blockSection);
+  const itemIndex = (splitContext?.startIndex ?? 0) + localIndex;
+  const sectionData = sourceSection?.data as Record<string, unknown> | undefined;
+  const hasItemsArray = Array.isArray(sectionData?.items);
+  const elementItemId = itemElement.dataset.cvItemId?.trim() || null;
+
+  return {
+    sectionId: blockSection.sourceSectionId,
+    itemIndex,
+    itemId: elementItemId ?? resolveSourceItemIdByIndex(sourceSection, itemIndex),
+    itemPath: hasItemsArray ? `data.items[${itemIndex}]` : "data.text",
+  };
+}
+
+function toSelectionKey(selection: CVSelectedSectionItem | null) {
+  if (!selection) {
+    return "null";
+  }
+
+  return [
+    selection.sectionId,
+    String(selection.itemIndex),
+    selection.itemId || "",
+    selection.itemPath,
+  ].join("|");
+}
+
+function getSectionSplitContext(section: CVPreviewSection): SectionSplitContext | null {
+  const sectionData = section.data as unknown as {
+    __splitContext?: {
+      startIndex?: unknown;
+      itemCount?: unknown;
+      totalCount?: unknown;
+      isContinuation?: unknown;
+      sourceItems?: unknown;
+    };
+  };
+
+  const context = sectionData.__splitContext;
+  if (!context) {
+    return null;
+  }
+
+  const startIndex = Number(context.startIndex);
+  const itemCount = Number(context.itemCount);
+  const totalCount = Number(context.totalCount);
+  const sourceItems = Array.isArray(context.sourceItems) ? context.sourceItems : null;
+
+  if (!Number.isFinite(startIndex) || !Number.isFinite(itemCount) || !Number.isFinite(totalCount) || !sourceItems) {
+    return null;
+  }
+
+  return {
+    startIndex: Math.max(0, Math.floor(startIndex)),
+    itemCount: Math.max(0, Math.floor(itemCount)),
+    totalCount: Math.max(0, Math.floor(totalCount)),
+    isContinuation: context.isContinuation === true,
+    sourceItems,
+  };
+}
+
 function cloneSectionWithItems(
   section: CVPreviewSection,
   items: unknown[],
   chunkIndex: number,
   customId?: string,
+  splitContext?: SectionSplitContext,
 ): CVPreviewSection {
   const sectionData = section.data as unknown as Record<string, unknown>;
+  const nextData: Record<string, unknown> = {
+    ...sectionData,
+    items,
+  };
+
+  if (splitContext) {
+    nextData.__splitContext = splitContext;
+  } else if ("__splitContext" in nextData) {
+    delete nextData.__splitContext;
+  }
 
   return {
     ...section,
     id: customId ?? `${section.id}__chunk_${chunkIndex + 1}`,
-    data: {
-      ...sectionData,
-      items,
-    } as CVPreviewSection["data"],
+    data: nextData as unknown as CVPreviewSection["data"],
   };
 }
 
@@ -200,17 +478,41 @@ function createItemChunkBlock(input: {
   sectionBaseHeight: number;
   itemGap: number;
   blockId: string;
+  itemStartIndex: number;
+  totalItemsCount: number;
+  sourceItems: unknown[];
 }): RenderSectionBlock {
-  const { sourceSection, items, itemHeights, sectionBaseHeight, itemGap, blockId } = input;
+  const {
+    sourceSection,
+    items,
+    itemHeights,
+    sectionBaseHeight,
+    itemGap,
+    blockId,
+    itemStartIndex,
+    totalItemsCount,
+    sourceItems,
+  } = input;
+
+  const splitContext: SectionSplitContext = {
+    startIndex: itemStartIndex,
+    itemCount: items.length,
+    totalCount: totalItemsCount,
+    isContinuation: itemStartIndex > 0,
+    sourceItems,
+  };
 
   return {
     id: blockId,
-    section: cloneSectionWithItems(sourceSection, items, 0, blockId),
+    section: cloneSectionWithItems(sourceSection, items, 0, blockId, splitContext),
     height: calculateChunkHeight(itemHeights, sectionBaseHeight, itemGap),
     splitMeta: {
       sectionBaseHeight,
       itemGap,
       itemHeights: [...itemHeights],
+      itemStartIndex,
+      totalItemsCount,
+      sourceItems,
     },
   };
 }
@@ -223,6 +525,8 @@ function createItemChunkBlocks(input: {
   itemGap: number;
   maxChunkHeight: number;
   idPrefix: string;
+  startIndex?: number;
+  fullSourceItems?: unknown[];
 }): RenderSectionBlock[] {
   const {
     sourceSection,
@@ -232,9 +536,14 @@ function createItemChunkBlocks(input: {
     itemGap,
     maxChunkHeight,
     idPrefix,
+    startIndex = 0,
+    fullSourceItems,
   } = input;
 
   const blocks: RenderSectionBlock[] = [];
+  const sourceItems = fullSourceItems ?? items;
+  const totalItemsCount = sourceItems.length;
+  let currentChunkStartIndex = startIndex;
   let currentItems: unknown[] = [];
   let currentItemHeights: number[] = [];
 
@@ -251,8 +560,13 @@ function createItemChunkBlocks(input: {
         sectionBaseHeight,
         itemGap,
         blockId: `${idPrefix}__chunk_${blocks.length + 1}`,
+        itemStartIndex: currentChunkStartIndex,
+        totalItemsCount,
+        sourceItems,
       }),
     );
+
+    currentChunkStartIndex += currentItems.length;
 
     currentItems = [];
     currentItemHeights = [];
@@ -285,6 +599,9 @@ function createItemChunkBlocks(input: {
       sectionBaseHeight,
       itemGap,
       blockId: `${idPrefix}__chunk_1`,
+      itemStartIndex: startIndex,
+      totalItemsCount,
+      sourceItems,
     }),
   ];
 }
@@ -305,7 +622,14 @@ function splitBlockToFitRemaining(input: {
     return null;
   }
 
-  const { itemHeights, itemGap, sectionBaseHeight } = block.splitMeta;
+  const {
+    itemHeights,
+    itemGap,
+    sectionBaseHeight,
+    itemStartIndex,
+    sourceItems,
+    totalItemsCount,
+  } = block.splitMeta;
   let fittingCount = 0;
 
   for (let index = 0; index < blockItems.length - 1; index += 1) {
@@ -340,6 +664,9 @@ function splitBlockToFitRemaining(input: {
     sectionBaseHeight,
     itemGap,
     blockId: `${block.id}__split_head`,
+    itemStartIndex,
+    totalItemsCount,
+    sourceItems,
   });
 
   const tailBlocks = createItemChunkBlocks({
@@ -350,6 +677,8 @@ function splitBlockToFitRemaining(input: {
     itemGap,
     maxChunkHeight: maxPageContentHeight,
     idPrefix: `${block.id}__split_tail`,
+    startIndex: itemStartIndex + fittingCount,
+    fullSourceItems: sourceItems,
   });
 
   return {
@@ -366,6 +695,27 @@ function measureListItemLayout(sectionNode: HTMLDivElement | null, expectedItemC
   const contentElement = sectionNode.querySelector<HTMLElement>("[data-cv-section-content]");
   if (!contentElement) {
     return null;
+  }
+
+  const markedItemElements = Array.from(
+    contentElement.querySelectorAll<HTMLElement>("[data-cv-split-item='true']"),
+  );
+
+  if (markedItemElements.length === expectedItemCount) {
+    const itemHeights = markedItemElements.map((element) => Math.max(1, element.offsetHeight));
+
+    let totalGap = 0;
+    for (let index = 0; index < markedItemElements.length - 1; index += 1) {
+      const current = markedItemElements[index];
+      const next = markedItemElements[index + 1];
+      const gap = next.offsetTop - current.offsetTop - current.offsetHeight;
+      totalGap += Math.max(0, gap);
+    }
+
+    return {
+      itemHeights,
+      totalGap,
+    };
   }
 
   const listRoot = findListRootForItems(contentElement, expectedItemCount);
@@ -459,6 +809,8 @@ function buildSectionBlocks(input: {
     itemGap,
     maxChunkHeight: maxPageContentHeight,
     idPrefix: section.id,
+    startIndex: 0,
+    fullSourceItems: sectionItems,
   });
 }
 
@@ -466,6 +818,7 @@ interface CVPreviewCanvasProps {
   sections: CVSection[];
   selectedSectionId: string | null;
   onSelectSection: (id: string | null) => void;
+  onSelectSectionItem?: (selection: CVSelectedSectionItem | null) => void;
   onUpdateSectionData: (sectionId: string, updates: Record<string, unknown>) => void;
   onRequestAddSection?: (sectionId: string, position: "above" | "below") => void;
   onRemoveSection?: (sectionId: string) => void;
@@ -479,6 +832,7 @@ export function CVPreviewCanvas({
   sections,
   selectedSectionId,
   onSelectSection,
+  onSelectSectionItem,
   onUpdateSectionData,
   onRequestAddSection,
   onRemoveSection,
@@ -490,13 +844,14 @@ export function CVPreviewCanvas({
   const themeBodyFont = useCVStore((state) => state.cv.theme.fonts.body);
   const themeSpacing = useCVStore((state) => state.cv.theme.spacing);
   const template = useMemo(() => getTemplateConfig(templateId), [templateId]);
+  const isTealFamily = template.visualFamily === "teal";
   const visibleContentSectionCount = useMemo(
     () => sections.filter((section) => section.isVisible && section.type !== "header" && section.type !== "personal_info").length,
     [sections],
   );
-  const forceSinglePage = template.id === "teal-timeline" && visibleContentSectionCount <= 3;
-  const headerSectionGapPx = template.id === "teal-timeline" ? 10 : HEADER_SECTION_GAP_PX;
-  const headerSectionGapClassName = template.id === "teal-timeline" ? "mt-2.5" : "mt-5";
+  const forceSinglePage = isTealFamily && visibleContentSectionCount <= 3;
+  const headerSectionGapPx = isTealFamily ? 10 : HEADER_SECTION_GAP_PX;
+  const headerSectionGapClassName = isTealFamily ? "mt-2.5" : "mt-5";
   const previewFontFamilyClassName = useMemo(
     () => resolvePreviewFontFamilyClass(String(themeBodyFont || "Arial")),
     [themeBodyFont],
@@ -510,14 +865,122 @@ export function CVPreviewCanvas({
     () => orderPreviewSections(previewData.sections, template.sectionOrder),
     [previewData.sections, template.sectionOrder],
   );
+  const bodyLayout = template.bodyLayout;
+  const isTwoColumnBody = bodyLayout?.mode === "two-column";
+  const bodyColumnGridClassName = useMemo(
+    () => resolveTwoColumnGridClass(bodyLayout),
+    [bodyLayout],
+  );
+  const bodyColumnGapClassName = bodyLayout?.columnGapClassName ?? "gap-4";
+
+  const leftColumnSectionTypeSet = useMemo(
+    () => new Set(bodyLayout?.leftColumnSectionTypes ?? []),
+    [bodyLayout?.leftColumnSectionTypes],
+  );
+  const rightColumnSectionTypeSet = useMemo(
+    () => new Set(bodyLayout?.rightColumnSectionTypes ?? []),
+    [bodyLayout?.rightColumnSectionTypes],
+  );
+
+  const summaryInHeaderState = useMemo(() => {
+    if (!template.headerLayout.summaryInHeader) {
+      return {
+        summary: null as CVHeaderSummaryContentData | null,
+        sourceSectionId: null as string | null,
+      };
+    }
+
+    const summarySection = orderedSections.find((section) => section.type === "summary" && section.visible);
+    if (!summarySection) {
+      return {
+        summary: null as CVHeaderSummaryContentData | null,
+        sourceSectionId: null as string | null,
+      };
+    }
+
+    const summary = extractSummaryForHeader({
+      section: summarySection,
+      layout: {
+        summaryTitle: template.headerLayout.summaryTitle,
+        summaryMaxBullets: template.headerLayout.summaryMaxBullets,
+      },
+    });
+
+    if (!summary) {
+      return {
+        summary: null as CVHeaderSummaryContentData | null,
+        sourceSectionId: null as string | null,
+      };
+    }
+
+    return {
+      summary,
+      sourceSectionId: summarySection.id,
+    };
+  }, [
+    orderedSections,
+    template.headerLayout.summaryInHeader,
+    template.headerLayout.summaryMaxBullets,
+    template.headerLayout.summaryTitle,
+  ]);
+
+  const renderedSections = useMemo(() => {
+    if (!summaryInHeaderState.sourceSectionId) {
+      return orderedSections;
+    }
+
+    return orderedSections.filter((section) => section.id !== summaryInHeaderState.sourceSectionId);
+  }, [orderedSections, summaryInHeaderState.sourceSectionId]);
+
+  const resolveBodyColumnForSection = useCallback((section: CVPreviewSection): BodyColumn => {
+    if (!isTwoColumnBody) {
+      return "left";
+    }
+
+    if (leftColumnSectionTypeSet.has(section.type)) {
+      return "left";
+    }
+
+    if (rightColumnSectionTypeSet.has(section.type)) {
+      return "right";
+    }
+
+    if (bodyLayout?.columnRatio === "left-wide" && rightColumnSectionTypeSet.size > 0) {
+      return "left";
+    }
+
+    return "right";
+  }, [bodyLayout?.columnRatio, isTwoColumnBody, leftColumnSectionTypeSet, rightColumnSectionTypeSet]);
+
+  const sourceSectionById = useMemo(() => {
+    const entries = sections.map((section) => [section.id, section] as const);
+    return new Map<string, CVSection>(entries);
+  }, [sections]);
 
   const measurePaperRef = useRef<HTMLDivElement | null>(null);
   const measureHeaderRef = useRef<HTMLDivElement | null>(null);
   const measureSectionsContainerRef = useRef<HTMLDivElement | null>(null);
+  const measureLeftColumnRef = useRef<HTMLDivElement | null>(null);
+  const measureRightColumnRef = useRef<HTMLDivElement | null>(null);
   const measureSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const lastItemSelectionKeyRef = useRef<string>("null");
   const [paginatedPages, setPaginatedPages] = useState<PreviewPage[]>([]);
   const [singlePageZoomClassName, setSinglePageZoomClassName] = useState(SINGLE_PAGE_ZOOM_DEFAULT_CLASS);
   const [tealPaginateForReadability, setTealPaginateForReadability] = useState(false);
+
+  const emitItemSelection = (selection: CVSelectedSectionItem | null) => {
+    if (!onSelectSectionItem) {
+      return;
+    }
+
+    const nextKey = toSelectionKey(selection);
+    if (lastItemSelectionKeyRef.current === nextKey) {
+      return;
+    }
+
+    lastItemSelectionKeyRef.current = nextKey;
+    onSelectSectionItem(selection);
+  };
 
   const headerSection = sections.find((section) => section.type === "header");
   const personalInfoSection = sections.find((section) => section.type === "personal_info");
@@ -526,11 +989,13 @@ export function CVPreviewCanvas({
 
   const selectHeader = () => {
     if (headerSection) {
+      emitItemSelection(null);
       onSelectSection(headerSection.id);
       return;
     }
 
     if (personalInfoSection) {
+      emitItemSelection(null);
       onSelectSection(personalInfoSection.id);
     }
   };
@@ -539,7 +1004,7 @@ export function CVPreviewCanvas({
     const recalculatePages = () => {
       const paperElement = measurePaperRef.current;
 
-      const fallbackBlocks: RenderSectionBlock[] = orderedSections.map((section, index) => ({
+      const fallbackBlocks: RenderSectionBlock[] = renderedSections.map((section, index) => ({
         id: `${section.id}__fallback_${index + 1}`,
         section,
         height: 1,
@@ -554,7 +1019,7 @@ export function CVPreviewCanvas({
         ];
 
         setPaginatedPages((previousPages) =>
-          arePagesEqual(previousPages, fallbackPages) ? previousPages : fallbackPages,
+          shouldReusePaginatedPages(previousPages, fallbackPages) ? previousPages : fallbackPages,
         );
         return;
       }
@@ -572,9 +1037,15 @@ export function CVPreviewCanvas({
       );
 
       const headerHeight = hasHeader ? Math.max(1, measureHeaderRef.current?.offsetHeight ?? 0) : 0;
-      const sectionGap = measureSectionGap(measureSectionsContainerRef.current);
+      const sectionGap = isTwoColumnBody
+        ? Math.max(
+            measureSectionGap(measureLeftColumnRef.current),
+            measureSectionGap(measureRightColumnRef.current),
+            measureSectionGap(measureSectionsContainerRef.current),
+          )
+        : measureSectionGap(measureSectionsContainerRef.current);
 
-      const blocks = orderedSections.flatMap((section) => {
+      const blocks = renderedSections.flatMap((section) => {
         const sectionNode = measureSectionRefs.current[section.id];
         const sectionHeight = Math.max(1, sectionNode?.offsetHeight ?? 1);
 
@@ -623,7 +1094,7 @@ export function CVPreviewCanvas({
           ];
 
           setPaginatedPages((previousPages) =>
-            arePagesEqual(previousPages, singlePage) ? previousPages : singlePage,
+            shouldReusePaginatedPages(previousPages, singlePage) ? previousPages : singlePage,
           );
           return;
         }
@@ -641,6 +1112,126 @@ export function CVPreviewCanvas({
           ? previousClassName
           : SINGLE_PAGE_ZOOM_DEFAULT_CLASS,
       );
+
+      if (isTwoColumnBody) {
+        const computedPages: PreviewPage[] = [];
+        let currentPage: PreviewPage = {
+          includeHeader: hasHeader,
+          blocks: [],
+        };
+        let leftBlockCount = 0;
+        let rightBlockCount = 0;
+        let leftRemainingHeight = maxPageContentHeight - (hasHeader ? headerHeight + headerSectionGapPx : 0);
+        let rightRemainingHeight = maxPageContentHeight - (hasHeader ? headerHeight + headerSectionGapPx : 0);
+
+        leftRemainingHeight = Math.max(80, leftRemainingHeight);
+        rightRemainingHeight = Math.max(80, rightRemainingHeight);
+
+        const startNextPage = () => {
+          currentPage = {
+            includeHeader: false,
+            blocks: [],
+          };
+          leftBlockCount = 0;
+          rightBlockCount = 0;
+          leftRemainingHeight = maxPageContentHeight;
+          rightRemainingHeight = maxPageContentHeight;
+        };
+
+        const pushCurrentPageIfNeeded = () => {
+          if (currentPage.blocks.length > 0 || currentPage.includeHeader) {
+            computedPages.push(currentPage);
+          }
+        };
+
+        const blockQueue = [...blocks];
+
+        while (blockQueue.length > 0) {
+          const block = blockQueue.shift();
+          if (!block) {
+            continue;
+          }
+
+          const targetColumn = resolveBodyColumnForSection(block.section);
+          const isLeftColumn = targetColumn === "left";
+          const targetCount = isLeftColumn ? leftBlockCount : rightBlockCount;
+          const targetRemainingHeight = isLeftColumn ? leftRemainingHeight : rightRemainingHeight;
+          const sectionGapBeforeBlock = targetCount > 0 ? sectionGap : 0;
+          const requiredHeight = block.height + sectionGapBeforeBlock;
+
+          if (requiredHeight > targetRemainingHeight) {
+            const availableBlockHeight = Math.max(0, targetRemainingHeight - sectionGapBeforeBlock);
+            const splitResult = splitBlockToFitRemaining({
+              block,
+              availableHeight: availableBlockHeight,
+              maxPageContentHeight,
+            });
+
+            if (splitResult) {
+              currentPage.blocks.push(splitResult.headBlock);
+
+              if (isLeftColumn) {
+                leftBlockCount += 1;
+                leftRemainingHeight -= splitResult.headBlock.height + sectionGapBeforeBlock;
+              } else {
+                rightBlockCount += 1;
+                rightRemainingHeight -= splitResult.headBlock.height + sectionGapBeforeBlock;
+              }
+
+              pushCurrentPageIfNeeded();
+              startNextPage();
+              blockQueue.unshift(...splitResult.tailBlocks);
+              continue;
+            }
+
+            if (currentPage.blocks.length === 0 && currentPage.includeHeader) {
+              startNextPage();
+              blockQueue.unshift(block);
+              continue;
+            }
+
+            if (currentPage.blocks.length === 0) {
+              currentPage.blocks.push(block);
+
+              if (isLeftColumn) {
+                leftBlockCount += 1;
+                leftRemainingHeight = 0;
+              } else {
+                rightBlockCount += 1;
+                rightRemainingHeight = 0;
+              }
+
+              pushCurrentPageIfNeeded();
+              startNextPage();
+              continue;
+            }
+
+            pushCurrentPageIfNeeded();
+            startNextPage();
+            blockQueue.unshift(block);
+            continue;
+          }
+
+          currentPage.blocks.push(block);
+
+          if (isLeftColumn) {
+            leftBlockCount += 1;
+            leftRemainingHeight -= requiredHeight;
+          } else {
+            rightBlockCount += 1;
+            rightRemainingHeight -= requiredHeight;
+          }
+        }
+
+        if (currentPage.blocks.length > 0 || currentPage.includeHeader || computedPages.length === 0) {
+          computedPages.push(currentPage);
+        }
+
+        setPaginatedPages((previousPages) =>
+          shouldReusePaginatedPages(previousPages, computedPages) ? previousPages : computedPages,
+        );
+        return;
+      }
 
       const computedPages: PreviewPage[] = [];
       let currentPage: PreviewPage = {
@@ -703,7 +1294,7 @@ export function CVPreviewCanvas({
       }
 
       setPaginatedPages((previousPages) =>
-        arePagesEqual(previousPages, computedPages) ? previousPages : computedPages,
+        shouldReusePaginatedPages(previousPages, computedPages) ? previousPages : computedPages,
       );
     };
 
@@ -713,7 +1304,18 @@ export function CVPreviewCanvas({
     return () => {
       window.removeEventListener("resize", recalculatePages);
     };
-  }, [forceSinglePage, hasHeader, headerSectionGapPx, orderedSections, sections, template]);
+  }, [
+    forceSinglePage,
+    hasHeader,
+    headerSectionGapPx,
+    isTwoColumnBody,
+    previewBodyTextClassName,
+    previewFontFamilyClassName,
+    renderedSections,
+    resolveBodyColumnForSection,
+    sections,
+    template,
+  ]);
 
   const handleHeaderEdit = (field: "fullName" | "headline", value: string) => {
     if (!headerSection) {
@@ -742,7 +1344,7 @@ export function CVPreviewCanvas({
       : [
           {
             includeHeader: hasHeader,
-            blocks: orderedSections.map((section, index) => ({
+            blocks: renderedSections.map((section, index) => ({
               id: `${section.id}__initial_${index + 1}`,
               section,
               height: 1,
@@ -766,7 +1368,128 @@ export function CVPreviewCanvas({
       return;
     }
 
+    emitItemSelection(null);
     onSelectSection(null);
+  };
+
+  const renderPreviewBlock = (block: RenderSectionBlock) => {
+    const blockSection = block.section;
+    const splitContext = getSectionSplitContext(blockSection);
+    const isSplitContinuation = splitContext?.isContinuation === true;
+    const isActive = isPreviewBlockActive(selectedSectionId, blockSection);
+    const sourceSection = sourceSectionById.get(blockSection.sourceSectionId);
+    const styleConfig = resolveSectionStyleConfig(
+      template,
+      blockSection.type,
+      blockSection.title,
+      (sourceSection?.data as { icon?: unknown } | undefined)?.icon,
+    );
+
+    return (
+      <div
+        key={block.id}
+        className="break-inside-avoid-page print:break-inside-avoid-page"
+        onMouseDownCapture={(event) => {
+          if (mode !== "edit" || !onSelectSectionItem) {
+            return;
+          }
+
+          const target = event.target as HTMLElement;
+          if (target.closest("[data-cv-section-action='true']")) {
+            return;
+          }
+
+          const selection = resolveItemSelectionFromTarget({
+            target: event.target,
+            sectionContainer: event.currentTarget,
+            blockSection,
+            sourceSection,
+          });
+
+          emitItemSelection(selection);
+        }}
+        onFocusCapture={(event) => {
+          if (mode !== "edit" || !onSelectSectionItem) {
+            return;
+          }
+
+          const selection = resolveItemSelectionFromTarget({
+            target: event.target,
+            sectionContainer: event.currentTarget,
+            blockSection,
+            sourceSection,
+          });
+
+          emitItemSelection(selection);
+        }}
+      >
+        <CVSectionRenderer
+          section={blockSection}
+          styleConfig={styleConfig}
+          template={template}
+          mode={mode}
+          isActive={isActive}
+          onSelectSection={onSelectSection}
+          onUpdateSectionData={(sectionId, updates) => {
+            const updatedItems = (updates as { items?: unknown }).items;
+            if (!splitContext || !Array.isArray(updatedItems) || updatedItems.length >= splitContext.totalCount) {
+              onUpdateSectionData(sectionId, updates);
+              return;
+            }
+
+            const sourceSectionEntry = sections.find((entry) => entry.id === sectionId);
+            const sourceSectionItems = Array.isArray((sourceSectionEntry?.data as { items?: unknown }).items)
+              ? ((sourceSectionEntry?.data as { items: unknown[] }).items)
+              : splitContext.sourceItems;
+            onUpdateSectionData(sectionId, {
+              ...updates,
+              items: mergeSplitChunkItems({
+                sourceItems: sourceSectionItems,
+                splitContext,
+                chunkItems: updatedItems,
+              }),
+            });
+          }}
+          onRequestAddSection={isSplitContinuation ? undefined : onRequestAddSection}
+          onRemoveSection={isSplitContinuation ? undefined : onRemoveSection}
+          onMoveSectionUp={isSplitContinuation ? undefined : onMoveSectionUp}
+          onMoveSectionDown={isSplitContinuation ? undefined : onMoveSectionDown}
+        />
+      </div>
+    );
+  };
+
+  const renderMeasureSection = (section: CVPreviewSection) => {
+    const sourceSection = sourceSectionById.get(section.sourceSectionId);
+    const styleConfig = resolveSectionStyleConfig(
+      template,
+      section.type,
+      section.title,
+      (sourceSection?.data as { icon?: unknown } | undefined)?.icon,
+    );
+
+    return (
+      <div
+        key={`measure-${section.id}`}
+        ref={(node) => {
+          measureSectionRefs.current[section.id] = node;
+        }}
+      >
+        <CVSectionRenderer
+          section={section}
+          styleConfig={styleConfig}
+          template={template}
+          mode="preview"
+          isActive={false}
+          onSelectSection={() => undefined}
+          onUpdateSectionData={() => undefined}
+          onRequestAddSection={undefined}
+          onRemoveSection={undefined}
+          onMoveSectionUp={undefined}
+          onMoveSectionDown={undefined}
+        />
+      </div>
+    );
   };
 
   return (
@@ -794,6 +1517,7 @@ export function CVPreviewCanvas({
                       template={template}
                       header={previewData.header}
                       contact={previewData.contact}
+                      summary={summaryInHeaderState.summary ?? undefined}
                       selected={headerSelected}
                       onSelect={selectHeader}
                       onEditHeader={handleHeaderEdit}
@@ -802,47 +1526,40 @@ export function CVPreviewCanvas({
                   ) : null}
 
                   {page.blocks.length > 0 ? (
-                    <div
-                      className={cn(
-                        page.includeHeader ? headerSectionGapClassName : "",
-                        template.spacingRules.sectionGapClassName,
-                      )}
-                    >
-                      {page.blocks.map((block) => {
-                        const blockSection = block.section;
-                        const isActive = selectedSectionId === blockSection.sourceSectionId;
-                        const styleConfig = resolveSectionStyleConfig(
-                          template,
-                          blockSection.type,
-                          blockSection.title,
-                        );
-
-                        return (
-                          <div
-                            key={block.id}
-                            className="break-inside-avoid-page print:break-inside-avoid-page"
-                          >
-                            <CVSectionRenderer
-                              section={blockSection}
-                              styleConfig={styleConfig}
-                              template={template}
-                              mode={mode}
-                              isActive={isActive}
-                              onSelectSection={onSelectSection}
-                              onUpdateSectionData={onUpdateSectionData}
-                              onRequestAddSection={onRequestAddSection}
-                              onRemoveSection={onRemoveSection}
-                              onMoveSectionUp={onMoveSectionUp}
-                              onMoveSectionDown={onMoveSectionDown}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
+                    isTwoColumnBody ? (
+                      <div
+                        className={cn(
+                          page.includeHeader ? headerSectionGapClassName : "",
+                          "grid items-start",
+                          bodyColumnGridClassName,
+                          bodyColumnGapClassName,
+                        )}
+                      >
+                        <div className={template.spacingRules.sectionGapClassName}>
+                          {page.blocks
+                            .filter((block) => resolveBodyColumnForSection(block.section) === "left")
+                            .map(renderPreviewBlock)}
+                        </div>
+                        <div className={template.spacingRules.sectionGapClassName}>
+                          {page.blocks
+                            .filter((block) => resolveBodyColumnForSection(block.section) === "right")
+                            .map(renderPreviewBlock)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className={cn(
+                          page.includeHeader ? headerSectionGapClassName : "",
+                          template.spacingRules.sectionGapClassName,
+                        )}
+                      >
+                        {page.blocks.map(renderPreviewBlock)}
+                      </div>
+                    )
                   ) : null}
                 </div>
 
-                {template.id === "teal-timeline" ? (
+                {isTealFamily ? (
                   <footer
                     className={cn(
                       "pointer-events-none absolute inset-x-3 bottom-2 flex items-end justify-between text-[11px] font-semibold",
@@ -878,6 +1595,8 @@ export function CVPreviewCanvas({
             template.pageSettings.paperPaddingClassName,
             template.typographySettings.bodyFontClassName,
             template.typographySettings.bodyTextClassName,
+            previewFontFamilyClassName,
+            previewBodyTextClassName,
             template.colorPalette.pageTextClassName,
           )}
         >
@@ -887,6 +1606,7 @@ export function CVPreviewCanvas({
                 template={template}
                 header={previewData.header}
                 contact={previewData.contact}
+                summary={summaryInHeaderState.summary ?? undefined}
                 selected={false}
                 onSelect={() => undefined}
                 onEditHeader={() => undefined}
@@ -895,37 +1615,35 @@ export function CVPreviewCanvas({
             </div>
           ) : null}
 
-          <div
-            ref={measureSectionsContainerRef}
-            className={cn(hasHeader ? headerSectionGapClassName : "", template.spacingRules.sectionGapClassName)}
-          >
-            {orderedSections.map((section) => {
-              const styleConfig = resolveSectionStyleConfig(template, section.type, section.title);
-
-              return (
-                <div
-                  key={`measure-${section.id}`}
-                  ref={(node) => {
-                    measureSectionRefs.current[section.id] = node;
-                  }}
-                >
-                  <CVSectionRenderer
-                    section={section}
-                    styleConfig={styleConfig}
-                    template={template}
-                    mode="preview"
-                    isActive={false}
-                    onSelectSection={() => undefined}
-                    onUpdateSectionData={() => undefined}
-                    onRequestAddSection={undefined}
-                    onRemoveSection={undefined}
-                    onMoveSectionUp={undefined}
-                    onMoveSectionDown={undefined}
-                  />
-                </div>
-              );
-            })}
-          </div>
+          {isTwoColumnBody ? (
+            <div
+              ref={measureSectionsContainerRef}
+              className={cn(
+                hasHeader ? headerSectionGapClassName : "",
+                "grid items-start",
+                bodyColumnGridClassName,
+                bodyColumnGapClassName,
+              )}
+            >
+              <div ref={measureLeftColumnRef} className={template.spacingRules.sectionGapClassName}>
+                {renderedSections
+                  .filter((section) => resolveBodyColumnForSection(section) === "left")
+                  .map(renderMeasureSection)}
+              </div>
+              <div ref={measureRightColumnRef} className={template.spacingRules.sectionGapClassName}>
+                {renderedSections
+                  .filter((section) => resolveBodyColumnForSection(section) === "right")
+                  .map(renderMeasureSection)}
+              </div>
+            </div>
+          ) : (
+            <div
+              ref={measureSectionsContainerRef}
+              className={cn(hasHeader ? headerSectionGapClassName : "", template.spacingRules.sectionGapClassName)}
+            >
+              {renderedSections.map(renderMeasureSection)}
+            </div>
+          )}
         </div>
       </div>
     </>

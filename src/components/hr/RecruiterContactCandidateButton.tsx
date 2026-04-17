@@ -184,7 +184,7 @@ export function RecruiterContactCandidateButton({
           ? "Đã gửi email liên hệ đến ứng viên thành công."
           : result.candidateHasEmail === false
             ? "Ứng viên chưa công khai email. Hệ thống đã lưu thông báo liên hệ cho ứng viên."
-            : "Đã gửi lời mời liên hệ thành công."
+            : "Đã lưu lời mời liên hệ, nhưng EMAIL_MODE=test nên chỉ gửi được địa chỉ đuôi .test."
       );
       setFieldErrors({});
     } catch (submitError) {

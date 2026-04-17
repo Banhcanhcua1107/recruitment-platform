@@ -2,9 +2,27 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
-const baseUrl = 'http://localhost:3001';
+const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
 const outDir = path.join(process.cwd(), 'artifacts', 'responsive-qa');
 const statePath = path.join(outDir, 'hr-auth-state.json');
+const sharedPassword = process.env.EMAIL_TESTING_SYNC_PASSWORD || 'TalentFlowTest#2026';
+const fallbackHrAccounts = [
+    'recruiter01@gmail.test',
+    'recruiter02@gmail.test',
+    'recruiter03@gmail.test',
+];
+
+async function syncFakeAccounts(page) {
+    const response = await page.request.post(`${baseUrl}/api/fake-accounts/sync-recruitment`, {
+        data: {},
+        timeout: 120000,
+    });
+
+    if (!response.ok()) {
+        const body = await response.text();
+        throw new Error(`Failed to sync fake accounts: ${response.status()} ${body}`);
+    }
+}
 
 async function ensureLogin(browser) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -22,32 +40,16 @@ async function ensureLogin(browser) {
         return !page.url().includes('/login');
     };
 
-    let isLoggedIn = await attemptLogin('hr@talentflow.local', 'Password123!');
+    let isLoggedIn = await attemptLogin('recruiter01@gmail.test', sharedPassword);
 
     if (!isLoggedIn) {
-        const seed = Date.now();
-        const tempEmail = `autotest.hr.${seed}@example.com`;
-        const tempPassword = 'Password123!';
-
-        await page.goto(`${baseUrl}/register`, { waitUntil: 'domcontentloaded' });
-        await page.locator('form .grid.grid-cols-2 button').nth(1).click();
-        await page.locator('#fullname').fill('Auto QA HR');
-        await page.locator('#email').fill(tempEmail);
-        await page.locator('#password').fill(tempPassword);
-        await page.locator('#confirmPassword').fill(tempPassword);
-        await page.locator('form button', { hasText: 'Tạo tài khoản miễn phí' }).first().click();
-        await page.waitForTimeout(2500);
-        await page.waitForLoadState('networkidle');
-
-        if (page.url().includes('/register')) {
-            const otpTitle = page.getByText(/Xác thực tài khoản/i);
-            if (await otpTitle.count()) {
-                await page.screenshot({ path: path.join(outDir, 'debug-register-otp-required.png'), fullPage: true });
-                throw new Error('Registration requires OTP verification, cannot auto-login for HR screenshots.');
+        await syncFakeAccounts(page);
+        for (const email of fallbackHrAccounts) {
+            isLoggedIn = await attemptLogin(email, sharedPassword);
+            if (isLoggedIn) {
+                break;
             }
         }
-
-        isLoggedIn = !page.url().includes('/login') && !page.url().includes('/register');
     }
 
     if (!isLoggedIn) {

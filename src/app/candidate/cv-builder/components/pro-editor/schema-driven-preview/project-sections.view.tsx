@@ -44,7 +44,7 @@ const labelCellClassName =
 const valueCellClassName = "border border-slate-300 px-2.5 py-1.5 align-top";
 
 function renderSubSectionType(subSection: ProjectSubSection) {
-  return subSection.type === "info" ? "Info" : "List";
+  return subSection.type === "info" ? "Thông tin" : "Danh sách";
 }
 
 function ProjectGroupEditor({
@@ -72,7 +72,7 @@ function ProjectGroupEditor({
             <div className="flex-1">
               <EditableText
                 value={subSection.label}
-                placeholder="Sub-section label"
+                placeholder="Nhãn mục con"
                 isSectionActive={isSectionActive}
                 onCommit={(nextLabel) => {
                   onChange(
@@ -93,7 +93,7 @@ function ProjectGroupEditor({
                 type="button"
                 onClick={() => onChange(removeGroupSubSection(projects, projectId, group.id, subSection.id))}
                 className="inline-flex h-6 w-6 items-center justify-center text-slate-400 hover:text-rose-600"
-                title="Xóa sub-section"
+                title="Xóa mục con"
               >
                 <Trash2 size={11} />
               </button>
@@ -145,7 +145,7 @@ function ProjectGroupEditor({
             className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
           >
             <Plus size={11} />
-            Sub info
+            Thêm thông tin con
           </button>
           <button
             type="button"
@@ -153,7 +153,7 @@ function ProjectGroupEditor({
             className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
           >
             <Plus size={11} />
-            Sub list
+            Thêm danh sách con
           </button>
         </div>
       ) : null}
@@ -211,7 +211,7 @@ function ProjectSectionRow({
           <div className="flex-1">
             <EditableText
               value={section.label}
-              placeholder="Section label"
+              placeholder="Nhãn trường"
               isSectionActive={isSectionActive}
               onCommit={(nextLabel) => {
                 onChange(updateProjectSection(projects, project.id, section.id, { label: nextLabel }));
@@ -228,7 +228,7 @@ function ProjectSectionRow({
               type="button"
               onClick={() => onChange(removeProjectSection(projects, project.id, section.id))}
               className="inline-flex h-5 w-5 items-center justify-center text-slate-400 hover:text-rose-600"
-              title="Xóa section"
+              title="Xóa trường"
             >
               <Trash2 size={11} />
             </button>
@@ -294,7 +294,7 @@ function ProjectStackedLayout({
   return (
     <div className="space-y-2">
       <div className="rounded-md border border-slate-300 bg-slate-50/70 px-2.5 py-2 text-[12px] text-slate-700">
-        <span className="font-semibold">Duration: </span>
+        <span className="font-semibold">Thời gian: </span>
         <span>{project.duration.from || "--"}</span>
         <span className="mx-1">-</span>
         <span>{project.duration.to || "--"}</span>
@@ -305,7 +305,7 @@ function ProjectStackedLayout({
           <div className="mb-1.5 flex items-start justify-between gap-2">
             <EditableText
               value={section.label}
-              placeholder="Section label"
+              placeholder="Nhãn trường"
               isSectionActive={isSectionActive}
               onCommit={(nextLabel) => {
                 onChange(updateProjectSection(projects, project.id, section.id, { label: nextLabel }));
@@ -320,7 +320,7 @@ function ProjectStackedLayout({
                 type="button"
                 onClick={() => onChange(removeProjectSection(projects, project.id, section.id))}
                 className="inline-flex h-5 w-5 items-center justify-center text-slate-400 hover:text-rose-600"
-                title="Xóa section"
+                title="Xóa trường"
               >
                 <Trash2 size={11} />
               </button>
@@ -395,11 +395,16 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
   };
 
   return (
-    <div className="group/project-item relative text-[12px] text-slate-800">
+    <div
+      className="group/project-item relative text-[12px] text-slate-800"
+      data-cv-split-item="true"
+      data-cv-item-id={project.id || ""}
+      data-cv-item-index={index}
+    >
       <div className="mb-1.5 flex items-start gap-2">
         <EditableText
           value={project.projectName}
-          placeholder={`PROJECT ${index + 1}`}
+          placeholder={`DỰ ÁN ${index + 1}`}
           isSectionActive={isSectionActive}
           onCommit={(nextValue) => onChange(updateProjectName(projects, project.id, nextValue))}
           multiline={false}
@@ -420,7 +425,7 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
                   : "border-slate-300 text-slate-600 hover:border-teal-300 hover:text-teal-700",
               )}
             >
-              Table
+              Bảng
             </button>
             <button
               type="button"
@@ -432,7 +437,7 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
                   : "border-slate-300 text-slate-600 hover:border-teal-300 hover:text-teal-700",
               )}
             >
-              Stacked
+              Khối
             </button>
             <button
               type="button"
@@ -457,7 +462,7 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
         <table className="w-full border-collapse text-[12px]">
           <tbody>
             <tr>
-              <td className={labelCellClassName}>Duration</td>
+              <td className={labelCellClassName}>Thời gian</td>
               <td className={valueCellClassName}>
                 <div className="flex flex-wrap items-center gap-1">
                   <EditableText
@@ -475,7 +480,7 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
                   <span className="text-slate-500">-</span>
                   <EditableText
                     value={project.duration.to}
-                    placeholder="Present"
+                    placeholder="Hiện tại"
                     isSectionActive={isSectionActive}
                     onCommit={(nextValue) => {
                       onChange(updateProjectDuration(projects, project.id, "to", nextValue));
@@ -526,7 +531,7 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
             className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
           >
             <Plus size={11} />
-            Add info
+            Thêm thông tin
           </button>
           <button
             type="button"
@@ -534,7 +539,7 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
             className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
           >
             <Plus size={11} />
-            Add list
+            Thêm danh sách
           </button>
           <button
             type="button"
@@ -542,7 +547,7 @@ function ProjectItem({ project, index, projects, isSectionActive, onChange }: Pr
             className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:border-teal-300 hover:bg-teal-50 hover:text-teal-700"
           >
             <Plus size={11} />
-            Add group
+            Thêm nhóm
           </button>
         </div>
       ) : null}

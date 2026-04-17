@@ -1,0 +1,144 @@
+{
+  "providedTarget": {
+    "url": "http://localhost:3000/candidate/cv-builder/9c92e112-40da-44eb-84d3-cc9488236348/edit",
+    "finalUrl": "http://localhost:3000/candidate/cv-builder/9c92e112-40da-44eb-84d3-cc9488236348/edit",
+    "accessible": false,
+    "containsNotFoundMessage": true
+  },
+  "runtimeRoute": "http://localhost:3001/candidate/cv-builder/cd9fc798-b29e-421a-8eca-ecbe042b7c02/edit",
+  "sectionsFound": [
+    {
+      "index": 1,
+      "label": "Chọn mục Tổng quan",
+      "plain": "Chọn mục Tổng quan",
+      "norm": "chon muc tong quan"
+    },
+    {
+      "index": 2,
+      "label": "Chọn mục Kinh nghiệm làm việc",
+      "plain": "Chọn mục Kinh nghiệm làm việc",
+      "norm": "chon muc kinh nghiem lam viec"
+    },
+    {
+      "index": 3,
+      "label": "Chọn mục Học vấn",
+      "plain": "Chọn mục Học vấn",
+      "norm": "chon muc hoc van"
+    },
+    {
+      "index": 4,
+      "label": "Chọn mục Kỹ năng",
+      "plain": "Chọn mục Kỹ năng",
+      "norm": "chon muc ky nang"
+    },
+    {
+      "index": 5,
+      "label": "Chọn mục Giải thưởng",
+      "plain": "Chọn mục Giải thưởng",
+      "norm": "chon muc giai thuong"
+    },
+    {
+      "index": 6,
+      "label": "Chọn mục Dự án",
+      "plain": "Chọn mục Dự án",
+      "norm": "chon muc du an"
+    },
+    {
+      "index": 7,
+      "label": "Chọn mục Dự án",
+      "plain": "Chọn mục Dự án",
+      "norm": "chon muc du an"
+    },
+    {
+      "index": 8,
+      "label": "Chọn mục Dự án",
+      "plain": "Chọn mục Dự án",
+      "norm": "chon muc du an"
+    },
+    {
+      "index": 10,
+      "label": "Chọn mục Tổng quan",
+      "plain": "Chọn mục Tổng quan",
+      "norm": "chon muc tong quan"
+    },
+    {
+      "index": 11,
+      "label": "Chọn mục Kinh nghiệm làm việc",
+      "plain": "Chọn mục Kinh nghiệm làm việc",
+      "norm": "chon muc kinh nghiem lam viec"
+    },
+    {
+      "index": 12,
+      "label": "Chọn mục Học vấn",
+      "plain": "Chọn mục Học vấn",
+      "norm": "chon muc hoc van"
+    },
+    {
+      "index": 13,
+      "label": "Chọn mục Kỹ năng",
+      "plain": "Chọn mục Kỹ năng",
+      "norm": "chon muc ky nang"
+    },
+    {
+      "index": 14,
+      "label": "Chọn mục Giải thưởng",
+      "plain": "Chọn mục Giải thưởng",
+      "norm": "chon muc giai thuong"
+    },
+    {
+      "index": 15,
+      "label": "Chọn mục Dự án",
+      "plain": "Chọn mục Dự án",
+      "norm": "chon muc du an"
+    }
+  ],
+  "sectionChecks": [
+    {
+      "sectionType": "project",
+      "clickedLabel": "Chọn mục Dự án",
+      "outlineText": "Dự án",
+      "outlineSynced": true,
+      "jumpedTop": true,
+      "focusedField": true,
+      "formLabel": "Tên dự án",
+      "formPlaceholder": "CV Builder 2.0",
+      "signatureChanged": true,
+      "scrollTop": 0
+    },
+    {
+      "sectionType": "experience",
+      "clickedLabel": "Chọn mục Kinh nghiệm làm việc",
+      "outlineText": "Kinh nghiệm làm việc",
+      "outlineSynced": true,
+      "jumpedTop": true,
+      "focusedField": true,
+      "formLabel": "Công ty",
+      "formPlaceholder": "F8 TECHNOLOGY EDUCATION.,JSC",
+      "signatureChanged": true,
+      "scrollTop": 0
+    },
+    {
+      "sectionType": "skills",
+      "clickedLabel": "Chọn mục Kỹ năng",
+      "outlineText": "Kỹ năng",
+      "outlineSynced": true,
+      "jumpedTop": true,
+      "focusedField": true,
+      "formLabel": "Kỹ năng",
+      "formPlaceholder": "Frontend: React, Next.js, TypeScript, Tailwind CSS",
+      "signatureChanged": true,
+      "scrollTop": 0
+    }
+  ],
+  "rapidSwitch": {
+    "expectedFinalLabel": "Chọn mục Kỹ năng",
+    "finalOutlineText": "Kỹ năng",
+    "outlineSynced": true,
+    "jumpedTop": true,
+    "focusedField": true,
+    "finalFormLabel": "Kỹ năng",
+    "finalFormPlaceholder": "Frontend: React, Next.js, TypeScript, Tailwind CSS",
+    "scrollTop": 0
+  },
+  "screenshot": "artifacts/responsive-qa/task2-right-panel-sync-runtime.png"
+}

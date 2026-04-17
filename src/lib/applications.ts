@@ -8,6 +8,7 @@ import {
   sendApplicationStatusEmail,
   sendApplicationSubmittedEmails,
 } from "@/lib/email/application-emails";
+import type { ApplicationEmailRecipientDebug } from "@/lib/email/application-emails";
 import { createSystemNotification } from "@/lib/notifications";
 import { renderResumePdfBuffer } from "@/lib/resume-pdf";
 import { applyEmployerBrandingToJob } from "@/lib/employer-branding";
@@ -164,6 +165,17 @@ function normalizeOptionalString(value: unknown) {
   return next || null;
 }
 
+function hasOwnedCvStoragePath(path: unknown, ownerUserId: string) {
+  const normalizedPath = safeTrim(path);
+  const normalizedOwner = safeTrim(ownerUserId);
+
+  if (!normalizedPath || !normalizedOwner) {
+    return false;
+  }
+
+  return normalizedPath.startsWith(`${normalizedOwner}/`);
+}
+
 function buildJobManagementUrl(jobId: string) {
   return `/hr/jobs/${jobId}`;
 }
@@ -297,6 +309,22 @@ async function getAuthenticatedUser() {
   }
 
   return { supabase, user };
+}
+
+async function assertCandidateViewer(supabase: SupabaseClient, userId: string) {
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (profile?.role && profile.role !== "candidate") {
+    throw new Error("Only candidates can access candidate CV options.");
+  }
 }
 
 async function getEmployerBrandingMap(employerIds: string[]) {
@@ -592,18 +620,18 @@ function getEventNameForStatus(status: RecruitmentPipelineStatus) {
 function getCandidateStatusMessage(status: RecruitmentPipelineStatus) {
   switch (status) {
     case "reviewing":
-      return "Ho so cua ban dang duoc bo phan tuyen dung xem xet.";
+      return "Ho so cua ban dang duoc bo phan tuyen dung xem xet. Chung toi se gui thong bao ngay khi co cap nhat tiep theo.";
     case "interview":
-      return "Ban da duoc chuyen sang vong phong van. Nha tuyen dung se lien he lich cu the.";
+      return "Ho so cua ban da duoc chuyen sang vong phong van. Nha tuyen dung se lien he voi ban de thong nhat lich cu the.";
     case "offer":
-      return "Nha tuyen dung da chuyen don cua ban sang giai doan de nghi.";
+      return "Ho so cua ban da duoc chuyen sang giai doan de nghi. Vui long theo doi email va trang quan ly ung tuyen de xem thong tin chi tiet.";
     case "hired":
-      return "Chuc mung ban. Nha tuyen dung da xac nhan ket qua tuyen dung.";
+      return "Chuc mung ban. Nha tuyen dung da xac nhan ket qua tuyen dung cho ho so nay.";
     case "rejected":
-      return "Cam on ban da ung tuyen. Hien tai nha tuyen dung chua the tiep tuc voi ho so nay.";
+      return "Cam on ban da ung tuyen. Hien tai nha tuyen dung chua the tiep tuc voi ho so nay, nhung ban van co the tiep tuc nop ho so cho cac vi tri khac.";
     case "applied":
     default:
-      return "Don ung tuyen cua ban da duoc ghi nhan.";
+      return "Don ung tuyen cua ban da duoc ghi nhan va dang cho nha tuyen dung tiep nhan.";
   }
 }
 
@@ -714,6 +742,11 @@ export async function applyToJob(input: {
 
   if (safeTrim(input.existingCvPath)) {
     const existingCvPath = safeTrim(input.existingCvPath);
+
+    if (!hasOwnedCvStoragePath(existingCvPath, user.id)) {
+      throw new Error("Selected CV does not belong to the current candidate.");
+    }
+
     const [{ data: existingApplicationCv, error: existingApplicationCvError }, { data: existingProfileCv, error: existingProfileCvError }] =
       await Promise.all([
         supabase
@@ -750,6 +783,10 @@ export async function applyToJob(input: {
     filePath = safeTrim(
       existingApplicationCv?.cv_file_path || existingProfileCv?.cv_file_path
     );
+
+    if (!hasOwnedCvStoragePath(filePath, user.id)) {
+      throw new Error("Selected CV does not belong to the current candidate.");
+    }
 
     if (!filePath) {
       throw new Error("Please upload or select a CV");
@@ -875,7 +912,9 @@ export async function applyToJob(input: {
   }
 
   let candidateEmailSent = false;
+  let recruiterEmailSent = false;
   let emailError: string | null = null;
+  let emailDebug: ApplicationEmailRecipientDebug[] = [];
 
   try {
     const companyName = safeTrim(employer?.company_name || job.company_name || "Recruiter");
@@ -894,14 +933,31 @@ export async function applyToJob(input: {
       cvDownloadUrl: internalCvUrl,
     });
     candidateEmailSent = emailResult.candidateEmailSent;
+    recruiterEmailSent = emailResult.recruiterEmailSent;
+    emailDebug = emailResult.emailDebug;
   } catch (error) {
     emailError =
       error instanceof Error ? error.message : "Failed to send application emails.";
+
+    const maybeEmailDebug =
+      typeof error === "object" && error !== null && "emailDebug" in error
+        ? (error as { emailDebug?: ApplicationEmailRecipientDebug[] }).emailDebug
+        : [];
+
+    emailDebug = Array.isArray(maybeEmailDebug) ? maybeEmailDebug : [];
+    recruiterEmailSent = emailDebug.some(
+      (entry) => entry.channel === "recruiter" && entry.success,
+    );
+    candidateEmailSent = emailDebug.some(
+      (entry) => entry.channel === "candidate" && entry.success,
+    );
+
     console.error("Unable to send application emails.", {
       applicationId,
       jobId: job.id,
       filePath,
       error: emailError,
+      emailDebug,
     });
   }
 
@@ -958,7 +1014,9 @@ export async function applyToJob(input: {
     cvUrl: internalCvUrl,
     emailSent: candidateEmailSent,
     candidateEmailSent,
+    recruiterEmailSent,
     emailError,
+    emailDebug,
   };
 }
 
@@ -1003,6 +1061,7 @@ export async function getDownloadUrlForApplication(applicationId: string) {
 
 export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
   const { supabase, user } = await getAuthenticatedUser();
+  await assertCandidateViewer(supabase, user.id);
   const items: CandidateCvOption[] = [];
   const seen = new Set<string>();
 
@@ -1046,12 +1105,11 @@ export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
   }
 
   const profilePath = safeTrim(profileCv?.cv_file_path);
-  if (profilePath && !seen.has(profilePath)) {
+  if (profilePath && hasOwnedCvStoragePath(profilePath, user.id) && !seen.has(profilePath)) {
     seen.add(profilePath);
-    const fileName = profilePath.split("/").pop() || "profile-cv.pdf";
     items.push({
       path: profilePath,
-      label: `CV trong hồ sơ (${fileName})`,
+      label: "CV trong hồ sơ",
       createdAt: String(profileCv?.updated_at || new Date().toISOString()),
       source: "profile",
     });
@@ -1059,21 +1117,20 @@ export async function listCandidateCvOptions(): Promise<CandidateCvOption[]> {
 
   for (const row of applicationCvs ?? []) {
     const path = safeTrim(row.cv_file_path);
-    if (!path || seen.has(path)) {
+    if (!path || seen.has(path) || !hasOwnedCvStoragePath(path, user.id)) {
       continue;
     }
 
     seen.add(path);
     const job = Array.isArray(row.jobs) ? row.jobs[0] : row.jobs;
-    const fileName = path.split("/").pop() || "resume.pdf";
     const jobTitle = safeTrim(job?.title) || "CV đã tải lên";
     const companyName = safeTrim(job?.company_name);
 
     items.push({
       path,
       label: companyName
-        ? `${jobTitle} - ${companyName} (${fileName})`
-        : `${jobTitle} (${fileName})`,
+        ? `${jobTitle} - ${companyName}`
+        : jobTitle,
       createdAt: String(row.created_at || new Date().toISOString()),
       source: "uploaded",
     });
@@ -1205,15 +1262,26 @@ export async function updateApplicationStatusForEmployer(
 
   const candidateEmail = safeTrim(application.email || candidate?.email);
   if (candidateEmail) {
-    await sendApplicationStatusEmail({
-      candidateEmail,
-      candidateName:
-        safeTrim(application.full_name || candidate?.full_name || candidateEmail) || candidateEmail,
-      jobTitle: safeTrim(job.title),
-      companyName: safeTrim(job.company_name || "Recruiter"),
-      statusLabel: APPLICATION_STATUS_LABELS[status],
-      message: getCandidateStatusMessage(status),
-    });
+    try {
+      await sendApplicationStatusEmail({
+        candidateEmail,
+        candidateName:
+          safeTrim(application.full_name || candidate?.full_name || candidateEmail) || candidateEmail,
+        jobTitle: safeTrim(job.title),
+        companyName: safeTrim(job.company_name || "Recruiter"),
+        statusLabel: APPLICATION_STATUS_LABELS[status],
+        message: getCandidateStatusMessage(status),
+      });
+    } catch (emailError) {
+      const message =
+        emailError instanceof Error ? emailError.message : String(emailError ?? "Unknown error");
+
+      console.warn("Unable to deliver application status email.", {
+        applicationId,
+        candidateEmail,
+        error: message,
+      });
+    }
   }
 }
 

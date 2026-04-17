@@ -1,15 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AddSectionModal } from "@/app/candidate/cv-builder/components/pro-editor/AddSectionModal";
 import { EditorTopbar } from "@/app/candidate/cv-builder/components/pro-editor/EditorTopbar";
 import {
   PreviewPanel,
   type PreviewToolbarAction,
 } from "@/app/candidate/cv-builder/components/pro-editor/PreviewPanel";
-import { TemplateList } from "@/app/candidate/cv-builder/components/pro-editor/TemplateList";
+import { EditorRightPanel } from "@/app/candidate/cv-builder/components/pro-editor/EditorRightPanel";
 import { JsonDebugPanel } from "@/app/candidate/cv-builder/components/pro-editor/JsonDebugPanel";
-import type { TemplateListItem } from "@/app/candidate/cv-builder/components/pro-editor/TemplateCard";
 import type { ModalSectionCatalogItem } from "@/app/candidate/cv-builder/components/pro-editor/template-schema";
 import { CV_TEMPLATE_LIBRARY_UI } from "@/components/cv/templates/templateCatalog";
 import type { SectionType } from "../../types";
@@ -23,7 +22,20 @@ const PREVIEW_ZOOM_STEPS = [
   { className: "scale-125", percent: 125 },
 ] as const;
 
-const FONT_CHOICES = ["Arial", "Times New Roman", "Courier New", "Ubuntu", "Amiri", "Cairo"] as const;
+const FONT_CHOICES = [
+  "Arial",
+  "Times New Roman",
+  "Courier New",
+  "Ubuntu",
+  "Amiri",
+  "Cairo",
+  "Manrope",
+  "'Manrope', sans-serif",
+  "'IBM Plex Sans', sans-serif",
+  "'Plus Jakarta Sans', sans-serif",
+  "'Lora', serif",
+  "'Source Sans 3', sans-serif",
+] as const;
 
 const FONT_SIZE_BY_MODE = {
   small: 3.7,
@@ -54,6 +66,7 @@ export interface EditorLayoutProps {
   onUndo: () => void;
   onRedo: () => void;
   onSave: () => void;
+  onRenameResume: (title: string) => void;
   onOpenOCR: () => void;
   onDownload: () => void;
 }
@@ -67,17 +80,22 @@ export function EditorLayout({
   onUndo,
   onRedo,
   onSave,
+  onRenameResume,
   onOpenOCR,
   onDownload,
 }: EditorLayoutProps) {
   const {
     cv,
     selectedSectionId,
+    selectedSectionItem,
     setSelectedSection,
+    setSelectedSectionItem,
     updateSection,
     updateSectionData,
     addSection,
+    addListItem,
     reorderSections,
+    removeListItem,
     removeSection,
     moveSectionUp,
     moveSectionDown,
@@ -95,17 +113,6 @@ export function EditorLayout({
   const activeTemplateId = cv.meta.templateId ?? CV_TEMPLATE_LIBRARY_UI[0]?.id;
   const activeFontFamily = String(cv.theme.fonts.body || FONT_CHOICES[0]);
   const fontSizeMode = resolveFontSizeMode(Number(cv.theme.spacing || FONT_SIZE_BY_MODE.medium));
-
-  const templateItems = useMemo<TemplateListItem[]>(
-    () =>
-      CV_TEMPLATE_LIBRARY_UI.map((template) => ({
-        id: template.id,
-        name: template.name,
-        thumbnail: template.thumbnail,
-        category: template.category,
-      })),
-    [],
-  );
 
   const openGeneralAddModal = () => {
     setInsertPosition(null);
@@ -160,6 +167,22 @@ export function EditorLayout({
 
   const previewToolbarActions: PreviewToolbarAction[] = [];
 
+  const handleSelectSectionFromOutline = (sectionId: string | null) => {
+    setSelectedSection(sectionId);
+    setSelectedSectionItem(null);
+  };
+
+  const handleToggleSectionVisibility = (sectionId: string) => {
+    const section = useCVStore.getState().cv.sections.find((entry) => entry.id === sectionId);
+    if (!section) {
+      return;
+    }
+
+    updateSection(sectionId, {
+      isVisible: !section.isVisible,
+    });
+  };
+
   const handleAddSectionFromCatalog = (item: ModalSectionCatalogItem) => {
     setSelectedSectionType(item.type);
 
@@ -201,7 +224,7 @@ export function EditorLayout({
   };
 
   return (
-    <div className="flex min-h-[calc(100dvh-64px)] flex-col bg-[#f5f6fa] text-slate-900">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f5f6fa] text-slate-900">
       <EditorTopbar
         resumeTitle={resumeTitle}
         saveStatus={saveStatus}
@@ -215,6 +238,7 @@ export function EditorLayout({
         onUndo={onUndo}
         onRedo={onRedo}
         onSave={onSave}
+        onRenameResume={onRenameResume}
         onOpenOCR={onOpenOCR}
         onDownload={onDownload}
         onOpenAddSection={openGeneralAddModal}
@@ -223,9 +247,9 @@ export function EditorLayout({
         onChangeFontSizeMode={handleSelectFontSizeMode}
       />
 
-      <div className="grid w-full flex-1 min-h-0 grid-cols-1 gap-3 px-3 pb-6 pt-4 sm:px-4 lg:grid-cols-[minmax(0,62%)_minmax(0,38%)] lg:gap-3 lg:px-5">
-        <div className="min-h-0">
-          <div className="sticky top-0 h-full min-h-0">
+      <div className="grid w-full min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden px-3 pb-6 pt-4 sm:px-4 lg:grid-cols-[minmax(0,62%)_minmax(0,38%)] lg:gap-3 lg:px-5">
+        <div className="h-full min-h-0 overflow-hidden">
+          <div className="h-full min-h-0 overflow-hidden">
             <PreviewPanel
               controls={previewToolbarActions}
               zoomPercent={PREVIEW_ZOOM_STEPS[zoomStepIndex].percent}
@@ -243,6 +267,7 @@ export function EditorLayout({
               sections={cv.sections}
               selectedSectionId={selectedSectionId}
               onSelectSection={setSelectedSection}
+              onSelectSectionItem={setSelectedSectionItem}
               onUpdateSectionData={updateSectionData}
               onRequestAddSection={openInsertModal}
               onRemoveSection={removeSection}
@@ -253,11 +278,17 @@ export function EditorLayout({
           </div>
         </div>
 
-        <div className="min-h-0">
-          <TemplateList
-            templates={templateItems}
-            activeTemplateId={activeTemplateId}
-            onSelectTemplate={handleChangeTemplate}
+        <div className="h-full min-h-0 overflow-hidden">
+          <EditorRightPanel
+            sections={cv.sections}
+            selectedSectionId={selectedSectionId}
+            selectedSectionItem={selectedSectionItem}
+            onSelectSection={handleSelectSectionFromOutline}
+            onToggleVisibility={handleToggleSectionVisibility}
+            onUpdateSectionData={updateSectionData}
+            onAddListItem={addListItem}
+            onRemoveListItem={removeListItem}
+            onOpenAddSection={openGeneralAddModal}
           />
         </div>
       </div>

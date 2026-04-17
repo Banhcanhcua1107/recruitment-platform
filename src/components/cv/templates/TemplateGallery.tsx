@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ChevronLeft, ChevronRight, Eye, Loader2, Sparkles } from "lucide-react";
-import { createResumeFromSections, saveResume } from "@/app/candidate/cv-builder/api";
+import { createResumeFromSections, saveResume } from "@/app/candidate/cv-builder/route-api";
 import { TemplateCard } from "./TemplateCard";
 import { TemplateCarousel } from "./TemplateCarousel";
 import { TemplateFilterBar } from "./TemplateFilterBar";

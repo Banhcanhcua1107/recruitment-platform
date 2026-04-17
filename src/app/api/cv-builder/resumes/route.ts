@@ -5,13 +5,24 @@ import {
   getMyResumes,
 } from "@/lib/resumes";
 
+function getResumeCollectionStatusCode(message: string) {
+  if (message === "Unauthorized") {
+    return 401;
+  }
+
+  return 500;
+}
+
 export async function GET() {
   try {
     const items = await getMyResumes();
     return NextResponse.json({ items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
-    return NextResponse.json({ error: message, items: [] }, { status: 500 });
+    return NextResponse.json(
+      { error: message, items: [] },
+      { status: getResumeCollectionStatusCode(message) }
+    );
   }
 }
 
@@ -61,6 +72,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: getResumeCollectionStatusCode(message) });
   }
 }

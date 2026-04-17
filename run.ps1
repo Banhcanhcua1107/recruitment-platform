@@ -252,6 +252,17 @@ function Ensure-EnvFile {
 
 function Build-NextApp {
     Write-Step '5/10 Build Next.js production'
+
+    if (Test-Path -LiteralPath '.next') {
+        Write-Info 'Clearing .next cache to avoid stale route/type artifacts from dev mode'
+        try {
+            Remove-Item -LiteralPath '.next' -Recurse -Force -ErrorAction Stop
+        }
+        catch {
+            Fail "Could not remove .next cache ($($_.Exception.Message)). Stop any running next dev process and retry."
+        }
+    }
+
     & npm run build
     if ($LASTEXITCODE -ne 0) {
         Fail 'npm run build failed.'
@@ -332,9 +343,9 @@ function Wait-ServiceHealthy {
 }
 
 function Wait-AllServices {
-    Write-Step '8/10 Wait for healthy services (frontend, nginx, redis, ai-service)'
+    Write-Step '8/10 Wait for healthy services (frontend, nginx, redis, mongodb, ai-service, mailpit)'
 
-    $services = @('frontend', 'nginx', 'redis', 'ai-service')
+    $services = @('frontend', 'nginx', 'redis', 'mongodb', 'ai-service', 'mailpit')
     foreach ($service in $services) {
         Wait-ServiceHealthy -Service $service -TimeoutSec $ServiceTimeoutSec
     }
@@ -373,12 +384,15 @@ function Check-HealthEndpoints {
     Assert-Http200 -Url $CanonicalLocalOriginWithSlash
     Assert-Http200 -Url "$CanonicalLocalOrigin/healthz"
     Assert-Http200 -Url "$CanonicalLocalOrigin/api/health"
+    Assert-Http200 -Url 'http://localhost:8025'
 }
 
 function Print-FinalOutput {
     Write-Step '10/10 Ready'
     Write-Host 'Project is running at:' -ForegroundColor Green
     Write-Host $CanonicalLocalOriginWithSlash -ForegroundColor Green
+    Write-Host 'Mailpit inbox is running at:' -ForegroundColor Green
+    Write-Host 'http://localhost:8025' -ForegroundColor Green
 }
 
 if ($Clean) {

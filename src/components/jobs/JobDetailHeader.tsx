@@ -141,7 +141,7 @@ export function JobDetailHeader({
     "Vị trí đang mở tuyển và sẵn sàng trao đổi thêm với những ứng viên phù hợp.";
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_390px] lg:items-start">
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.65fr)_390px] xl:grid-cols-[minmax(0,1.78fr)_410px] lg:items-start">
       <div className="overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-[0_20px_50px_-36px_rgba(15,23,42,0.24)]">
         <div className="relative hidden h-52 overflow-hidden border-b border-slate-200 bg-slate-100 sm:block sm:h-64">
           <CoverImage src={coverUrl} alt={`Ảnh bìa tuyển dụng ${job.company_name}`} />

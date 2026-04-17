@@ -5,6 +5,18 @@ import {
   saveResume,
 } from "@/lib/resumes";
 
+function getResumeRouteStatusCode(message: string) {
+  if (message === "Unauthorized") {
+    return 401;
+  }
+
+  if (message === "Resume not found") {
+    return 404;
+  }
+
+  return 500;
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -20,7 +32,7 @@ export async function GET(
     return NextResponse.json({ item });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: getResumeRouteStatusCode(message) });
   }
 }
 
@@ -44,7 +56,7 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: getResumeRouteStatusCode(message) });
   }
 }
 
@@ -58,6 +70,6 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: getResumeRouteStatusCode(message) });
   }
 }

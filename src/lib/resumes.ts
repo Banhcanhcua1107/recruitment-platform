@@ -103,13 +103,25 @@ export async function getTemplateById(id: string): Promise<TemplateRow | null> {
   return data;
 }
 
+async function getAuthenticatedResumeContext() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    throw new Error("Unauthorized");
+  }
+
+  return { supabase, user };
+}
+
 // ─── Resumes ──────────────────────────────────────────────────────────────────
 
 /** Lấy danh sách CV của user hiện tại */
 export async function getMyResumes(): Promise<ResumeRow[]> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  const { supabase, user } = await getAuthenticatedResumeContext();
 
   const { data, error } = await supabase
     .from("resumes")
@@ -123,12 +135,13 @@ export async function getMyResumes(): Promise<ResumeRow[]> {
 
 /** Lấy một resume theo ID */
 export async function getResumeById(id: string): Promise<ResumeRow | null> {
-  const supabase = await createClient();
+  const { supabase, user } = await getAuthenticatedResumeContext();
   const { data, error } = await supabase
     .from("resumes")
     .select("*, template:templates(name, structure_schema, default_styling, thumbnail_url)")
     .eq("id", id)
-    .single();
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   if (error) return null;
   return data;
@@ -315,24 +328,36 @@ export async function saveResume(
     current_styling?: Record<string, unknown>;
   }
 ): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const { supabase, user } = await getAuthenticatedResumeContext();
+  const { data, error } = await supabase
     .from("resumes")
     .update(updates)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("Resume not found");
+  }
 }
 
 /** Xóa resume */
 export async function deleteResume(id: string): Promise<void> {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const { supabase, user } = await getAuthenticatedResumeContext();
+  const { data, error } = await supabase
     .from("resumes")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
+  if (!data) {
+    throw new Error("Resume not found");
+  }
 }
 
 /** Đổi tên resume */

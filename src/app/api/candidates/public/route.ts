@@ -46,6 +46,7 @@ interface MatchedCandidateItem {
   expectedSalaryLabel: string;
   matchScore: number;
   matchLabel: string;
+  isRecruiterApplicant: boolean;
   relatedJobs: RelatedCompanyJob[];
   relatedJobDetails: RelatedCompanyJobDetail[];
   isOpenToWork: boolean;
@@ -87,6 +88,11 @@ interface CandidateScoredJob {
   id: string;
   title: string;
   score: number;
+}
+
+interface RecruiterCandidateApplicationContext {
+  jobStatusById: Map<string, string>;
+  latestAppliedAt: string | null;
 }
 
 interface JobMatchSignals {
@@ -510,6 +516,34 @@ function resolveMatchLabel(scorePercent: number) {
   return "Phù hợp";
 }
 
+function getApplicationStatusScore(status: string | null | undefined) {
+  const normalized = normalizeText(status || "");
+
+  if (normalized === "hired" || normalized === "offered" || normalized === "offer") {
+    return 97;
+  }
+
+  if (normalized === "interviewing" || normalized === "interview") {
+    return 93;
+  }
+
+  if (
+    normalized === "reviewing" ||
+    normalized === "viewed" ||
+    normalized === "pending" ||
+    normalized === "new" ||
+    normalized === "applied"
+  ) {
+    return 88;
+  }
+
+  if (normalized === "rejected") {
+    return 76;
+  }
+
+  return 84;
+}
+
 function isPlaceholderCompanyName(value: string) {
   const normalized = normalizeText(value);
   return !normalized || normalized.includes("chua cap nhat") || normalized.includes("nha tuyen dung");
@@ -812,6 +846,51 @@ export async function GET(request: Request) {
     const jobSignals = jobs.map(buildJobSignals);
     const jobsById = new Map(jobs.map((job) => [job.id, job]));
 
+    const recruiterApplicationsByCandidate = new Map<
+      string,
+      RecruiterCandidateApplicationContext
+    >();
+
+    if (jobs.length > 0) {
+      const jobIds = jobs.map((job) => job.id).filter(Boolean);
+
+      if (jobIds.length > 0) {
+        const { data: recruiterApplications } = await supabase
+          .from("applications")
+          .select("candidate_id, job_id, status, created_at")
+          .in("job_id", jobIds)
+          .order("created_at", { ascending: false })
+          .limit(3000);
+
+        for (const row of recruiterApplications ?? []) {
+          if (!row.candidate_id || !row.job_id) {
+            continue;
+          }
+
+          const candidateId = String(row.candidate_id);
+          const jobId = String(row.job_id);
+
+          const current = recruiterApplicationsByCandidate.get(candidateId) ?? {
+            jobStatusById: new Map<string, string>(),
+            latestAppliedAt: null,
+          };
+
+          const status = String(row.status ?? "applied");
+          const createdAt = typeof row.created_at === "string" ? row.created_at : null;
+
+          if (!current.jobStatusById.has(jobId)) {
+            current.jobStatusById.set(jobId, status);
+          }
+
+          if (createdAt && (!current.latestAppliedAt || createdAt > current.latestAppliedAt)) {
+            current.latestAppliedAt = createdAt;
+          }
+
+          recruiterApplicationsByCandidate.set(candidateId, current);
+        }
+      }
+    }
+
     const scoredCandidates = candidatesSource
       .map((candidate) => {
         const candidateSignals = getRecruiterCandidateSignals(candidate);
@@ -860,6 +939,23 @@ export async function GET(request: Request) {
                 .sort((left, right) => right.score - left.score)
             : [];
 
+        const recruiterApplicationContext = recruiterApplicationsByCandidate.get(
+          candidate.candidateId
+        );
+        const isRecruiterApplicant =
+          (recruiterApplicationContext?.jobStatusById.size ?? 0) > 0;
+
+        const applicantStatusScores = recruiterApplicationContext
+          ? Array.from(recruiterApplicationContext.jobStatusById.values()).map(
+              (status) => getApplicationStatusScore(status)
+            )
+          : [];
+
+        const appliedScoreFloor =
+          applicantStatusScores.length > 0
+            ? Math.max(...applicantStatusScores) / 100
+            : 0;
+
         const broadScoreData = scoreCandidateBroadly(
           candidate,
           candidateYears,
@@ -868,9 +964,11 @@ export async function GET(request: Request) {
         );
 
         const topMatchScore =
-          scoredJobs.length > 0 ? scoredJobs[0].score : broadScoreData.score;
+          scoredJobs.length > 0
+            ? Math.max(scoredJobs[0].score, appliedScoreFloor)
+            : Math.max(broadScoreData.score, appliedScoreFloor);
 
-        const relatedJobs =
+        const scoredRelatedJobs =
           scoredJobs.length > 0
             ? scoredJobs
                 .filter((job) => job.score >= 0.38)
@@ -883,15 +981,48 @@ export async function GET(request: Request) {
                 }))
             : [];
 
+        const appliedRelatedJobs = recruiterApplicationContext
+          ? Array.from(recruiterApplicationContext.jobStatusById.entries())
+              .map(([jobId, status]) => {
+                const job = jobsById.get(jobId);
+                if (!job) {
+                  return null;
+                }
+
+                return {
+                  id: jobId,
+                  title: job.title,
+                  url: `/hr/jobs/${jobId}`,
+                  matchScore: getApplicationStatusScore(status),
+                } satisfies RelatedCompanyJob;
+              })
+              .filter((job): job is RelatedCompanyJob => Boolean(job))
+          : [];
+
+        const relatedJobsMap = new Map<string, RelatedCompanyJob>();
+        for (const job of scoredRelatedJobs) {
+          relatedJobsMap.set(job.id, job);
+        }
+        for (const job of appliedRelatedJobs) {
+          const existing = relatedJobsMap.get(job.id);
+          if (!existing || job.matchScore > existing.matchScore) {
+            relatedJobsMap.set(job.id, job);
+          }
+        }
+
+        const relatedJobs = Array.from(relatedJobsMap.values())
+          .sort((left, right) => right.matchScore - left.matchScore)
+          .slice(0, 3);
+
         const relatedJobDetails =
-          scoredJobs.length > 0
-            ? scoredJobs.map((job) => {
+          relatedJobs.length > 0
+            ? relatedJobs.map((job) => {
                 const jobDetail = jobsById.get(job.id);
                 return {
                   id: job.id,
                   title: job.title,
                   url: `/hr/jobs/${job.id}`,
-                  matchScore: Math.round(job.score * 100),
+                  matchScore: job.matchScore,
                   location: jobDetail?.location || "",
                   description: jobDetail?.description || "",
                   requirements: jobDetail?.requirements || [],
@@ -968,15 +1099,17 @@ export async function GET(request: Request) {
           expectedSalaryMax: expectedSalary.max,
           expectedSalaryLabel: expectedSalary.label,
           matchScore,
-          matchLabel: resolveMatchLabel(matchScore),
+          matchLabel: isRecruiterApplicant ? "Đã ứng tuyển" : resolveMatchLabel(matchScore),
           relatedJobs,
           relatedJobDetails,
+          isRecruiterApplicant,
           isOpenToWork:
             candidateSignals.readiness === "ready_now" ||
             candidateSignals.readiness === "open",
           email: candidate.email,
           profileUrl: `/candidate/${candidate.candidateId}?from=hr`,
-          updatedAt: candidate.updatedAt,
+          updatedAt:
+            recruiterApplicationContext?.latestAppliedAt || candidate.updatedAt,
           rawTopScore: topMatchScore,
         };
       })
@@ -999,7 +1132,9 @@ export async function GET(request: Request) {
     let effectiveThreshold = configuredThreshold;
 
     let matchedCandidates = scoredCandidates.filter(
-      (candidate) => candidate.rawTopScore >= configuredThreshold && candidate.matchScore >= minMatchScore
+      (candidate) =>
+        (candidate.isRecruiterApplicant && candidate.matchScore >= minMatchScore) ||
+        (candidate.rawTopScore >= configuredThreshold && candidate.matchScore >= minMatchScore)
     );
 
     if (matchedCandidates.length === 0 && scoredCandidates.length > 0 && minMatchScore === 0) {

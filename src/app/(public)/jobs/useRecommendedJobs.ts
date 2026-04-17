@@ -10,22 +10,50 @@ import type { ResolvedRecommendedJobsData } from "./jobs-page.types";
 
 type RecommendationStatus = "loading" | "ready" | "empty";
 
-function readRecommendationCache() {
+interface RecommendationCacheEnvelope {
+  ownerUserId: string;
+  payload: unknown;
+  cachedAt: string;
+}
+
+function readRecommendationCache(ownerUserId: string) {
   if (typeof window === "undefined") return null;
 
   try {
     const raw = window.localStorage.getItem(RECOMMENDATION_CACHE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as RecommendationCacheEnvelope | null;
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    if (
+      typeof parsed.ownerUserId !== "string" ||
+      parsed.ownerUserId.trim().length === 0 ||
+      parsed.ownerUserId !== ownerUserId
+    ) {
+      return null;
+    }
+
+    return parsed.payload ?? null;
   } catch {
     return null;
   }
 }
 
-function writeRecommendationCache(payload: unknown) {
+function writeRecommendationCache(payload: unknown, ownerUserId: string) {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(RECOMMENDATION_CACHE_KEY, JSON.stringify(payload));
+    const envelope: RecommendationCacheEnvelope = {
+      ownerUserId,
+      payload,
+      cachedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(RECOMMENDATION_CACHE_KEY, JSON.stringify(envelope));
   } catch {
     // Ignore quota / storage errors on a public page.
   }
@@ -70,19 +98,19 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
         }).catch(() => null),
       ]);
 
-      const hasAuthenticatedUser = Boolean(authResult?.data?.user);
+      const authUserId = authResult?.data?.user?.id || "";
+      const hasAuthenticatedUser = authUserId.length > 0;
       let apiPayload = response?.ok ? await response.json().catch(() => null) : null;
-      const localPayload = hasAuthenticatedUser ? readRecommendationCache() : null;
+      const localPayload = hasAuthenticatedUser
+        ? readRecommendationCache(authUserId)
+        : null;
 
       if (!cancelled) {
         setIsAuthenticated(hasAuthenticatedUser);
       }
 
-      if (response?.ok && apiPayload) {
-        writeRecommendationCache({
-          ...apiPayload,
-          cachedAt: new Date().toISOString(),
-        });
+      if (response?.ok && apiPayload && hasAuthenticatedUser) {
+        writeRecommendationCache(apiPayload, authUserId);
       }
 
       let resolved = resolveRecommendedJobsData({
@@ -107,10 +135,7 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
 
         if (regeneratedPayload) {
           apiPayload = regeneratedPayload;
-          writeRecommendationCache({
-            ...regeneratedPayload,
-            cachedAt: new Date().toISOString(),
-          });
+          writeRecommendationCache(regeneratedPayload, authUserId);
 
           resolved = resolveRecommendedJobsData({
             apiPayload,
@@ -149,6 +174,10 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
     setError(null);
 
     try {
+      const supabase = createClient();
+      const authUserResult = await supabase.auth.getUser().catch(() => null);
+      const authUserId = authUserResult?.data?.user?.id || "";
+
       const response = await fetch("/api/recommend-jobs", {
         method: "POST",
         headers: {
@@ -163,10 +192,9 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
         throw new Error(payload?.error || "Không thể phân tích hồ sơ lúc này.");
       }
 
-      writeRecommendationCache({
-        ...payload,
-        cachedAt: new Date().toISOString(),
-      });
+      if (authUserId) {
+        writeRecommendationCache(payload, authUserId);
+      }
 
       const resolved = resolveRecommendedJobsData({
         apiPayload: payload,

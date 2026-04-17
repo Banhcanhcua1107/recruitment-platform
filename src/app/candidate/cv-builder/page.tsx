@@ -18,7 +18,7 @@ import {
   deleteResume,
   getMyResumes,
   type ResumeRow,
-} from "./api";
+} from "./route-api";
 import { startCVImportAnalysis, uploadCVImport } from "@/features/cv-import/api/client";
 import { buildOptimisticImportReviewDetail } from "@/features/cv-import/review/import-review-detail";
 import type { CVDocumentDetailResponse, CVImportSummaryResponse } from "@/types/cv-import";

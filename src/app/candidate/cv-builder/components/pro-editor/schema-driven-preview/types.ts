@@ -1,12 +1,4 @@
 import type { ComponentType } from "react";
-import type {
-  AwardItem,
-  CertificateItem,
-  EducationItem,
-  ExperienceItem,
-  ProjectItem,
-  SkillItem,
-} from "../../../types";
 
 export type CVPreviewSectionType =
   | "summary"
@@ -90,7 +82,7 @@ export interface CVTemplateSectionStyleRule {
 }
 
 export interface CVTemplateHeaderLayout {
-  variant: "reference-split" | "compact" | "modern-band";
+  variant: "reference-split";
   showAvatar: boolean;
   avatarSizeClassName: string;
   infoColumns: 1 | 2;
@@ -99,18 +91,31 @@ export interface CVTemplateHeaderLayout {
   roleTextClassName: string;
   infoLabelTextClassName: string;
   infoValueTextClassName: string;
+  summaryInHeader?: boolean;
+  summaryTitle?: string;
+  summaryMaxBullets?: number;
+}
+
+export interface CVTemplateBodyLayout {
+  mode: "single-column" | "two-column";
+  columnRatio?: "equal" | "left-narrow" | "left-wide";
+  leftColumnSectionTypes?: CVPreviewSectionType[];
+  rightColumnSectionTypes?: CVPreviewSectionType[];
+  columnGapClassName?: string;
 }
 
 export interface CVTemplateConfig {
   id: string;
   name: string;
   description: string;
+  visualFamily?: "teal";
   pageSettings: CVTemplatePageSettings;
   typographySettings: CVTemplateTypographySettings;
   colorPalette: CVTemplateColorPalette;
   spacingRules: CVTemplateSpacingRules;
   sectionStyleRules: Record<CVPreviewSectionType, CVTemplateSectionStyleRule>;
   headerLayout: CVTemplateHeaderLayout;
+  bodyLayout?: CVTemplateBodyLayout;
   sectionOrder: CVPreviewSectionType[];
 }
 
@@ -162,6 +167,12 @@ export interface CVContactContentData {
   website?: string;
 }
 
+export interface CVHeaderSummaryContentData {
+  title?: string;
+  intro?: string;
+  bullets: string[];
+}
+
 export interface SummarySectionData {
   text: string;
   title?: string;
@@ -179,15 +190,19 @@ export interface CareerObjectiveSectionData {
 export interface ExperienceSectionData {
   title?: string;
   icon?: string;
-  items: ExperienceItem[];
+  items: Array<Record<string, unknown>>;
 }
 
 export interface EducationSectionData {
-  items: EducationItem[];
+  title?: string;
+  icon?: string;
+  items: Array<Record<string, unknown>>;
 }
 
 export interface SkillsSectionData {
-  items: SkillItem[];
+  title?: string;
+  icon?: string;
+  items: Array<Record<string, unknown>>;
 }
 
 export interface LanguageItem {
@@ -197,19 +212,27 @@ export interface LanguageItem {
 }
 
 export interface LanguagesSectionData {
-  items: LanguageItem[];
+  title?: string;
+  icon?: string;
+  items: Array<Record<string, unknown>>;
 }
 
 export interface ProjectsSectionData {
-  items: ProjectItem[];
+  title?: string;
+  icon?: string;
+  items: Array<Record<string, unknown>>;
 }
 
 export interface CertificatesSectionData {
-  items: CertificateItem[];
+  title?: string;
+  icon?: string;
+  items: Array<Record<string, unknown>>;
 }
 
 export interface AwardsSectionData {
-  items: AwardItem[];
+  title?: string;
+  icon?: string;
+  items: Array<Record<string, unknown>>;
 }
 
 export interface ActivityItem {
@@ -222,11 +245,14 @@ export interface ActivityItem {
 }
 
 export interface ActivitiesSectionData {
-  items: ActivityItem[];
+  title?: string;
+  icon?: string;
+  items: Array<Record<string, unknown>>;
 }
 
 export interface CustomSectionData {
   title?: string;
+  icon?: string;
   text: string;
   items?: string[];
 }

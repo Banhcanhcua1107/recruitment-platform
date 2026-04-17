@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getTemplates, createResume, TemplateRow } from "../api";
+import { getTemplates, TemplateRow } from "../api";
+import { createResume } from "../route-api";
 import { ArrowLeft, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 import Link from "next/link";
 

@@ -19,7 +19,7 @@ export interface AdviceBlockData {
   example: string;
 }
 
-interface GuidanceContent {
+export interface GuidanceContent {
   heading: string;
   description: string;
   tips: AdviceBlockData[];
@@ -325,7 +325,7 @@ function normalizeText(value: string) {
     .toLowerCase();
 }
 
-function resolveTopicBySection(activeSection: CVSection | null): GuidanceTopic {
+export function resolveTopicBySection(activeSection: CVSection | null): GuidanceTopic {
   if (!activeSection) {
     return "summary";
   }

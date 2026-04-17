@@ -1,8 +1,7 @@
 import "server-only";
 
-import nodemailer from "nodemailer";
-import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import type { Attachment } from "nodemailer/lib/mailer";
+import { sendModeAwareEmail } from "@/lib/email-testing/sender";
 
 export interface SendEmailPayload {
   to: string | string[];
@@ -12,61 +11,55 @@ export interface SendEmailPayload {
   attachments?: Attachment[];
 }
 
-function getRequiredEnv(name: string) {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    throw new Error(`Thiếu biến môi trường bắt buộc: ${name}.`);
-  }
-  return value;
+export interface SendEmailDelivery {
+  mode: "real" | "test";
+  recipients: string[];
+  from: string;
+  replyTo: string | null;
+  messageId: string;
+  accepted: string[];
+  rejected: string[];
 }
 
-function getSmtpConfig(): SMTPTransport.Options {
-  const host = getRequiredEnv("SMTP_HOST");
-  const user = getRequiredEnv("SMTP_USER");
-  const pass = getRequiredEnv("SMTP_PASS");
-  const rawPort = process.env.SMTP_PORT?.trim() || "587";
-  const port = Number(rawPort);
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new Error("SMTP_PORT không hợp lệ. Vui lòng cấu hình cổng SMTP dạng số dương.");
-  }
-
-  return {
-    host,
-    port,
-    secure: String(process.env.SMTP_SECURE || "false") === "true",
-    auth: { user, pass },
-  };
+export interface SendEmailResult {
+  messageId: string;
+  mode: "real" | "test";
+  accepted: string[];
+  rejected: string[];
+  deliveries: SendEmailDelivery[];
 }
 
-function getFromAddress() {
-  return process.env.SMTP_FROM?.trim() || "";
-}
-
-let transporter: nodemailer.Transporter<SMTPTransport.SentMessageInfo> | null = null;
-
-function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport(getSmtpConfig());
-  }
-  return transporter;
+function toPlainText(html: string) {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|section|article|li|tr|h[1-6])>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 export async function sendEmail(payload: SendEmailPayload) {
-  const from = getFromAddress();
-  if (!from) {
-    throw new Error("Thiếu SMTP_FROM để gửi email.");
-  }
-
-  const info = await getTransporter().sendMail({
-    from,
+  const result = await sendModeAwareEmail({
     to: payload.to,
     subject: payload.subject,
     html: payload.html,
-    text: payload.text,
+    text: payload.text?.trim() || toPlainText(payload.html),
     attachments: payload.attachments,
   });
 
   return {
-    messageId: info.messageId,
-  };
+    messageId: result.messageId,
+    mode: result.mode,
+    accepted: result.accepted,
+    rejected: result.rejected,
+    deliveries: result.deliveries,
+  } as SendEmailResult;
 }

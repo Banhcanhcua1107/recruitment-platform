@@ -151,7 +151,7 @@ export async function updateCompanyProfileAction(formData: FormData) {
   revalidatePath("/jobs");
   revalidatePath("/jobs/[id]", "page");
   revalidatePath("/companies");
-  revalidatePath("/companies/[id]", "page");
+  revalidatePath("/companies/[slug]", "page");
   revalidatePath("/hr/dashboard");
   revalidatePath("/hr/jobs");
   revalidatePath("/hr/company");

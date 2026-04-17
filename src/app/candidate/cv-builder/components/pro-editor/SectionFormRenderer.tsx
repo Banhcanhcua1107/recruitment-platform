@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Lightbulb, Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import type { CVSection } from "../../types";
 import {
   type EditorFieldSchema,
@@ -64,6 +66,9 @@ interface SectionFormRendererProps {
   onUpdateSectionData: (sectionId: string, updates: Record<string, unknown>) => void;
   onAddListItem: (sectionId: string) => void;
   onRemoveListItem: (sectionId: string, itemRef: number | string) => void;
+  className?: string;
+  autoFocusFirstField?: boolean;
+  title?: string;
 }
 
 export function SectionFormRenderer({
@@ -71,15 +76,35 @@ export function SectionFormRenderer({
   onUpdateSectionData,
   onAddListItem,
   onRemoveListItem,
+  className,
+  autoFocusFirstField = false,
+  title,
 }: SectionFormRendererProps) {
+  const containerRef = useRef<HTMLElement | null>(null);
   const selectedSchema = selectedSection ? getSectionSchema(selectedSection.type) : null;
   const sectionData = (selectedSection?.data ?? {}) as Record<string, unknown>;
+  const selectedSectionKey = selectedSection?.id || null;
+
+  useEffect(() => {
+    if (!autoFocusFirstField || !selectedSectionKey) {
+      return;
+    }
+
+    const rafId = window.requestAnimationFrame(() => {
+      const focusTarget = containerRef.current?.querySelector<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
+      focusTarget?.focus({ preventScroll: true });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [autoFocusFirstField, selectedSectionKey]);
 
   return (
-    <section className="mt-8">
+    <section ref={containerRef} className={cn("mt-8", className)}>
       <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
         <Lightbulb size={13} className="text-amber-500" />
-        {EDITOR_UI_TEXTS.rightPanel.editTitle}
+        {title || EDITOR_UI_TEXTS.rightPanel.editTitle}
       </div>
 
       {!selectedSection ? (

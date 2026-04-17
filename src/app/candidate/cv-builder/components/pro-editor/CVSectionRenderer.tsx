@@ -20,6 +20,26 @@ interface CVSectionRendererProps {
   onMoveSectionDown?: (sectionId: string) => void;
 }
 
+function isNestedInteractiveTarget(target: EventTarget | null, currentTarget: EventTarget | null) {
+  if (!(target instanceof HTMLElement) || !(currentTarget instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (target === currentTarget) {
+    return false;
+  }
+
+  if (target.isContentEditable) {
+    return true;
+  }
+
+  return Boolean(
+    target.closest(
+      "input, textarea, select, button, a, [contenteditable='true'], [role='textbox'], [data-cv-inline-editor='true'], [data-cv-section-action='true']",
+    ),
+  );
+}
+
 function HiddenSectionCard({ title, template }: { title: string; template: CVTemplateConfig }) {
   return (
     <div
@@ -126,6 +146,10 @@ export function CVSectionRenderer({
             return;
           }
 
+          if (isActive) {
+            return;
+          }
+
           const target = event.target as HTMLElement;
           if (target.closest("[data-cv-section-action='true']")) {
             return;
@@ -133,8 +157,17 @@ export function CVSectionRenderer({
 
           onSelectSection(section.sourceSectionId);
         }}
-        onClick={() => {
+        onClick={(event) => {
           if (mode !== "edit") {
+            return;
+          }
+
+          // Pointer clicks already select onMouseDown; keep click selection for keyboard/assistive activation.
+          if (event.detail > 0) {
+            return;
+          }
+
+          if (isActive) {
             return;
           }
 
@@ -142,6 +175,10 @@ export function CVSectionRenderer({
         }}
         onKeyDown={(event) => {
           if (mode !== "edit") {
+            return;
+          }
+
+          if (isNestedInteractiveTarget(event.target, event.currentTarget)) {
             return;
           }
 

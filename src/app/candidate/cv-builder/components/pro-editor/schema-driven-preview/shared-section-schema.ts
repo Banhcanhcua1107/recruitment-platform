@@ -600,7 +600,7 @@ function projectsAdapter(): SharedSchemaAdapter {
         };
       });
 
-      return buildProjectsSectionPayload(section.title || "", normalizedProjects);
+      return buildProjectsSectionPayload(section.title || "", normalizedProjects) as unknown as Record<string, unknown>;
     },
   };
 }

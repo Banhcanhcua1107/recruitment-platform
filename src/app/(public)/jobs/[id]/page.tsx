@@ -116,7 +116,7 @@ export default async function JobDetailPage({
 
   return (
     <main className="min-h-dvh bg-slate-50">
-      <div className="mx-auto max-w-310 px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pb-24 lg:pt-10">
+      <div className="mx-auto w-full max-w-425 px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pb-24 lg:pt-10">
         <Link
           href="/jobs"
           prefetch={false}
@@ -144,7 +144,7 @@ export default async function JobDetailPage({
           />
         </div>
 
-        <section className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_380px]">
+        <section className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.62fr)_380px] xl:grid-cols-[minmax(0,1.72fr)_400px]">
           <div className="space-y-6">
             {job.description?.length ? (
               <PageSection

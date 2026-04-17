@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import { Bold, Italic, List, Plus, Trash2, Underline } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -314,6 +322,22 @@ export function EditableText({
     }
   };
 
+  const handleReadModePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!isSectionActive) {
+      return;
+    }
+
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    // Some selectable wrappers consume the synthetic click event after mousedown.
+    // Opening edit mode on pointer down keeps inline editing reliable.
+    event.preventDefault();
+    event.stopPropagation();
+    startEditing();
+  };
+
   if (mode === "edit") {
     return (
       <div
@@ -362,8 +386,16 @@ export function EditableText({
         !value && "text-slate-400",
         readClassName,
       )}
+      onPointerDown={handleReadModePointerDown}
       onClick={(event) => {
         if (!isSectionActive) {
+          return;
+        }
+
+        // Pointer activation is handled onPointerDown to avoid dropped click events.
+        // Keep onClick for keyboard activation (event.detail === 0).
+        if (event.detail !== 0) {
+          event.stopPropagation();
           return;
         }
 
@@ -436,6 +468,20 @@ export function EditableList({
 
       commit();
     }, 0);
+  };
+
+  const handleReadModePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (!isSectionActive) {
+      return;
+    }
+
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    startEditing();
   };
 
   if (mode === "edit") {
@@ -516,8 +562,14 @@ export function EditableList({
         isSectionActive ? "hover:border-emerald-200/80 hover:bg-emerald-50/35" : "cursor-text",
         readClassName,
       )}
+      onPointerDown={handleReadModePointerDown}
       onClick={(event) => {
         if (!isSectionActive) {
+          return;
+        }
+
+        if (event.detail !== 0) {
+          event.stopPropagation();
           return;
         }
 

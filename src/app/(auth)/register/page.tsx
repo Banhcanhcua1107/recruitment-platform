@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { Suspense, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -9,7 +9,7 @@ import { createClient } from "@/utils/supabase/client";
 import { signInWithGoogle } from "@/utils/supabase/auth-helpers";
 import { signup, verifyOtp } from "@/app/(auth)/actions";
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const searchParams = useSearchParams();
   const supabase = createClient();
   const requestedRole = searchParams.get("role") === "employer" ? "employer" : "candidate";
@@ -348,5 +348,19 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={(
+        <div className="flex min-h-screen items-center justify-center bg-white text-slate-600">
+          <p className="text-sm font-semibold">Đang tải trang đăng ký...</p>
+        </div>
+      )}
+    >
+      <RegisterPageContent />
+    </Suspense>
   );
 }

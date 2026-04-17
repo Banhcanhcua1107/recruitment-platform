@@ -29,7 +29,7 @@ export function AddSectionButtons({
           onAddAbove();
         }}
         className={cn(
-          "absolute -left-3 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border bg-white/95 text-slate-500 shadow-[0_10px_20px_-14px_rgba(15,23,42,0.48)] transition-all duration-200 hover:border-emerald-300/70 hover:text-emerald-700",
+          "absolute -left-6 top-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border bg-white/95 text-slate-500 shadow-[0_10px_20px_-14px_rgba(15,23,42,0.48)] transition-all duration-200 hover:border-emerald-300/70 hover:text-emerald-700",
           borderClassName,
           visibilityClassName,
         )}
@@ -45,7 +45,7 @@ export function AddSectionButtons({
           onAddBelow();
         }}
         className={cn(
-          "absolute -left-3 bottom-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border bg-white/95 text-slate-500 shadow-[0_10px_20px_-14px_rgba(15,23,42,0.48)] transition-all duration-200 hover:border-emerald-300/70 hover:text-emerald-700",
+          "absolute -left-6 bottom-2 z-20 inline-flex h-7 w-7 items-center justify-center rounded-full border bg-white/95 text-slate-500 shadow-[0_10px_20px_-14px_rgba(15,23,42,0.48)] transition-all duration-200 hover:border-emerald-300/70 hover:text-emerald-700",
           borderClassName,
           visibilityClassName,
         )}

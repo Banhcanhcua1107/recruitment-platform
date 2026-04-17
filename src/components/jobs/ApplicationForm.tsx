@@ -142,6 +142,7 @@ export function ApplicationForm({
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
   const [candidateEmailSent, setCandidateEmailSent] = useState(false);
   const [cvOptions, setCvOptions] = useState<CandidateCvOption[]>([]);
   const [cvMode, setCvMode] = useState<CvMode>("existing");
@@ -274,6 +275,7 @@ export function ApplicationForm({
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    setEmailWarning(null);
     setCandidateEmailSent(false);
 
     try {
@@ -310,8 +312,21 @@ export function ApplicationForm({
         throw new Error(result.error || "Không thể gửi hồ sơ ứng tuyển lúc này.");
       }
 
-      setSuccess("Hồ sơ của bạn đã được gửi thành công tới nhà tuyển dụng.");
+      const hasEmailFailure = Boolean(result.emailError);
+      setSuccess(
+        hasEmailFailure
+          ? "Hồ sơ của bạn đã được ghi nhận thành công trong hệ thống."
+          : "Hồ sơ của bạn đã được gửi thành công tới nhà tuyển dụng."
+      );
       setCandidateEmailSent(Boolean(result.candidateEmailSent));
+      setEmailWarning(
+        hasEmailFailure
+          ? localizeApplicationMessage(
+              result.emailError ||
+                "Hệ thống chưa gửi được email xác nhận. Vui lòng thử lại sau."
+            )
+          : null
+      );
       setFieldErrors({});
       setFile(null);
     } catch (submitError) {
@@ -340,6 +355,13 @@ export function ApplicationForm({
             <p className="mt-2">Bạn cũng sẽ nhận được email xác nhận từ hệ thống.</p>
           ) : null}
         </StatusAlert>
+
+        {emailWarning ? (
+          <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+            <p className="font-semibold">Email xác nhận chưa gửi được</p>
+            <p className="mt-1">{emailWarning}</p>
+          </div>
+        ) : null}
 
         <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
           <p className="text-sm leading-6 text-slate-600">

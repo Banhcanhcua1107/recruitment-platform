@@ -157,6 +157,7 @@ export function UnifiedJobCard({
   const postedLabel = resolvePostedLabel(job.posted_date);
   const showNewBadge = isFreshJob(job.posted_date);
   const salaryLabel = resolveSalaryLabel(job.salary);
+  const isCompetitiveSalaryLabel = salaryLabel === "Lương cạnh tranh";
   const { visible, overflow } = buildSkillTags(job, isCompact ? 3 : 5, matchMeta);
   const hasLogo =
     job.logo_url &&
@@ -262,7 +263,17 @@ export function UnifiedJobCard({
 
         <div className="flex flex-wrap items-center justify-between gap-2 md:flex-col md:items-end md:justify-center md:text-right">
           <div className="text-left md:text-right">
-            <p className={`${isCompact ? "text-base md:text-xl" : "text-lg md:text-2xl"} line-clamp-1 font-black leading-none text-primary`}>
+            <p
+              className={`${
+                isCompetitiveSalaryLabel
+                  ? isCompact
+                    ? "text-sm md:text-lg"
+                    : "text-base md:text-xl"
+                  : isCompact
+                    ? "text-base md:text-xl"
+                    : "text-lg md:text-2xl"
+              } line-clamp-1 font-black leading-none text-primary`}
+            >
               {salaryLabel}
             </p>
             {matchMeta ? (

@@ -69,6 +69,13 @@ export interface CVSection {
   data: AnySectionData; 
   
 }
+
+export interface CVSelectedSectionItem {
+  sectionId: string;
+  itemIndex: number;
+  itemId: string | null;
+  itemPath: string;
+}
   
  // Style definitions
  export interface SectionStyles {

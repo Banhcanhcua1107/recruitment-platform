@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ChevronDown,
   Loader2,
+  PencilLine,
   Plus,
   Redo2,
   Save,
@@ -54,6 +55,21 @@ function SaveStateChip({ saveStatus, isDirty }: SaveStateChipProps) {
 
 type FontSizeMode = "small" | "medium" | "large";
 
+function normalizeFontChoiceValue(fontValue: string) {
+  return fontValue
+    .replace(/["']/g, "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+}
+
+function formatFontChoiceLabel(fontValue: string) {
+  return fontValue
+    .replace(/["']/g, "")
+    .split(",")[0]
+    .trim();
+}
+
 interface EditorTopbarProps {
   resumeTitle: string;
   saveStatus: "idle" | "saving" | "saved";
@@ -67,6 +83,7 @@ interface EditorTopbarProps {
   onUndo: () => void;
   onRedo: () => void;
   onSave: () => void;
+  onRenameResume: (title: string) => void;
   onOpenOCR: () => void;
   onDownload: () => void;
   onOpenAddSection: () => void;
@@ -88,6 +105,7 @@ export function EditorTopbar({
   onUndo,
   onRedo,
   onSave,
+  onRenameResume,
   onOpenAddSection,
   onChangeTemplate,
   onChangeFontFamily,
@@ -95,6 +113,8 @@ export function EditorTopbar({
 }: EditorTopbarProps) {
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isTypographyMenuOpen, setIsTypographyMenuOpen] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(resumeTitle);
 
   const activeTemplate = useMemo(() => {
     return CV_TEMPLATE_LIBRARY.find((item) => item.id === activeTemplateId) ?? CV_TEMPLATE_LIBRARY[0] ?? null;
@@ -107,21 +127,66 @@ export function EditorTopbar({
       ? activeTemplate.name
       : "Mẫu đang cập nhật";
 
+  const commitResumeTitle = () => {
+    setIsEditingTitle(false);
+
+    if (titleDraft !== resumeTitle) {
+      onRenameResume(titleDraft);
+    }
+  };
+
   return (
     <header className="relative z-50 border-b border-(--app-border) bg-white/82 backdrop-blur-xl">
       <div className="mx-auto flex min-h-18 max-w-440 flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <Link
           href="/candidate/cv-builder"
           className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-600 shadow-[0_10px_20px_-16px_rgba(15,23,42,0.45)] transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
-          aria-label="Quay lai trang danh sach CV"
+          aria-label="Quay lại trang danh sách CV"
         >
           <ArrowLeft size={16} />
         </Link>
 
         <div className="min-w-0">
-          <p className="truncate font-headline text-lg font-extrabold tracking-tight text-slate-900">
-            {resumeTitle}
-          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            {isEditingTitle ? (
+              <input
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={commitResumeTitle}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitResumeTitle();
+                  }
+
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setTitleDraft(resumeTitle);
+                    setIsEditingTitle(false);
+                  }
+                }}
+                autoFocus
+                aria-label="Chỉnh sửa tên CV"
+                className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-1.5 font-headline text-lg font-extrabold tracking-tight text-slate-900 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+              />
+            ) : (
+              <p className="truncate font-headline text-lg font-extrabold tracking-tight text-slate-900">
+                {resumeTitle}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setTitleDraft(resumeTitle);
+                setIsEditingTitle(true);
+              }}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-800"
+              title="Sửa tên CV"
+              aria-label="Sửa tên CV"
+            >
+              <PencilLine size={14} />
+            </button>
+          </div>
           <p className="text-[12px] font-medium text-slate-500">{EDITOR_UI_TEXTS.topbar.subtitle}</p>
         </div>
 
@@ -151,7 +216,7 @@ export function EditorTopbar({
                 <p className="mb-2 text-xs font-semibold">Phông chữ</p>
                 <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl bg-slate-600/65 p-2">
                   {fontOptions.map((fontOption) => {
-                    const selected = fontOption === fontFamily;
+                    const selected = normalizeFontChoiceValue(fontOption) === normalizeFontChoiceValue(fontFamily);
 
                     return (
                       <button
@@ -165,7 +230,7 @@ export function EditorTopbar({
                             : "text-slate-100 hover:bg-slate-500/70",
                         )}
                       >
-                        {fontOption}
+                        {formatFontChoiceLabel(fontOption)}
                       </button>
                     );
                   })}

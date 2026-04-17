@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { CVContent, CVSection, CVMode, SectionType, CVProfile, AnySectionData } from './types';
+import { CVContent, CVSection, CVMode, SectionType, CVProfile, AnySectionData, CVSelectedSectionItem } from './types';
 import { normalizeCvSections, normalizeSectionDataIds } from './section-normalization';
 import { appendDefaultItemToSection, createSectionFromSchema, exportCVRootJson, type CVRootJsonDocument } from './cv-json-system';
 import { validateListSectionItem, validateSectionDataShape, validateSectionPayload } from './cv-json-validation';
@@ -21,6 +21,7 @@ interface EditorState {
   
   // UI State
   selectedSectionId: string | null;
+  selectedSectionItem: CVSelectedSectionItem | null;
   isSidebarOpen: boolean;
   scale: number;
   isSaving: boolean;
@@ -53,6 +54,7 @@ interface EditorState {
   
   // UI Actions
   setSelectedSection: (id: string | null) => void;
+  setSelectedSectionItem: (selection: CVSelectedSectionItem | null) => void;
   toggleSidebar: () => void;
   setScale: (scale: number) => void;
   setAISuggestions: (suggestions: string[]) => void;
@@ -77,6 +79,32 @@ const DEFAULT_THEME = {
   fonts: { heading: 'Manrope', body: 'Manrope' }, // Clean sans-serif
   spacing: 4,
 };
+
+function mergeThemeWithDefaults(styling?: Partial<CVContent['theme']>): CVContent['theme'] {
+  const safeColors = styling?.colors && typeof styling.colors === 'object'
+    ? styling.colors
+    : undefined;
+  const safeFonts = styling?.fonts && typeof styling.fonts === 'object'
+    ? styling.fonts
+    : undefined;
+  const safeSpacing = typeof styling?.spacing === 'number' && Number.isFinite(styling.spacing)
+    ? styling.spacing
+    : DEFAULT_THEME.spacing;
+
+  return {
+    ...DEFAULT_THEME,
+    ...styling,
+    colors: {
+      ...DEFAULT_THEME.colors,
+      ...(safeColors ?? {}),
+    },
+    fonts: {
+      ...DEFAULT_THEME.fonts,
+      ...(safeFonts ?? {}),
+    },
+    spacing: safeSpacing,
+  };
+}
 
 const INITIAL_TEMPLATE_SECTIONS: CVSection[] = [
   { 
@@ -236,6 +264,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
   metadata: { title: 'Untitled CV' },
   
   selectedSectionId: null,
+  selectedSectionItem: null,
   isSidebarOpen: true,
   scale: 1,
   isSaving: false,
@@ -250,9 +279,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
     const normalizedSections = normalizeCvSections(sections);
     const initialCV: CVContent = {
       meta: { pageSize: 'A4', version: '1.0', templateId },
-      theme: styling
-        ? { ...DEFAULT_THEME, ...styling }
-        : DEFAULT_THEME,
+      theme: mergeThemeWithDefaults(styling),
       layout: { type: 'fixed', columns: 12 },
       sections: normalizedSections.map((s) => ({
         ...s,
@@ -266,6 +293,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
       historyIndex: 0,
       isDirty: false,
       selectedSectionId: null,
+      selectedSectionItem: null,
     });
   },
 
@@ -286,7 +314,9 @@ export const useCVStore = create<EditorState>((set, get) => ({
       mode,
       cv: initialCV,
       history: [initialCV],
-      historyIndex: 0
+      historyIndex: 0,
+      selectedSectionId: null,
+      selectedSectionItem: null,
     });
   },
 
@@ -326,6 +356,7 @@ export const useCVStore = create<EditorState>((set, get) => ({
         return {
             cv: newCV,
             selectedSectionId: newSection.id,
+          selectedSectionItem: null,
             isDirty: true,
             history: newHistory,
             historyIndex: newHistory.length - 1,
@@ -350,7 +381,14 @@ export const useCVStore = create<EditorState>((set, get) => ({
     sections.splice(idx + 1, 0, cloned);
     const newCV = { ...state.cv, sections };
     const newHistory = [...state.history.slice(0, state.historyIndex + 1), newCV];
-    return { cv: newCV, selectedSectionId: cloned.id, isDirty: true, history: newHistory, historyIndex: newHistory.length - 1 };
+    return {
+      cv: newCV,
+      selectedSectionId: cloned.id,
+      selectedSectionItem: null,
+      isDirty: true,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    };
   }),
 
   updateSection: (sectionId, updates) => set((state) => {
@@ -402,6 +440,10 @@ export const useCVStore = create<EditorState>((set, get) => ({
     return {
       cv: newCV,
       selectedSectionId: state.selectedSectionId === sectionId ? null : state.selectedSectionId,
+      selectedSectionItem:
+        state.selectedSectionItem && state.selectedSectionItem.sectionId === sectionId
+          ? null
+          : state.selectedSectionItem,
       isDirty: true,
       history: newHistory,
       historyIndex: newHistory.length - 1,
@@ -616,17 +658,71 @@ export const useCVStore = create<EditorState>((set, get) => ({
     });
   },
 
-  updateTheme: (themeUpdates) => set((state) => ({
-    cv: { ...state.cv, theme: { ...state.cv.theme, ...themeUpdates } },
-    isDirty: true
-  })),
+  updateTheme: (themeUpdates) => set((state) => {
+    const nextTheme = {
+      ...state.cv.theme,
+      ...themeUpdates,
+      colors: {
+        ...state.cv.theme.colors,
+        ...(themeUpdates.colors ?? {}),
+      },
+      fonts: {
+        ...state.cv.theme.fonts,
+        ...(themeUpdates.fonts ?? {}),
+      },
+      spacing: typeof themeUpdates.spacing === 'number' && Number.isFinite(themeUpdates.spacing)
+        ? themeUpdates.spacing
+        : state.cv.theme.spacing,
+    };
+
+    return {
+      cv: { ...state.cv, theme: nextTheme },
+      isDirty: true,
+    };
+  }),
 
   setMeta: (metaUpdates) => set((state) => ({
     cv: { ...state.cv, meta: { ...state.cv.meta, ...metaUpdates } },
     isDirty: true
   })),
 
-  setSelectedSection: (id) => set({ selectedSectionId: id }),
+  setSelectedSection: (id) =>
+    set((state) => {
+      const nextSelectedSectionItem =
+        id && state.selectedSectionItem?.sectionId === id
+          ? state.selectedSectionItem
+          : null;
+
+      if (state.selectedSectionId === id && state.selectedSectionItem === nextSelectedSectionItem) {
+        return state;
+      }
+
+      return {
+        selectedSectionId: id,
+        selectedSectionItem: nextSelectedSectionItem,
+      };
+    }),
+  setSelectedSectionItem: (selection) =>
+    set((state) => {
+      const previous = state.selectedSectionItem;
+
+      if (!previous && !selection) {
+        return state;
+      }
+
+      if (
+        previous &&
+        selection &&
+        previous.sectionId === selection.sectionId &&
+        previous.itemIndex === selection.itemIndex &&
+        previous.itemId === selection.itemId &&
+        previous.itemPath === selection.itemPath
+      ) {
+        return state;
+      }
+
+      return { selectedSectionItem: selection };
+    }),
   toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
   setScale: (scale) => set({ scale }),
   setAISuggestions: (suggestions) => set({ aiSuggestions: suggestions }),

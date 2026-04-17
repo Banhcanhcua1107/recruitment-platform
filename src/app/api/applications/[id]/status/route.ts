@@ -27,6 +27,15 @@ function getStatusCode(message: string) {
     return 404;
   }
 
+  if (
+    normalized.includes("vui long") ||
+    normalized.includes("required") ||
+    normalized.includes("test mode only allows .test recipients/senders") ||
+    normalized.includes("rejected:")
+  ) {
+    return 400;
+  }
+
   return 500;
 }
 

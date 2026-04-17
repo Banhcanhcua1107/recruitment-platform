@@ -2,19 +2,30 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import type { Job } from "@/types/job";
-import { getAllJobs, searchPublicJobs } from "@/lib/jobs";
+import { getAllJobs, getFreshPublicJobs } from "@/lib/jobs";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { toSlug } from "@/lib/slug";
 
 export interface Company {
   slug: string;
   name: string;
+  aliases?: string[];
   logoUrl: string | null;
   coverUrl: string | null;
   location: string | null;
   industry: string[];
   size: string | null;
   description?: string | null;
+  companyOverview?: string | null;
+  employerId?: string | null;
+  website?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  benefits?: string[];
+  culture?: string[];
+  vision?: string | null;
+  mission?: string | null;
+  updatedAt?: string | null;
   jobCount: number;
 }
 
@@ -35,28 +46,37 @@ export interface SearchPublicCompaniesResult {
   totalPages: number;
 }
 
-const PUBLIC_COMPANY_SUMMARY_COLUMNS = [
-  "name",
-  "logo_url",
-  "cover_url",
-  "location",
-  "industry",
-  "size",
-  "description",
-  "job_count",
-].join(", ");
+interface EmployerDirectoryRow {
+  id: string;
+  company_name: string | null;
+  email: string | null;
+  logo_url: string | null;
+  cover_url: string | null;
+  location: string | null;
+  industry: unknown;
+  company_size: string | null;
+  company_description: string | null;
+}
 
-const FALLBACK_COMPANY_JOB_COLUMNS = [
-  "company_name",
-  "logo_url",
-  "cover_url",
-  "location",
-  "industry",
-  "employer_id",
-  "posted_date",
-].join(", ");
-
-const PUBLIC_COMPANY_MAX_LIMIT = 50;
+interface CompanyProfileDirectoryRow {
+  user_id: string;
+  company_name: string | null;
+  company_overview: string | null;
+  email: string | null;
+  website: string | null;
+  phone: string | null;
+  logo_url: string | null;
+  cover_url: string | null;
+  location: string | null;
+  industry: unknown;
+  company_size: string | null;
+  benefits: unknown;
+  culture: unknown;
+  vision: string | null;
+  mission: string | null;
+  company_description: string | null;
+  updated_at: string | null;
+}
 
 interface NormalizedCompanySearchParams {
   q: string;
@@ -65,9 +85,21 @@ interface NormalizedCompanySearchParams {
   sort: PublicCompaniesSort;
 }
 
+const PUBLIC_COMPANY_MAX_LIMIT = 50;
+const COMPANY_NAME_PLACEHOLDER_SLUG = "chua-cap-nhat-ten-cong-ty";
+const COMPANY_PROFILES_TABLE_MARKERS = [
+  'relation "company_profiles" does not exist',
+  "could not find the table 'public.company_profiles' in the schema cache",
+];
+const EMPLOYERS_TABLE_MARKERS = [
+  'relation "employers" does not exist',
+  "could not find the table 'public.employers' in the schema cache",
+];
+
 function normalizeString(value: unknown): string | null {
   if (typeof value === "string") {
-    return value.trim() || null;
+    const next = value.trim();
+    return next || null;
   }
 
   if (value == null) {
@@ -87,7 +119,7 @@ function normalizeStringArray(value: unknown): string[] {
 
   if (typeof value === "string") {
     return value
-      .split(/\r?\n|,/)
+      .split(/\r?\n|,/) 
       .map((item) => item.trim())
       .filter(Boolean);
   }
@@ -104,43 +136,149 @@ function normalizeCount(value: unknown): number {
   return Math.floor(next);
 }
 
-function sanitizeLikeValue(value: string): string {
-  return value.replace(/[%,_]/g, " ").trim();
-}
-
-function hasMissingColumnError(error: { message?: string } | null, columnName: string): boolean {
+function isSchemaError(error: { message?: string } | null, markers: string[]) {
   if (!error?.message) {
     return false;
   }
 
   const message = error.message.toLowerCase();
-  const target = columnName.toLowerCase();
-  return (
-    message.includes(`column \"${target}\" does not exist`) ||
-    message.includes(`column jobs.${target} does not exist`)
-  );
+  return markers.some((marker) => message.includes(marker.toLowerCase()));
 }
 
-function shouldFallbackSummaryError(error: { message?: string } | null): boolean {
-  if (!error?.message) {
+function isPublicCompanyName(name: string | null) {
+  if (!name) {
     return false;
   }
 
-  const message = error.message.toLowerCase();
-  return (
-    message.includes("company_directory_summary") &&
-    (message.includes("does not exist") ||
-      message.includes("schema cache") ||
-      message.includes("could not find"))
-  );
+  const slug = toSlug(name);
+  return Boolean(slug) && slug !== COMPANY_NAME_PLACEHOLDER_SLUG;
 }
 
-function mergeIndustries(current: string[], incoming: string[]) {
-  for (const industry of incoming) {
-    if (industry && !current.includes(industry)) {
-      current.push(industry);
+function mergeUniqueItems(target: string[], incoming: string[]) {
+  for (const item of incoming) {
+    if (!target.includes(item)) {
+      target.push(item);
     }
   }
+}
+
+function parsePostedTime(value: string | null | undefined): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return 0;
+  }
+
+  return parsed;
+}
+
+function pickLatestJob(jobs: Job[]): Job | null {
+  if (jobs.length === 0) {
+    return null;
+  }
+
+  let latest = jobs[0];
+  let latestTimestamp = parsePostedTime(latest.posted_date);
+
+  for (const job of jobs) {
+    const currentTimestamp = parsePostedTime(job.posted_date);
+    if (currentTimestamp > latestTimestamp) {
+      latest = job;
+      latestTimestamp = currentTimestamp;
+    }
+  }
+
+  return latest;
+}
+
+function resolveCompanyName(
+  profile: CompanyProfileDirectoryRow | null,
+  employer: EmployerDirectoryRow | null,
+  jobs: Job[],
+): string | null {
+  const profileName = normalizeString(profile?.company_name);
+  if (isPublicCompanyName(profileName)) {
+    return profileName;
+  }
+
+  const employerName = normalizeString(employer?.company_name);
+  if (isPublicCompanyName(employerName)) {
+    return employerName;
+  }
+
+  for (const job of jobs) {
+    const jobCompanyName = normalizeString(job.company_name);
+    if (isPublicCompanyName(jobCompanyName)) {
+      return jobCompanyName;
+    }
+  }
+
+  return null;
+}
+
+function mergeCompany(existing: Company, incoming: Company) {
+  existing.jobCount += incoming.jobCount;
+
+  mergeUniqueItems(existing.aliases ?? [], incoming.aliases ?? []);
+
+  if (!existing.logoUrl && incoming.logoUrl) {
+    existing.logoUrl = incoming.logoUrl;
+  }
+
+  if (!existing.coverUrl && incoming.coverUrl) {
+    existing.coverUrl = incoming.coverUrl;
+  }
+
+  if (!existing.location && incoming.location) {
+    existing.location = incoming.location;
+  }
+
+  if (!existing.size && incoming.size) {
+    existing.size = incoming.size;
+  }
+
+  if (!existing.description && incoming.description) {
+    existing.description = incoming.description;
+  }
+
+  if (!existing.companyOverview && incoming.companyOverview) {
+    existing.companyOverview = incoming.companyOverview;
+  }
+
+  if (!existing.website && incoming.website) {
+    existing.website = incoming.website;
+  }
+
+  if (!existing.email && incoming.email) {
+    existing.email = incoming.email;
+  }
+
+  if (!existing.phone && incoming.phone) {
+    existing.phone = incoming.phone;
+  }
+
+  if (!existing.vision && incoming.vision) {
+    existing.vision = incoming.vision;
+  }
+
+  if (!existing.mission && incoming.mission) {
+    existing.mission = incoming.mission;
+  }
+
+  if (!existing.updatedAt && incoming.updatedAt) {
+    existing.updatedAt = incoming.updatedAt;
+  }
+
+  if (!existing.employerId && incoming.employerId) {
+    existing.employerId = incoming.employerId;
+  }
+
+  mergeUniqueItems(existing.industry, incoming.industry);
+  mergeUniqueItems(existing.benefits ?? [], incoming.benefits ?? []);
+  mergeUniqueItems(existing.culture ?? [], incoming.culture ?? []);
 }
 
 function sortCompanies(companies: Company[], sort: PublicCompaniesSort): Company[] {
@@ -181,9 +319,19 @@ function filterSortPaginateCompanies(
 
   if (params.q) {
     const query = params.q.toLowerCase();
-    filtered = companies.filter((company) =>
-      `${company.name} ${company.location ?? ""}`.toLowerCase().includes(query),
-    );
+    filtered = companies.filter((company) => {
+      const searchSource = [
+        company.name,
+        company.location ?? "",
+        company.industry.join(" "),
+        company.companyOverview ?? "",
+        company.description ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+
+      return searchSource.includes(query);
+    });
   }
 
   const sorted = sortCompanies(filtered, params.sort);
@@ -200,269 +348,184 @@ function filterSortPaginateCompanies(
   };
 }
 
-async function getEmployerProfiles() {
+async function getEmployerDirectoryRows(): Promise<EmployerDirectoryRow[]> {
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("employers")
-      .select("id, company_name, logo_url, cover_url, location, industry, company_size, company_description");
+      .select(
+        "id, company_name, email, logo_url, cover_url, location, industry, company_size, company_description",
+      );
 
-    if (
-      error &&
-      error.message?.toLowerCase().includes('relation "employers" does not exist')
-    ) {
-      return new Map<string, Record<string, unknown>>();
+    if (error) {
+      if (isSchemaError(error, EMPLOYERS_TABLE_MARKERS)) {
+        return [];
+      }
+
+      throw new Error(error.message);
     }
 
-    if (error || !data) {
-      return new Map<string, Record<string, unknown>>();
-    }
-
-    return new Map(
-      data
-        .map((row) => row as Record<string, unknown>)
-        .map((row) => [toSlug(String(row.company_name ?? "")), row] as const)
-        .filter(([slug]) => Boolean(slug))
-    );
+    return (data ?? []) as EmployerDirectoryRow[];
   } catch {
-    return new Map<string, Record<string, unknown>>();
+    return [];
   }
 }
 
-function toCompanyFromRow(
-  row: Record<string, unknown>,
-  employerProfiles?: Map<string, Record<string, unknown>>,
-): Company {
-  const name = normalizeString(row.name) || normalizeString(row.company_name) || "Chưa cập nhật";
-  const slug = toSlug(name);
-  const employerProfile = employerProfiles?.get(slug);
+async function getCompanyProfileDirectoryRows(): Promise<CompanyProfileDirectoryRow[]> {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("company_profiles")
+      .select(
+        "user_id, company_name, company_overview, email, website, phone, logo_url, cover_url, location, industry, company_size, benefits, culture, vision, mission, company_description, updated_at",
+      );
 
-  const employerIndustries = normalizeStringArray(employerProfile?.industry);
-  const rowIndustries = normalizeStringArray(row.industry);
-  const industries: string[] = [];
-  mergeIndustries(industries, rowIndustries);
-  mergeIndustries(industries, employerIndustries);
+    if (error) {
+      if (isSchemaError(error, COMPANY_PROFILES_TABLE_MARKERS)) {
+        return [];
+      }
 
-  return {
-    slug,
-    name,
-    logoUrl: normalizeString(employerProfile?.logo_url) || normalizeString(row.logo_url),
-    coverUrl: normalizeString(employerProfile?.cover_url) || normalizeString(row.cover_url),
-    location: normalizeString(employerProfile?.location) || normalizeString(row.location),
-    industry: industries,
-    size: normalizeString(employerProfile?.company_size) || normalizeString(row.size),
-    description:
-      normalizeString(employerProfile?.company_description) || normalizeString(row.description),
-    jobCount: normalizeCount(row.job_count ?? 1),
-  };
-}
-
-async function getAllCompaniesFromSummaryView(): Promise<Company[] | null> {
-  const supabase = createAdminClient();
-  const result = await supabase
-    .from("company_directory_summary")
-    .select(PUBLIC_COMPANY_SUMMARY_COLUMNS)
-    .order("job_count", { ascending: false })
-    .order("name", { ascending: true });
-
-  if (result.error) {
-    if (shouldFallbackSummaryError(result.error)) {
-      return null;
+      throw new Error(error.message);
     }
 
-    throw new Error(result.error.message);
+    return (data ?? []) as CompanyProfileDirectoryRow[];
+  } catch {
+    return [];
   }
-
-  const items = (result.data ?? [])
-    .map((row) => toCompanyFromRow(row as unknown as Record<string, unknown>))
-    .filter((company) => Boolean(company.slug));
-
-  return items.length > 0 ? items : null;
 }
 
-async function searchCompaniesFromSummaryView(
-  params: NormalizedCompanySearchParams,
-): Promise<SearchPublicCompaniesResult | null> {
-  const supabase = createAdminClient();
-  const from = (params.page - 1) * params.limit;
-  const to = from + params.limit - 1;
-
-  let query = supabase
-    .from("company_directory_summary")
-    .select(PUBLIC_COMPANY_SUMMARY_COLUMNS, { count: "exact" });
-
-  if (params.q) {
-    const safeQuery = sanitizeLikeValue(params.q);
-    query = query.or(`name.ilike.%${safeQuery}%,location.ilike.%${safeQuery}%`);
-  }
-
-  if (params.sort === "name_asc") {
-    query = query.order("name", { ascending: true });
-  } else {
-    query = query.order("job_count", { ascending: false }).order("name", { ascending: true });
-  }
-
-  const result = await query.range(from, to);
-
-  if (result.error) {
-    if (shouldFallbackSummaryError(result.error)) {
-      return null;
-    }
-
-    throw new Error(result.error.message);
-  }
-
-  const items = (result.data ?? [])
-    .map((row) => toCompanyFromRow(row as unknown as Record<string, unknown>))
-    .filter((company) => Boolean(company.slug));
-  const total = Number(result.count ?? items.length);
-
-  if (total === 0) {
-    return null;
-  }
-
-  return {
-    items,
-    page: params.page,
-    limit: params.limit,
-    total,
-    totalPages: Math.max(1, Math.ceil(total / params.limit)),
-  };
-}
-
-async function getFallbackCompanyRows(): Promise<Record<string, unknown>[]> {
-  const supabase = createAdminClient();
-
-  const buildQuery = ({
-    includeStatus,
-    includePublicVisible,
-  }: {
-    includeStatus: boolean;
-    includePublicVisible: boolean;
-  }) => {
-    let query = supabase
-      .from("jobs")
-      .select(FALLBACK_COMPANY_JOB_COLUMNS)
-      .not("employer_id", "is", null)
-      .order("posted_date", { ascending: false, nullsFirst: false });
-
-    if (includeStatus) {
-      query = query.eq("status", "open");
-    }
-
-    if (includePublicVisible) {
-      query = query.eq("is_public_visible", true);
-    }
-
-    return query;
-  };
-
-  let result = await buildQuery({ includeStatus: true, includePublicVisible: true });
-
-  if (result.error && hasMissingColumnError(result.error, "status")) {
-    result = await buildQuery({ includeStatus: false, includePublicVisible: false });
-  } else if (result.error && hasMissingColumnError(result.error, "is_public_visible")) {
-    result = await buildQuery({ includeStatus: true, includePublicVisible: false });
-  }
-
-  if (result.error) {
-    throw new Error(result.error.message);
-  }
-
-  return (result.data ?? []) as unknown as Record<string, unknown>[];
-}
-
-function buildCompaniesFromFallbackRows(
-  rows: Record<string, unknown>[],
-  employerProfiles: Map<string, Record<string, unknown>>,
+function buildCompaniesFromSources(
+  jobs: Job[],
+  employers: EmployerDirectoryRow[],
+  profiles: CompanyProfileDirectoryRow[],
 ): Company[] {
-  const map = new Map<string, Company>();
-
-  for (const row of rows) {
-    const name = normalizeString(row.company_name);
-    if (!name) {
+  const jobsByEmployerId = new Map<string, Job[]>();
+  for (const job of jobs) {
+    const employerId = normalizeString(job.employer_id);
+    if (!employerId) {
       continue;
     }
 
-    const slug = toSlug(name);
-    const existing = map.get(slug);
-    const employerProfile = employerProfiles.get(slug);
-
-    const jobIndustries = normalizeStringArray(row.industry);
-    const employerIndustries = normalizeStringArray(employerProfile?.industry);
-    const employerLogoUrl = normalizeString(employerProfile?.logo_url);
-    const employerCoverUrl = normalizeString(employerProfile?.cover_url);
-    const employerLocation = normalizeString(employerProfile?.location);
-    const employerSize = normalizeString(employerProfile?.company_size);
-    const employerDescription = normalizeString(employerProfile?.company_description);
-    const jobLogoUrl = normalizeString(row.logo_url);
-    const jobCoverUrl = normalizeString(row.cover_url);
-    const jobLocation = normalizeString(row.location);
-
-    if (existing) {
-      existing.jobCount += 1;
-
-      if (employerLogoUrl) {
-        existing.logoUrl = employerLogoUrl;
-      } else if (!existing.logoUrl && jobLogoUrl) {
-        existing.logoUrl = jobLogoUrl;
-      }
-
-      if (employerCoverUrl) {
-        existing.coverUrl = employerCoverUrl;
-      } else if (!existing.coverUrl && jobCoverUrl) {
-        existing.coverUrl = jobCoverUrl;
-      }
-
-      if (employerLocation) {
-        existing.location = employerLocation;
-      } else if (!existing.location && jobLocation) {
-        existing.location = jobLocation;
-      }
-
-      if (!existing.size && employerSize) {
-        existing.size = employerSize;
-      }
-
-      if (!existing.description && employerDescription) {
-        existing.description = employerDescription;
-      }
-
-      mergeIndustries(existing.industry, jobIndustries);
-      mergeIndustries(existing.industry, employerIndustries);
-      continue;
-    }
-
-    const industries: string[] = [];
-    mergeIndustries(industries, jobIndustries);
-    mergeIndustries(industries, employerIndustries);
-
-    map.set(slug, {
-      slug,
-      name,
-      logoUrl: employerLogoUrl || jobLogoUrl,
-      coverUrl: employerCoverUrl || jobCoverUrl,
-      location: employerLocation || jobLocation,
-      industry: industries,
-      size: employerSize,
-      description: employerDescription,
-      jobCount: 1,
-    });
+    const list = jobsByEmployerId.get(employerId) ?? [];
+    list.push(job);
+    jobsByEmployerId.set(employerId, list);
   }
 
-  return sortCompanies([...map.values()], "jobs_desc");
+  const employersById = new Map<string, EmployerDirectoryRow>();
+  for (const employer of employers) {
+    employersById.set(employer.id, employer);
+  }
+
+  const profilesByUserId = new Map<string, CompanyProfileDirectoryRow>();
+  for (const profile of profiles) {
+    profilesByUserId.set(profile.user_id, profile);
+  }
+
+  const employerIds = new Set<string>();
+  for (const employerId of jobsByEmployerId.keys()) {
+    employerIds.add(employerId);
+  }
+  for (const employer of employers) {
+    employerIds.add(employer.id);
+  }
+  for (const profile of profiles) {
+    employerIds.add(profile.user_id);
+  }
+
+  const mergedBySlug = new Map<string, Company>();
+
+  for (const employerId of employerIds) {
+    const employer = employersById.get(employerId) ?? null;
+    const profile = profilesByUserId.get(employerId) ?? null;
+    const employerJobs = jobsByEmployerId.get(employerId) ?? [];
+    const latestJob = pickLatestJob(employerJobs);
+    const companyName = resolveCompanyName(profile, employer, employerJobs);
+
+    if (!companyName) {
+      continue;
+    }
+
+    const slug = toSlug(companyName);
+    if (!slug || slug === COMPANY_NAME_PLACEHOLDER_SLUG) {
+      continue;
+    }
+
+    const aliases: string[] = [];
+    const candidateNames = [
+      companyName,
+      normalizeString(profile?.company_name),
+      normalizeString(employer?.company_name),
+      ...employerJobs.map((job) => normalizeString(job.company_name)),
+    ];
+
+    for (const candidateName of candidateNames) {
+      if (!isPublicCompanyName(candidateName)) {
+        continue;
+      }
+
+      const aliasSlug = toSlug(candidateName!);
+      if (aliasSlug) {
+        mergeUniqueItems(aliases, [aliasSlug]);
+      }
+    }
+
+    const industry: string[] = [];
+    mergeUniqueItems(industry, normalizeStringArray(profile?.industry));
+    mergeUniqueItems(industry, normalizeStringArray(employer?.industry));
+    for (const job of employerJobs) {
+      mergeUniqueItems(industry, normalizeStringArray(job.industry));
+    }
+
+    const companyOverview =
+      normalizeString(profile?.company_overview) ||
+      normalizeString(profile?.company_description) ||
+      normalizeString(employer?.company_description) ||
+      null;
+
+    const company: Company = {
+      slug,
+      name: companyName,
+      aliases,
+      employerId,
+      logoUrl: normalizeString(profile?.logo_url) || normalizeString(employer?.logo_url) || normalizeString(latestJob?.logo_url),
+      coverUrl: normalizeString(profile?.cover_url) || normalizeString(employer?.cover_url) || normalizeString(latestJob?.cover_url),
+      location: normalizeString(profile?.location) || normalizeString(employer?.location) || normalizeString(latestJob?.location),
+      industry,
+      size: normalizeString(profile?.company_size) || normalizeString(employer?.company_size),
+      description: companyOverview,
+      companyOverview,
+      website: normalizeString(profile?.website),
+      email: normalizeString(profile?.email) || normalizeString(employer?.email),
+      phone: normalizeString(profile?.phone),
+      benefits: normalizeStringArray(profile?.benefits),
+      culture: normalizeStringArray(profile?.culture),
+      vision: normalizeString(profile?.vision),
+      mission: normalizeString(profile?.mission),
+      updatedAt: normalizeString(profile?.updated_at),
+      jobCount: normalizeCount(employerJobs.length),
+    };
+
+    const existing = mergedBySlug.get(slug);
+    if (!existing) {
+      mergedBySlug.set(slug, company);
+      continue;
+    }
+
+    mergeCompany(existing, company);
+  }
+
+  return sortCompanies([...mergedBySlug.values()], "jobs_desc");
 }
 
 async function getAllCompaniesImpl(): Promise<Company[]> {
   try {
-    const fromSummaryView = await getAllCompaniesFromSummaryView();
-    if (fromSummaryView) {
-      return fromSummaryView;
-    }
+    const [jobs, employers, profiles] = await Promise.all([
+      getAllJobs(),
+      getEmployerDirectoryRows(),
+      getCompanyProfileDirectoryRows(),
+    ]);
 
-    const employerProfiles = await getEmployerProfiles();
-    const fallbackRows = await getFallbackCompanyRows();
-    return buildCompaniesFromFallbackRows(fallbackRows, employerProfiles);
+    return buildCompaniesFromSources(jobs, employers, profiles);
   } catch {
     return [];
   }
@@ -481,23 +544,22 @@ export async function searchPublicCompanies(
   params: SearchPublicCompaniesParams = {},
 ): Promise<SearchPublicCompaniesResult> {
   const normalizedParams = normalizeSearchParams(params);
-
-  try {
-    const fromSummaryView = await searchCompaniesFromSummaryView(normalizedParams);
-    if (fromSummaryView) {
-      return fromSummaryView;
-    }
-  } catch {
-    // Fall back to cached list flow below.
-  }
-
   const companies = await getAllCompanies();
   return filterSortPaginateCompanies(companies, normalizedParams);
 }
 
 export async function getCompanyBySlug(slug: string): Promise<Company | undefined> {
-  const companies = await getAllCompanies();
-  return companies.find((company) => company.slug === slug);
+  const normalizedSlug = toSlug(slug.trim());
+  if (!normalizedSlug) {
+    return undefined;
+  }
+
+  // Resolve detail pages against fresh profile/employer snapshots
+  // so HR edits are reflected immediately after reload.
+  const companies = await getAllCompaniesImpl();
+  return companies.find(
+    (company) => company.slug === normalizedSlug || (company.aliases ?? []).includes(normalizedSlug),
+  );
 }
 
 export async function getRelatedJobsByCompanySlug(
@@ -507,28 +569,11 @@ export async function getRelatedJobsByCompanySlug(
     limit?: number;
   } = {},
 ): Promise<Job[]> {
-  const company = await getCompanyBySlug(slug);
-  if (!company) {
-    return [];
-  }
-
   const limit = Math.max(1, Math.min(12, Number(options.limit ?? 6)));
-  const pageSize = Math.min(24, limit + 6);
-  const result = await searchPublicJobs({
-    company: company.name,
-    page: 1,
-    limit: pageSize,
-    sort: "newest",
-  });
+  const jobs = await getJobsByCompanySlug(slug);
 
-  return result.items
-    .filter((job) => {
-      if (options.excludeJobId && job.id === options.excludeJobId) {
-        return false;
-      }
-
-      return toSlug(job.company_name?.trim() ?? "") === company.slug;
-    })
+  return jobs
+    .filter((job) => (options.excludeJobId ? job.id !== options.excludeJobId : true))
     .slice(0, limit);
 }
 
@@ -538,7 +583,15 @@ export async function getJobsByCompanySlug(slug: string): Promise<Job[]> {
     return [];
   }
 
-  const jobs = await getAllJobs();
+  const jobs = await getFreshPublicJobs();
+
+  if (company.employerId) {
+    const byEmployer = jobs.filter((job) => normalizeString(job.employer_id) === company.employerId);
+    if (byEmployer.length > 0) {
+      return byEmployer;
+    }
+  }
+
   return jobs.filter((job) => toSlug(job.company_name?.trim() ?? "") === company.slug);
 }
 

@@ -12,7 +12,7 @@ import {
   saveOriginalCVFromImport,
   startCVImportAnalysis,
 } from "@/features/cv-import/api/client";
-import { createResumeFromSections } from "@/app/candidate/cv-builder/api";
+import { createResumeFromSections } from "@/app/candidate/cv-builder/route-api";
 import { ImportDocumentPreview } from "@/features/cv-import/components/ImportDocumentPreview";
 import { ImportStatusBadge } from "@/features/cv-import/components/ImportStatusBadge";
 import { buildResumeSectionsFromParsedJson } from "@/features/cv-import/transforms/parsed-json-to-builder-sections";

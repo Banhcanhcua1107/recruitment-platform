@@ -15,6 +15,7 @@
         "perf:budgets": "node scripts/perf/budgets.mjs",
         "perf:baseline": "npm run perf:autocannon && npm run perf:lighthouse",
         "seed:jobs": "tsx scripts/seed_jobs.ts",
+        "seed:candidate-profiles": "tsx scripts/seed_candidate_profiles_from_real_jobs.ts",
         "import:real-jobs": "tsx scripts/import-real-jobs.ts",
         "test:cv-builder-json": "tsx src/app/candidate/cv-builder/json-first-store.test.ts"
     },

@@ -120,6 +120,19 @@ function customTextToLanguages(rawText: string): LanguagesSectionData {
   };
 }
 
+function customItemsToLanguages(items: unknown[]): LanguagesSectionData {
+  return {
+    items: items.map((item, index) => {
+      const language = item as Record<string, unknown>;
+      return {
+        id: toSafeText(language.id) || `lang-${index + 1}`,
+        name: toSafeText(language.name),
+        level: toSafeText(language.level),
+      };
+    }),
+  };
+}
+
 function customTextToActivities(rawText: string): ActivitiesSectionData {
   const lines = textToLines(rawText);
   return {
@@ -347,7 +360,9 @@ function mapRegularSection(
           ...base,
           type: "languages",
           title: defaultTitleForType("languages", section.title),
-          data: customTextToLanguages(rawText),
+          data: Array.isArray(customData.items)
+            ? customItemsToLanguages(customData.items)
+            : customTextToLanguages(rawText),
         };
       }
 

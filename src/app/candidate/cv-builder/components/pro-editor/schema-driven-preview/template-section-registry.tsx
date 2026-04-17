@@ -6,6 +6,7 @@ import {
   TealActivitiesSection,
   TealAwardsSection,
   TealCertificatesSection,
+  TealCustomSection,
   TealEducationSection,
   TealLanguagesSection,
   TealProjectsSection,
@@ -76,11 +77,15 @@ export const TEMPLATE_SECTION_COMPONENTS = {
   certificates: adaptLegacyTemplateSection(TealCertificatesSection),
   awards: adaptLegacyTemplateSection(TealAwardsSection),
   projects: adaptLegacyTemplateSection(TealProjectsSection),
+  custom: adaptLegacyTemplateSection(TealCustomSection),
 } satisfies SharedTemplateSectionComponentMap;
 
 export function getTemplateSectionComponent<TType extends CVPreviewSectionType>(
   sectionType: TType,
 ): ComponentType<SharedTemplateSectionComponentProps<CVPreviewSectionDataMap[TType]>> | null {
-  return (TEMPLATE_SECTION_COMPONENTS[sectionType] ??
-    null) as ComponentType<SharedTemplateSectionComponentProps<CVPreviewSectionDataMap[TType]>> | null;
+  const component = sectionType in TEMPLATE_SECTION_COMPONENTS
+    ? TEMPLATE_SECTION_COMPONENTS[sectionType as keyof typeof TEMPLATE_SECTION_COMPONENTS]
+    : null;
+
+  return component as ComponentType<SharedTemplateSectionComponentProps<CVPreviewSectionDataMap[TType]>> | null;
 }

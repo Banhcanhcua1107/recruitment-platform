@@ -31,6 +31,7 @@ export interface RecruitmentSyncSummary {
   requestedRole: RecruitmentSyncRole;
   requestedAccounts: number;
   processedAccounts: number;
+  sharedLoginPassword: string;
   seededBeforeSync: {
     attempted: boolean;
     candidateCount: number;
@@ -73,6 +74,8 @@ const DEFAULT_SYNC_COUNTS: RecruitmentSeedRequest = {
   candidateCount: 40,
   recruiterCount: 20,
 };
+
+const DEFAULT_EMAIL_TESTING_SYNC_PASSWORD = "TalentFlowTest#2026";
 
 const CANDIDATE_HEADLINES = [
   "Frontend Developer",
@@ -270,6 +273,11 @@ function isAlreadyRegisteredError(message: string) {
   );
 }
 
+function resolveEmailTestingSyncPassword() {
+  const configuredPassword = process.env.EMAIL_TESTING_SYNC_PASSWORD?.trim();
+  return configuredPassword || DEFAULT_EMAIL_TESTING_SYNC_PASSWORD;
+}
+
 async function findAuthUserIdByEmail(admin: ReturnType<typeof createAdminClient>, email: string) {
   let page = 1;
   const perPage = 200;
@@ -303,6 +311,22 @@ async function ensureAuthUser(
   account: FakeAccount,
 ): Promise<{ userId: string; created: boolean }> {
   const normalizedEmail = account.email.trim().toLowerCase();
+  const sharedPassword = resolveEmailTestingSyncPassword();
+
+  const syncAuthCredentials = async (userId: string) => {
+    const { error: updateError } = await admin.auth.admin.updateUserById(userId, {
+      password: sharedPassword,
+      email_confirm: true,
+      user_metadata: {
+        full_name: account.fullName,
+        source: "email-testing",
+      },
+    });
+
+    if (updateError) {
+      throw new Error(updateError.message);
+    }
+  };
 
   const { data: profileMatch, error: profileLookupError } = await admin
     .from("profiles")
@@ -316,18 +340,18 @@ async function ensureAuthUser(
   }
 
   if (profileMatch?.id) {
+    const existingProfileUserId = String(profileMatch.id);
+    await syncAuthCredentials(existingProfileUserId);
+
     return {
-      userId: String(profileMatch.id),
+      userId: existingProfileUserId,
       created: false,
     };
   }
 
-  const password =
-    process.env.EMAIL_TESTING_SYNC_PASSWORD?.trim() || "TalentFlowTest#2026";
-
   const { data, error } = await admin.auth.admin.createUser({
     email: normalizedEmail,
-    password,
+    password: sharedPassword,
     email_confirm: true,
     user_metadata: {
       full_name: account.fullName,
@@ -347,6 +371,8 @@ async function ensureAuthUser(
       );
     }
 
+    await syncAuthCredentials(recoveredUserId);
+
     return {
       userId: recoveredUserId,
       created: false,
@@ -356,6 +382,8 @@ async function ensureAuthUser(
   if (!data?.user?.id) {
     throw new Error(`Supabase did not return user id for ${normalizedEmail}.`);
   }
+
+  await syncAuthCredentials(data.user.id);
 
   return {
     userId: data.user.id,
@@ -551,6 +579,7 @@ export async function syncFakeAccountsToRecruitment(
     requestedRole: role,
     requestedAccounts: scopedAccounts.length,
     processedAccounts: 0,
+    sharedLoginPassword: resolveEmailTestingSyncPassword(),
     seededBeforeSync,
     authUsers: {
       created: 0,

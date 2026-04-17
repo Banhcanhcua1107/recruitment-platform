@@ -31,6 +31,48 @@ function detectFormat(text: string): ContentFormat {
   return "short";
 }
 
+function normalizeForSimilarity(value: string) {
+  return value
+    .replace(/<[^>]*>/g, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s\n\r]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function calculateDiceSimilarity(original: string, suggestion: string): number {
+  const a = normalizeForSimilarity(original);
+  const b = normalizeForSimilarity(suggestion);
+
+  if (!a || !b) {
+    return 0;
+  }
+
+  if (a === b) {
+    return 1;
+  }
+
+  const bigrams = (source: string): Set<string> => {
+    const set = new Set<string>();
+    for (let i = 0; i < source.length - 1; i++) {
+      set.add(source.slice(i, i + 2));
+    }
+    return set;
+  };
+
+  const sourceA = bigrams(a);
+  const sourceB = bigrams(b);
+  let overlap = 0;
+  sourceA.forEach((gram) => {
+    if (sourceB.has(gram)) {
+      overlap += 1;
+    }
+  });
+
+  return (2 * overlap) / (sourceA.size + sourceB.size);
+}
+
 // ── Extract actual output, stripping model reasoning ────────────────
 // Models (qwen3, qwen2.5) often prepend English reasoning even for Vietnamese tasks.
 // This function aggressively strips all non-content text.
@@ -108,27 +150,7 @@ function extractOutput(raw: string, lang: "vi" | "en"): string {
 // ── Similarity check ─────────────────────────────────────────
 // Simple word-overlap ratio to detect when model just copied the input
 function isTooSimilar(original: string, suggestion: string, threshold = 0.80): boolean {
-  const normalize = (s: string) =>
-    s.replace(/<[^>]*>/g, "").replace(/[\s\n\r]+/g, " ").trim().toLowerCase();
-
-  const a = normalize(original);
-  const b = normalize(suggestion);
-
-  if (!a || !b) return false;
-
-  // Character-level overlap (Sørensen–Dice on bigrams)
-  const bigrams = (s: string): Set<string> => {
-    const set = new Set<string>();
-    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
-    return set;
-  };
-  const ba = bigrams(a);
-  const bb = bigrams(b);
-  let overlap = 0;
-  ba.forEach(g => { if (bb.has(g)) overlap++; });
-  const dice = (2 * overlap) / (ba.size + bb.size);
-
-  return dice > threshold;
+  return calculateDiceSimilarity(original, suggestion) > threshold;
 }
 
 import { CV_WRITER_SYSTEM_PROMPT_VI, CV_WRITER_SYSTEM_PROMPT_EN } from "./ai-config";
@@ -154,10 +176,24 @@ function buildSystemPrompt(lang: "vi" | "en", format: ContentFormat): string {
       ? `- Write as a single flowing paragraph of 5-7 professional sentences demonstrating maximum capability.\n- No bullet points.`
       : `- Keep it concise and impactful.\n- Do NOT write a long paragraph.`;
 
+  const additionalRulesVi = `
+RANG BUOC BO SUNG (BAT BUOC):
+- Giữ nguyên ý nghĩa nghiệp vụ cốt lõi của nội dung gốc.
+- KHÔNG bịa thêm số liệu, thành tích, công nghệ hoặc vai trò không có trong dữ liệu gốc.
+- Phải diễn đạt lại khác rõ rệt, không sao chép nguyên văn dài dòng từ nội dung gốc.
+- Không thêm phần mở đầu/kết luận kiểu hội thoại.`;
+
+  const additionalRulesEn = `
+ADDITIONAL MANDATORY RULES:
+- Preserve the original business meaning.
+- DO NOT invent metrics, achievements, technologies, or responsibilities.
+- Rewrite with meaningfully different wording; avoid near-verbatim copying.
+- No conversational preface or trailing explanations.`;
+
   if (lang === "vi") {
-    return CV_WRITER_SYSTEM_PROMPT_VI.replace("{FORMAT_RULE}", formatRuleVi);
+    return `${CV_WRITER_SYSTEM_PROMPT_VI.replace("{FORMAT_RULE}", formatRuleVi)}\n${additionalRulesVi}`;
   }
-  return CV_WRITER_SYSTEM_PROMPT_EN.replace("{FORMAT_RULE}", formatRuleEn);
+  return `${CV_WRITER_SYSTEM_PROMPT_EN.replace("{FORMAT_RULE}", formatRuleEn)}\n${additionalRulesEn}`;
 }
 
 // ── Section-specific rewriting hints ────────────────────────
@@ -198,10 +234,61 @@ function buildUserPrompt(
     ? (SECTION_HINTS_VI[sectionType] || "Viết lại nội dung này chuyên nghiệp hơn.")
     : (SECTION_HINTS_EN[sectionType] || "Rewrite this content more professionally.");
 
+  const normalizedFieldName = fieldName.trim() || "content";
+
   if (lang === "vi") {
-    return `${hint}\n\nNội dung gốc (KHÔNG được sao chép):\n${currentContent.trim()}${context ? `\n\nBối cảnh: ${context}` : ""}\n\n${anchorVi}`;
+    return `${hint}
+
+Trường cần tối ưu: ${normalizedFieldName}
+Ràng buộc:
+- Không sao chép nguyên văn quá giống bản gốc.
+- Không bịa dữ kiện mới.
+- Nếu thiếu số liệu trong bản gốc, dùng diễn đạt định tính thay vì tự thêm số.
+
+Nội dung gốc (KHÔNG được sao chép):
+${currentContent.trim()}${context ? `\n\nBối cảnh: ${context}` : ""}
+
+${anchorVi}`;
   }
-  return `${hint}\n\nOriginal content (DO NOT copy):\n${currentContent.trim()}${context ? `\n\nContext: ${context}` : ""}\n\n${anchorEn}`;
+  return `${hint}
+
+Target field: ${normalizedFieldName}
+Constraints:
+- Do not copy near-verbatim from the original.
+- Do not invent new facts.
+- If there are no metrics in the input, keep impact qualitative instead of inventing numbers.
+
+Original content (DO NOT copy):
+${currentContent.trim()}${context ? `\n\nContext: ${context}` : ""}
+
+${anchorEn}`;
+}
+
+const DEBUG_PREVIEW_MAX_CHARS = 1200;
+const MODEL_OUTPUT_MIN_CHARS = 10;
+
+function truncateForDebug(value: string, maxChars = DEBUG_PREVIEW_MAX_CHARS) {
+  const text = value.trim();
+  if (text.length <= maxChars) {
+    return text;
+  }
+
+  return `${text.slice(0, maxChars)}...`;
+}
+
+interface OllamaCallResult {
+  output: string;
+  rawOutput: string;
+  model: string;
+  error: string | null;
+  requestPreview: {
+    baseUrl: string;
+    model: string;
+    temperature: number;
+    prefill: string;
+    systemPromptPreview: string;
+    userPromptPreview: string;
+  };
 }
 
 // ── Ollama caller ────────────────────────────────────────────
@@ -210,9 +297,18 @@ async function callOllama(
   userPrompt: string,
   prefill = "",
   temperature = 0.2
-): Promise<string> {
+): Promise<OllamaCallResult> {
   const baseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
   const model   = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+
+  const requestPreview = {
+    baseUrl,
+    model,
+    temperature,
+    prefill,
+    systemPromptPreview: truncateForDebug(systemPrompt, 500),
+    userPromptPreview: truncateForDebug(userPrompt, 700),
+  };
 
   const messages: { role: string; content: string }[] = [
     { role: "system", content: systemPrompt },
@@ -235,9 +331,9 @@ async function callOllama(
           model,
           stream: false,
           options: {
-            temperature: 0.2, // Quan trọng: Giảm sáng tạo thừa
+            temperature,
             num_predict: 500, // Giới hạn độ dài để không viết quá dài
-            top_p: 0.5,
+            top_p: 0.8,
             // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
             stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"],
           },
@@ -251,28 +347,69 @@ async function callOllama(
     );
 
     if (!response.ok) {
-      console.error(`[Ollama] HTTP ${response.status}:`, await response.text());
-      return "";
+      const detail = await response.text();
+      console.error(`[Ollama] HTTP ${response.status}:`, detail);
+      return {
+        output: "",
+        rawOutput: "",
+        model,
+        error: `HTTP ${response.status}: ${detail}`,
+        requestPreview,
+      };
     }
 
     const body = await response.json();
     const content = (body?.message?.content ?? "").trim();
-    // Prepend the prefill seed back (Ollama strips it from the response)
-    return prefill ? prefill + content : content;
+    const fullOutput = prefill ? prefill + content : content;
+
+    return {
+      output: fullOutput,
+      rawOutput: fullOutput,
+      model,
+      error: null,
+      requestPreview,
+    };
   } catch (err) {
     if (err instanceof UpstreamTimeoutError) {
       console.error("[Ollama] timeout:", err.message);
-      return "";
+      return {
+        output: "",
+        rawOutput: "",
+        model,
+        error: err.message,
+        requestPreview,
+      };
     }
 
     console.error("[Ollama] call failed:", err);
-    return "";
+    return {
+      output: "",
+      rawOutput: "",
+      model,
+      error: err instanceof Error ? err.message : String(err),
+      requestPreview,
+    };
   }
 }
 
 // ════════════════════════════════════════════════════════════
 // Public Server Action – CV content optimization
 // ════════════════════════════════════════════════════════════
+
+export interface OptimizeDebugInfo {
+  traceId: string;
+  model: string;
+  language: "vi" | "en";
+  format: ContentFormat;
+  similarityScore: number;
+  retriedBecauseSimilar: boolean;
+  usedRetryResult: boolean;
+  firstAttemptRawPreview: string;
+  finalAttemptRawPreview: string;
+  systemPromptPreview: string;
+  userPromptPreview: string;
+  failureReason?: string;
+}
 
 export interface OptimizeResult {
   success: boolean;
@@ -281,6 +418,7 @@ export interface OptimizeResult {
   suggestions?: string;   // additional info that could strengthen the content
   error?: string;
   provider?: string;
+  debug?: OptimizeDebugInfo;
 }
 
 export async function optimizeCVContent(
@@ -293,51 +431,168 @@ export async function optimizeCVContent(
     return { success: false, error: "Nội dung trống. Hãy nhập nội dung trước khi tối ưu." };
   }
 
-  const lang   = detectLanguage(currentContent);
-  const format  = detectFormat(currentContent);
+  const traceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const includeDebug = process.env.NODE_ENV !== "production" || process.env.AI_INCLUDE_DEBUG === "1";
+
+  const lang = detectLanguage(currentContent);
+  const format = detectFormat(currentContent);
   const systemPrompt = buildSystemPrompt(lang, format);
-  const userPrompt   = buildUserPrompt(sectionType, fieldName, currentContent, lang, format, context);
+  const userPrompt = buildUserPrompt(sectionType, fieldName, currentContent, lang, format, context);
   // Prefill forces the model past reasoning and into output immediately
   const prefill = format === "list" ? "- " : "";
 
   // First attempt with normal temperature
-  let raw = await callOllama(systemPrompt, userPrompt, prefill, 0.7);
-  if (!raw) {
+  const firstAttempt = await callOllama(systemPrompt, userPrompt, prefill, 0.7);
+
+  if (includeDebug) {
+    console.info(`[AI optimize][${traceId}] first attempt`, {
+      model: firstAttempt.model,
+      request: firstAttempt.requestPreview,
+      error: firstAttempt.error,
+      rawOutputPreview: truncateForDebug(firstAttempt.rawOutput),
+    });
+  }
+
+  if (!firstAttempt.output) {
+    const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+    const baseError = firstAttempt.error || "Ollama không phản hồi.";
+
     return {
       success: false,
-      error: "Ollama không phản hồi. Đảm bảo Ollama đang chạy và model '" +
-        (process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b") +
-        "' đã được pull.",
+      error: `${baseError} Đảm bảo Ollama đang chạy và model '${model}' đã được pull.`,
+      provider: `ollama/${model}`,
+      debug: includeDebug
+        ? {
+            traceId,
+            model,
+            language: lang,
+            format,
+            similarityScore: 0,
+            retriedBecauseSimilar: false,
+            usedRetryResult: false,
+            firstAttemptRawPreview: "",
+            finalAttemptRawPreview: "",
+            systemPromptPreview: truncateForDebug(systemPrompt, 500),
+            userPromptPreview: truncateForDebug(userPrompt, 700),
+            failureReason: baseError,
+          }
+        : undefined,
     };
   }
 
   // Extract the actual output, stripping any model reasoning preamble
-  let output = extractOutput(raw, lang);
+  let finalRaw = firstAttempt.rawOutput;
+  let output = extractOutput(finalRaw, lang);
+  let similarityScore = calculateDiceSimilarity(currentContent, output);
 
-  // If output is too similar to input, retry once with higher temperature
-  if (output.length > 10 && isTooSimilar(currentContent, output)) {
-    console.log("[AI] Suggestion too similar to original, retrying with higher temperature...");
-    raw = await callOllama(systemPrompt, userPrompt, prefill, 0.9);
-    if (raw) {
-      const retryOutput = extractOutput(raw, lang);
-      if (retryOutput.length > 10) {
+  let retriedBecauseSimilar = false;
+  let usedRetryResult = false;
+
+  // If output is too similar to input, retry once with stronger anti-copy constraints
+  if (output.length > MODEL_OUTPUT_MIN_CHARS && isTooSimilar(currentContent, output, 0.74)) {
+    retriedBecauseSimilar = true;
+
+    const antiCopyAddon = lang === "vi"
+      ? "Yêu cầu bổ sung: Phải viết lại khác rõ rệt bản gốc. Không sao chép cụm từ dài từ nội dung gốc."
+      : "Additional requirement: Rewrite with clearly different wording. Avoid long phrase overlap from the source.";
+
+    const retryPrompt = `${userPrompt}\n\n${antiCopyAddon}`;
+    const retryAttempt = await callOllama(systemPrompt, retryPrompt, prefill, 0.95);
+
+    if (includeDebug) {
+      console.info(`[AI optimize][${traceId}] retry attempt`, {
+        model: retryAttempt.model,
+        request: retryAttempt.requestPreview,
+        error: retryAttempt.error,
+        rawOutputPreview: truncateForDebug(retryAttempt.rawOutput),
+      });
+    }
+
+    if (retryAttempt.output) {
+      const retryOutput = extractOutput(retryAttempt.output, lang);
+      const retrySimilarity = calculateDiceSimilarity(currentContent, retryOutput);
+
+      if (retryOutput.length > MODEL_OUTPUT_MIN_CHARS && retrySimilarity < similarityScore) {
         output = retryOutput;
+        similarityScore = retrySimilarity;
+        finalRaw = retryAttempt.rawOutput;
+        usedRetryResult = true;
       }
     }
   }
 
-  if (output.length > 10) {
-    const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+  const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? firstAttempt.model ?? "qwen3:4b";
+  const provider = `ollama/${model}`;
+  const looksCopied = isTooSimilar(currentContent, output, 0.90);
+
+  if (output.length > MODEL_OUTPUT_MIN_CHARS && !looksCopied) {
+    if (includeDebug) {
+      console.info(`[AI optimize][${traceId}] success`, {
+        provider,
+        similarityScore,
+        retriedBecauseSimilar,
+        usedRetryResult,
+        outputPreview: truncateForDebug(output),
+      });
+    }
+
     return {
       success: true,
       suggestion: output,
-      provider: `ollama/${model}`,
+      provider,
+      debug: includeDebug
+        ? {
+            traceId,
+            model,
+            language: lang,
+            format,
+            similarityScore,
+            retriedBecauseSimilar,
+            usedRetryResult,
+            firstAttemptRawPreview: truncateForDebug(firstAttempt.rawOutput),
+            finalAttemptRawPreview: truncateForDebug(finalRaw),
+            systemPromptPreview: truncateForDebug(systemPrompt, 500),
+            userPromptPreview: truncateForDebug(userPrompt, 700),
+          }
+        : undefined,
     };
+  }
+
+  const failureReason = looksCopied
+    ? "Kết quả AI quá giống nội dung gốc nên bị từ chối."
+    : "Không thể trích xuất nội dung hợp lệ từ phản hồi AI.";
+
+  if (includeDebug) {
+    console.warn(`[AI optimize][${traceId}] failure`, {
+      provider,
+      similarityScore,
+      retriedBecauseSimilar,
+      usedRetryResult,
+      outputPreview: truncateForDebug(output),
+      failureReason,
+    });
   }
 
   return {
     success: false,
-    error: "Không thể tối ưu nội dung. Vui lòng thử lại.",
+    error: `AI suggestion không khả dụng: ${failureReason}`,
+    provider,
+    debug: includeDebug
+      ? {
+          traceId,
+          model,
+          language: lang,
+          format,
+          similarityScore,
+          retriedBecauseSimilar,
+          usedRetryResult,
+          firstAttemptRawPreview: truncateForDebug(firstAttempt.rawOutput),
+          finalAttemptRawPreview: truncateForDebug(finalRaw),
+          systemPromptPreview: truncateForDebug(systemPrompt, 500),
+          userPromptPreview: truncateForDebug(userPrompt, 700),
+          failureReason,
+        }
+      : undefined,
   };
 }
 
@@ -380,11 +635,15 @@ Return pure JSON (no markdown), format:
     ? `CV:\n"""\n${cvText.slice(0, 2000)}\n"""${locationLine}\nGợi ý 5 công ty phù hợp nhất, trả về JSON:`
     : `CV:\n"""\n${cvText.slice(0, 2000)}\n"""${locationLine}\nSuggest 5 best-matching companies, return JSON:`;
 
-  const raw = await callOllama(systemPrompt, userPrompt);
+  const ollamaResult = await callOllama(systemPrompt, userPrompt);
+  const raw = ollamaResult.output.trim();
+
   if (!raw) {
     return {
       success: false,
-      error: "Ollama không phản hồi. Kiểm tra 'ollama serve' và 'ollama pull qwen3:4b'.",
+      error:
+        ollamaResult.error
+        || "Ollama không phản hồi. Kiểm tra 'ollama serve' và 'ollama pull qwen3:4b'.",
     };
   }
 

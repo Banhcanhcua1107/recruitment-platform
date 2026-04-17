@@ -117,7 +117,7 @@ export function createDefaultProjectSubSection(type: "info" | "list"): ProjectSu
     return {
       id: createSectionId("proj-sub-list"),
       type: "list",
-      label: "New list",
+      label: "Danh sách mới",
       items: [""],
     };
   }
@@ -125,7 +125,7 @@ export function createDefaultProjectSubSection(type: "info" | "list"): ProjectSu
   return {
     id: createSectionId("proj-sub-info"),
     type: "info",
-    label: "New field",
+    label: "Trường mới",
     value: "",
   };
 }
@@ -135,7 +135,7 @@ export function createDefaultProjectSection(type: ProjectSectionType): ProjectSe
     return {
       id: createSectionId("proj-list"),
       type: "list",
-      label: "New list",
+      label: "Danh sách mới",
       items: [""],
     };
   }
@@ -144,7 +144,7 @@ export function createDefaultProjectSection(type: ProjectSectionType): ProjectSe
     return {
       id: createSectionId("proj-group"),
       type: "group",
-      label: "New group",
+      label: "Nhóm mới",
       sections: [createDefaultProjectSubSection("info")],
     };
   }
@@ -152,7 +152,7 @@ export function createDefaultProjectSection(type: ProjectSectionType): ProjectSe
   return {
     id: createSectionId("proj-info"),
     type: "info",
-    label: "New field",
+    label: "Trường mới",
     value: "",
   };
 }
@@ -169,37 +169,37 @@ function buildStandardProjectSections(values: {
     {
       id: createSectionId("proj-client"),
       type: "info",
-      label: "Client",
+      label: "Khách hàng",
       value: values.client,
     },
     {
       id: createSectionId("proj-description"),
       type: "info",
-      label: "Descriptions",
+      label: "Mô tả",
       value: values.description,
     },
     {
       id: createSectionId("proj-members"),
       type: "info",
-      label: "Number of members",
+      label: "Số lượng thành viên",
       value: values.memberCount || DEFAULT_MEMBER_COUNT,
     },
     {
       id: createSectionId("proj-position"),
       type: "info",
-      label: "Position",
+      label: "Vị trí",
       value: values.position,
     },
     {
       id: createSectionId("proj-resp"),
       type: "list",
-      label: "Responsibilities",
+      label: "Trách nhiệm",
       items: values.responsibilities.length > 0 ? values.responsibilities : [""],
     },
     {
       id: createSectionId("proj-tech"),
       type: "list",
-      label: "Technology in use",
+      label: "Công nghệ sử dụng",
       items: values.technologies.length > 0 ? values.technologies : [""],
     },
   ] as ProjectSection[];
@@ -218,7 +218,7 @@ function normalizeProjectSubSections(input: unknown): ProjectSubSection[] {
 
       const record = entry as Record<string, unknown>;
       const type = toSafeText(record.type).toLowerCase();
-      const label = toSafeText(record.label) || (type === "list" ? "New list" : "New field");
+      const label = toSafeText(record.label) || (type === "list" ? "Danh sách mới" : "Trường mới");
 
       if (type === "list") {
         const items = Array.isArray(record.items)
@@ -260,7 +260,7 @@ function normalizeProjectSections(input: unknown): ProjectSection[] {
 
       const record = entry as Record<string, unknown>;
       const type = toSafeText(record.type).toLowerCase();
-      const label = toSafeText(record.label) || "New field";
+      const label = toSafeText(record.label) || "Trường mới";
 
       if (type === "info") {
         return {
@@ -469,14 +469,14 @@ export function buildProjectsSectionPayload(title: string, projects: ProjectMode
   const serializedItems = projects.map((project, index) => {
     const { infoEntries, listEntries } = flattenSectionData(project.sections);
 
-    const client = findInfoByLabel(infoEntries, ["client"]);
-    const description = findInfoByLabel(infoEntries, ["descriptions", "description", "mo ta"]);
-    const memberCount = findInfoByLabel(infoEntries, ["number of members", "team size", "so luong thanh vien"])
+    const client = findInfoByLabel(infoEntries, ["client", "khach hang", "doi tac"]);
+    const description = findInfoByLabel(infoEntries, ["descriptions", "description", "mo ta", "mô tả"]);
+    const memberCount = findInfoByLabel(infoEntries, ["number of members", "team size", "so luong thanh vien", "so thanh vien", "số lượng thành viên"])
       || DEFAULT_MEMBER_COUNT;
-    const position = findInfoByLabel(infoEntries, ["position", "role", "vai tro"]);
+    const position = findInfoByLabel(infoEntries, ["position", "role", "vai tro", "vị trí"]);
 
-    const responsibilitiesItems = findListByLabel(listEntries, ["responsibilities", "nhiem vu", "trach nhiem"]);
-    const technologiesItems = findListByLabel(listEntries, ["technology in use", "technologies", "tech stack"]);
+    const responsibilitiesItems = findListByLabel(listEntries, ["responsibilities", "nhiem vu", "nhiệm vụ", "trach nhiem", "trách nhiệm"]);
+    const technologiesItems = findListByLabel(listEntries, ["technology in use", "technologies", "tech stack", "cong nghe su dung", "công nghệ sử dụng"]);
 
     const parsedMemberCount = Number.parseInt(memberCount, 10);
 

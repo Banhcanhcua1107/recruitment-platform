@@ -7,6 +7,7 @@
 
 :root {
     font-family: var(--font-sans), sans-serif;
+    --global-navbar-height: 4rem;
     --app-bg: #f7f9fb;
     --app-surface: rgba(255, 255, 255, 0.94);
     --app-surface-muted: #f8fafc;
@@ -14,6 +15,12 @@
     --app-text: #0f172a;
     --app-muted-text: #64748b;
     --app-shadow-soft: 0 24px 70px -46px rgba(15, 23, 42, 0.22);
+}
+
+@media (min-width: 1024px) {
+     :root {
+        --global-navbar-height: 5rem;
+    }
 }
 
 html {
@@ -277,6 +284,22 @@ h4,
 
 .cv-preview-font-manrope {
     font-family: Manrope, "Segoe UI", sans-serif !important;
+}
+
+.cv-preview-font-ibm-plex-sans {
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif !important;
+}
+
+.cv-preview-font-plus-jakarta-sans {
+    font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif !important;
+}
+
+.cv-preview-font-source-sans-3 {
+    font-family: "Source Sans 3", "Segoe UI", sans-serif !important;
+}
+
+.cv-preview-font-lora {
+    font-family: Lora, "Times New Roman", serif !important;
 }
 
 .cv-preview-text-small {

@@ -11,11 +11,11 @@ function getStatusCode(message: string) {
     return 401;
   }
 
-  if (normalized.includes("chỉ nhà tuyển dụng")) {
+  if (normalized.includes("chỉ nhà tuyển dụng") || normalized.includes("chi nha tuyen dung")) {
     return 403;
   }
 
-  if (normalized.includes("không tìm thấy")) {
+  if (normalized.includes("không tìm thấy") || normalized.includes("khong tim thay")) {
     return 404;
   }
 
@@ -38,6 +38,15 @@ function getContactStatusCode(message: string) {
   }
 
   if (normalized.includes("vui lòng") || normalized.includes("required")) {
+    return 400;
+  }
+
+  if (
+    normalized.includes("test mode only allows .test recipients/senders") ||
+    normalized.includes("rejected:") ||
+    normalized.includes("at least one recipient is required") ||
+    normalized.includes("sender address is required")
+  ) {
     return 400;
   }
 

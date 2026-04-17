@@ -52,7 +52,7 @@ const SECTION_SCHEMAS: Partial<Record<SectionType, CVSectionSchema>> = {
     allowMultiple: false,
     canAddFromModal: false,
     fields: [
-      { key: "fullName", label: "Họ tên", kind: "text", placeholder: "Nguyen Van A" },
+      { key: "fullName", label: "Họ tên", kind: "text", placeholder: "Nguyễn Văn A" },
       { key: "title", label: "Vị trí", kind: "text", placeholder: "Lập trình viên Fullstack" },
     ],
     guideLines: [
@@ -60,7 +60,7 @@ const SECTION_SCHEMAS: Partial<Record<SectionType, CVSectionSchema>> = {
       "Tên hiển thị cần đồng nhất với hồ sơ LinkedIn.",
     ],
     defaultData: {
-      fullName: "Nguyen Van A",
+      fullName: "Nguyễn Văn A",
       title: "Fullstack Developer",
       avatarUrl: "",
     },
@@ -77,7 +77,7 @@ const SECTION_SCHEMAS: Partial<Record<SectionType, CVSectionSchema>> = {
       { key: "phone", label: "Điện thoại", kind: "tel", placeholder: "+84 1234567890" },
       { key: "dob", label: "Ngày sinh", kind: "text", placeholder: "01/01/2000" },
       { key: "email", label: "Email", kind: "email", placeholder: "nguyenvana@gmail.com" },
-      { key: "address", label: "Địa chỉ", kind: "text", placeholder: "Ha Noi, Viet Nam" },
+      { key: "address", label: "Địa chỉ", kind: "text", placeholder: "Hà Nội, Việt Nam" },
     ],
     guideLines: [
       "Email nên dùng định dạng chuyên nghiệp, không dùng nickname.",
@@ -87,7 +87,7 @@ const SECTION_SCHEMAS: Partial<Record<SectionType, CVSectionSchema>> = {
       phone: "+84 1234567890",
       dob: "01/01/2000",
       email: "nguyenvana@gmail.com",
-      address: "Ha Noi, Viet Nam",
+      address: "Hà Nội, Việt Nam",
     },
   },
   summary: {
@@ -128,7 +128,7 @@ const SECTION_SCHEMAS: Partial<Record<SectionType, CVSectionSchema>> = {
     list: {
       itemLabel: "Mục kinh nghiệm",
       fields: [
-        { key: "company", label: "Công ty", kind: "text", placeholder: "F8 TECHNOLOGY EDUCATION.,JSC" },
+        { key: "company", label: "Công ty", kind: "text", placeholder: "F8 TECHNOLOGY EDUCATION JSC" },
         { key: "position", label: "Vị trí", kind: "text", placeholder: "Lập trình viên Fullstack" },
         { key: "startDate", label: "Bắt đầu", kind: "month", placeholder: "2018-01" },
         { key: "endDate", label: "Kết thúc", kind: "text", placeholder: "Hiện tại" },
@@ -150,7 +150,7 @@ const SECTION_SCHEMAS: Partial<Record<SectionType, CVSectionSchema>> = {
       items: [
         {
           id: "exp-default-1",
-          company: "F8 TECHNOLOGY EDUCATION.,JSC",
+          company: "F8 TECHNOLOGY EDUCATION JSC",
           position: "Fullstack Developer",
           startDate: "01/2018",
           endDate: "Present",
@@ -433,7 +433,7 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
       phone: "+84 1234567890",
       dob: "01/01/2000",
       email: "nguyenvana@gmail.com",
-      address: "Ha Noi, Viet Nam",
+      address: "Hà Nội, Việt Nam",
     },
   },
   {
@@ -472,7 +472,7 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
       items: [
         {
           id: "exp-default-modal-1",
-          company: "F8 TECHNOLOGY EDUCATION.,JSC",
+          company: "F8 TECHNOLOGY EDUCATION JSC",
           position: "Fullstack Developer",
           startDate: "01/2018",
           endDate: "Present",
@@ -565,12 +565,12 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
           role: "Product Owner, BA, Developer, Tester, Video Editor",
           startDate: "01/2019",
           endDate: "Present",
-          description: "Learn programming online (https://f8.edu.vn)",
+          description: "Learn programming online at https://f8.edu.vn.",
           responsibilities:
             "- Developer\n- Solution architect\n- Frontend: ReactJS\n- Backend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, Mongodb, MariaDB, Redis, Docker, AWS EC2, AWS S3\n- Architecture: Microservice - Event driven (deploy with K8S), Websocket, SSO",
           technologies:
             "- Frontend: ReactJS\n- Backend: PHP (Laravel, Lumen), NodeJS, Apache Kafka, Websocket, MongoDB, MariaDB\n- Infra: Redis, Docker, AWS EC2, AWS S3, K8S",
-          customer: "F8 TECHNOLOGY EDUCATION.,JSC",
+          customer: "F8 TECHNOLOGY EDUCATION JSC",
           teamSize: 6,
         },
       ],
@@ -608,7 +608,7 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
       items: [
         {
           id: "award-default-modal-0",
-          title: '1st place in 2 "North - South - Central POLY & FE Creabtion" contests',
+          title: '1st place in 2 "North - South - Central POLY & FE Creation" contests',
           date: "",
           issuer: "",
           description: "",
@@ -618,14 +618,14 @@ const MODAL_SECTION_CATALOG: ModalSectionCatalogItem[] = [
           title: "Poly Creative Competition 2016",
           date: "06/2016",
           issuer: "",
-          description: "Poly creation contest: https://goo.gl/BVP5kE",
+          description: "Poly Creation contest: https://goo.gl/BVP5kE",
         },
         {
           id: "award-default-modal-2",
           title: "FE Creative Competition 2016",
           date: "08/2016",
           issuer: "",
-          description: "FE creation contest: https://goo.gl/86ULiw",
+          description: "FE Creation contest: https://goo.gl/86ULiw",
         },
         {
           id: "award-default-modal-3",

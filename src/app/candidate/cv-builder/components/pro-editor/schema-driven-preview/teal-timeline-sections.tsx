@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlignLeft,
   Award,
@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { AddSectionButtons } from "@/app/candidate/cv-builder/components/pro-editor/AddSectionButtons";
 import { cn } from "@/lib/utils";
-import { EditableText } from "./inline-editors";
+import { EditableList, EditableText } from "./inline-editors";
 import { buildProjectsSectionPayload, normalizeProjectsModel } from "./project-sections.model";
 import { ProjectCollectionEditor } from "./project-sections.view";
 import type {
@@ -29,6 +29,7 @@ import type {
   CVSectionComponentProps,
   EducationSectionData,
   CVTemplateIconToken,
+  CustomSectionData,
   ExperienceSectionData,
   LanguagesSectionData,
   ProjectsSectionData,
@@ -50,12 +51,26 @@ const ICON_MAP: Record<CVTemplateIconToken, LucideIcon> = {
   custom: FileText,
 };
 
-interface TealOverviewItemData {
+const ICON_PICKER_OPTIONS: CVTemplateIconToken[] = [
+  "summary",
+  "target",
+  "experience",
+  "education",
+  "skills",
+  "languages",
+  "projects",
+  "certificates",
+  "awards",
+  "activities",
+  "custom",
+];
+
+interface TealOverviewItemData extends Record<string, unknown> {
   id: string;
   content: string;
 }
 
-interface TealWorkExperienceItemData {
+interface TealWorkExperienceItemData extends Record<string, unknown> {
   id: string;
   leftDate: string;
   rightTitle: string;
@@ -64,21 +79,22 @@ interface TealWorkExperienceItemData {
   sourceShape?: Record<string, unknown>;
 }
 
-interface TealActivityItemData {
+interface TealActivityItemData extends Record<string, unknown> {
   id: string;
   leftDate: string;
   rightTitle: string;
   rightSubtitle: string;
+  rightDescription: string;
 }
 
-interface TealSkillItemData {
+interface TealSkillItemData extends Record<string, unknown> {
   id: string;
   name: string;
   group: "main" | "other";
   level?: number;
 }
 
-interface TealEducationItemData {
+interface TealEducationItemData extends Record<string, unknown> {
   id: string;
   institution: string;
   degree: string;
@@ -86,7 +102,7 @@ interface TealEducationItemData {
   endDate: string;
 }
 
-interface TealCertificateItemData {
+interface TealCertificateItemData extends Record<string, unknown> {
   id: string;
   name: string;
   issuer: string;
@@ -94,13 +110,13 @@ interface TealCertificateItemData {
   url: string;
 }
 
-interface TealLanguageItemData {
+interface TealLanguageItemData extends Record<string, unknown> {
   id: string;
   name: string;
   level: string;
 }
 
-interface TealAwardItemData {
+interface TealAwardItemData extends Record<string, unknown> {
   id: string;
   date: string;
   title: string;
@@ -121,6 +137,52 @@ const AWARD_EMPTY_ITEM_TEMPLATE: TealAwardItemData = {
   detail: "",
 };
 
+const ACTIVITY_EMPTY_ITEM_TEMPLATE: Record<string, unknown> = {
+  id: "act-1",
+  startDate: "",
+  endDate: "",
+  name: "",
+  role: "",
+  description: "",
+};
+
+const SKILL_EMPTY_ITEM_TEMPLATE: Record<string, unknown> = {
+  id: "skill-main-1",
+  name: "",
+  group: "main",
+  level: 0,
+};
+
+const EDUCATION_EMPTY_ITEM_TEMPLATE: Record<string, unknown> = {
+  id: "edu-1",
+  institution: "",
+  degree: "",
+  startDate: "",
+  endDate: "",
+};
+
+const CERTIFICATE_EMPTY_ITEM_TEMPLATE: Record<string, unknown> = {
+  id: "cert-1",
+  name: "",
+  issuer: "",
+  date: "",
+  url: "",
+};
+
+const LANGUAGE_EMPTY_ITEM_TEMPLATE: Record<string, unknown> = {
+  id: "lang-1",
+  name: "",
+  level: "",
+};
+
+const AWARD_RAW_EMPTY_ITEM_TEMPLATE: Record<string, unknown> = {
+  id: "award-1",
+  date: "",
+  title: "",
+  issuer: "",
+  description: "",
+};
+
 const WORK_EXPERIENCE_EMPTY_ITEM_TEMPLATE: Record<string, unknown> = {
   id: "we-1",
   type: "workItem",
@@ -137,6 +199,7 @@ interface SectionHeaderProps {
   icon: CVTemplateIconToken;
   isSectionActive: boolean;
   onChangeTitle: (nextTitle: string) => void;
+  onChangeIcon?: (nextIcon: CVTemplateIconToken) => void;
 }
 
 function toSafeText(value: unknown) {
@@ -192,6 +255,14 @@ interface CreateEmptyNodeFromSchemaOptions<TNode extends Record<string, unknown>
   indexHint?: number;
 }
 
+interface AppendTealTimelineItemOptions<TNode extends Record<string, unknown>> {
+  sourceNode?: TNode | null;
+  fallbackNode: TNode;
+  idPrefix: string;
+  insertAt?: number;
+  preserveMetadataKeys?: string[];
+}
+
 export function createEmptyNodeFromSchema<TNode extends Record<string, unknown>>({
   sourceNode,
   fallbackNode,
@@ -205,7 +276,142 @@ export function createEmptyNodeFromSchema<TNode extends Record<string, unknown>>
   return {
     ...normalizedNode,
     id: `${idPrefix}-${indexHint + 1}-${Date.now()}`,
-  } as TNode;
+  } as unknown as TNode;
+}
+
+export function appendTealTimelineItem<TNode extends Record<string, unknown>>(
+  items: unknown[],
+  {
+    sourceNode,
+    fallbackNode,
+    idPrefix,
+    insertAt,
+    preserveMetadataKeys = ["type", "nodeType", "sectionType", "kind"],
+  }: AppendTealTimelineItemOptions<TNode>,
+): TNode[] {
+  const existingItems = Array.isArray(items) ? [...items] : [];
+  let resolvedSourceNode: TNode | undefined;
+
+  if (isObjectRecord(sourceNode)) {
+    resolvedSourceNode = sourceNode;
+  } else {
+    for (let index = existingItems.length - 1; index >= 0; index -= 1) {
+      const candidate = existingItems[index];
+      if (isObjectRecord(candidate)) {
+        resolvedSourceNode = candidate as TNode;
+        break;
+      }
+    }
+  }
+  const nextItem = createEmptyNodeFromSchema<TNode>({
+    sourceNode: resolvedSourceNode,
+    fallbackNode,
+    idPrefix,
+    indexHint: existingItems.length,
+  });
+
+  if (resolvedSourceNode) {
+    preserveMetadataKeys.forEach((metadataKey) => {
+      const metadataValue = resolvedSourceNode[metadataKey];
+      if (metadataValue !== undefined) {
+        nextItem[metadataKey as keyof TNode] = metadataValue as TNode[keyof TNode];
+      }
+    });
+  }
+
+  const safeInsertAt = Number.isInteger(insertAt)
+    ? Math.min(Math.max(insertAt ?? existingItems.length, 0), existingItems.length)
+    : existingItems.length;
+
+  return [
+    ...(existingItems.slice(0, safeInsertAt) as TNode[]),
+    nextItem,
+    ...(existingItems.slice(safeInsertAt) as TNode[]),
+  ];
+}
+
+interface RepeatableSplitState {
+  sourceItemsFromSplit: unknown[] | null;
+  fullRawItems: unknown[];
+  chunkStartIndex: number;
+  chunkItemCount: number;
+  totalItemCount: number;
+  isSplitContinuation: boolean;
+  showSectionChrome: boolean;
+  isLastChunk: boolean;
+}
+
+interface RepeatableAddTarget<TNode extends Record<string, unknown>> {
+  insertAt: number;
+  sourceNode?: TNode;
+  selectedIndexWithinChunk: number;
+}
+
+function resolveRepeatableSplitState(data: unknown, rawItems: unknown[]): RepeatableSplitState {
+  const splitContext = isObjectRecord(data) && isObjectRecord((data as Record<string, unknown>).__splitContext)
+    ? ((data as Record<string, unknown>).__splitContext as Record<string, unknown>)
+    : null;
+
+  const sourceItemsFromSplit = splitContext && Array.isArray(splitContext.sourceItems)
+    ? splitContext.sourceItems
+    : null;
+  const fullRawItems = sourceItemsFromSplit ?? rawItems;
+  const chunkStartIndex = splitContext && Number.isFinite(Number(splitContext.startIndex))
+    ? Math.max(0, Math.floor(Number(splitContext.startIndex)))
+    : 0;
+  const chunkItemCount = splitContext && Number.isFinite(Number(splitContext.itemCount))
+    ? Math.max(0, Math.floor(Number(splitContext.itemCount)))
+    : rawItems.length;
+  const totalItemCount = splitContext && Number.isFinite(Number(splitContext.totalCount))
+    ? Math.max(0, Math.floor(Number(splitContext.totalCount)))
+    : fullRawItems.length;
+  const isSplitContinuation = splitContext?.isContinuation === true && chunkStartIndex > 0;
+
+  return {
+    sourceItemsFromSplit,
+    fullRawItems,
+    chunkStartIndex,
+    chunkItemCount,
+    totalItemCount,
+    isSplitContinuation,
+    showSectionChrome: !isSplitContinuation,
+    isLastChunk: !splitContext || chunkStartIndex + chunkItemCount >= totalItemCount,
+  };
+}
+
+export function resolveTealSectionFrameClassName(input: {
+  showSectionChrome: boolean;
+  isActive: boolean;
+}) {
+  if (input.showSectionChrome) {
+    return input.isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent";
+  }
+
+  return input.isActive ? "border-teal-200 bg-white pt-0" : "border-transparent bg-transparent pt-0";
+}
+
+function resolveRepeatableAddTarget<TNode extends Record<string, unknown>>(input: {
+  fullRawItems: unknown[];
+  chunkStartIndex: number;
+  chunkLength: number;
+  sourceItemsFromSplit: unknown[] | null;
+}): RepeatableAddTarget<TNode> {
+  const { fullRawItems, chunkStartIndex, chunkLength, sourceItemsFromSplit } = input;
+  const fullLength = fullRawItems.length;
+  const desiredInsertAt = sourceItemsFromSplit ? chunkStartIndex + chunkLength : fullLength;
+  const insertAt = Math.min(Math.max(desiredInsertAt, 0), fullLength);
+
+  const sourceIndex = insertAt > 0 ? insertAt - 1 : fullLength - 1;
+  const sourceCandidate = sourceIndex >= 0 ? fullRawItems[sourceIndex] : undefined;
+  const sourceNode = isObjectRecord(sourceCandidate)
+    ? (sourceCandidate as TNode)
+    : undefined;
+
+  return {
+    insertAt,
+    sourceNode,
+    selectedIndexWithinChunk: insertAt - chunkStartIndex,
+  };
 }
 
 function stripHtml(value: string) {
@@ -352,27 +558,78 @@ function buildWorkExperienceItemRecord(item: TealWorkExperienceItemData, index: 
   return nextRecord;
 }
 
-export function appendWorkExperienceItem(items: unknown[]) {
+interface AppendWorkExperienceItemOptions {
+  insertAt?: number;
+  sourceNode?: Record<string, unknown> | null;
+}
+
+export function appendWorkExperienceItem(items: unknown[], options?: AppendWorkExperienceItemOptions) {
   const existingItems = Array.isArray(items) ? [...items] : [];
   const firstItemShape = existingItems.find((item) => isObjectRecord(item));
+  const resolvedSourceNode = isObjectRecord(options?.sourceNode)
+    ? options.sourceNode
+    : (isObjectRecord(firstItemShape) ? firstItemShape : undefined);
 
-  const nextItem = createEmptyNodeFromSchema<Record<string, unknown>>({
-    sourceNode: isObjectRecord(firstItemShape) ? firstItemShape : undefined,
+  return appendTealTimelineItem<Record<string, unknown>>(existingItems, {
+    sourceNode: resolvedSourceNode,
     fallbackNode: WORK_EXPERIENCE_EMPTY_ITEM_TEMPLATE,
     idPrefix: "we",
-    indexHint: existingItems.length,
+    insertAt: options?.insertAt,
+  });
+}
+
+export function appendTealTimelineSkillItem(items: unknown[], group: "main" | "other") {
+  const existingItems = Array.isArray(items) ? [...items] : [];
+  let sourceNode: Record<string, unknown> | undefined;
+  let lastGroupIndex = -1;
+  let insertAt = existingItems.length;
+
+  existingItems.forEach((item, index) => {
+    if (!isObjectRecord(item)) {
+      return;
+    }
+
+    const itemGroup = normalizeSkillGroup(item.group, toSafeText(item.name));
+    if (itemGroup === group) {
+      sourceNode = item;
+      lastGroupIndex = index;
+    }
   });
 
-  if (isObjectRecord(firstItemShape)) {
-    ["type", "nodeType", "sectionType", "kind"].forEach((metadataKey) => {
-      const metadataValue = firstItemShape[metadataKey];
-      if (typeof metadataValue === "string" && metadataValue.trim().length > 0) {
-        nextItem[metadataKey] = metadataValue;
+  if (lastGroupIndex >= 0) {
+    insertAt = lastGroupIndex + 1;
+  } else if (group === "main") {
+    const firstOtherIndex = existingItems.findIndex((item) => {
+      if (!isObjectRecord(item)) {
+        return false;
       }
+
+      return normalizeSkillGroup(item.group, toSafeText(item.name)) === "other";
     });
+
+    if (firstOtherIndex >= 0) {
+      insertAt = firstOtherIndex;
+    }
   }
 
-  return [...existingItems, nextItem];
+  const appendedItems = appendTealTimelineItem<Record<string, unknown>>(existingItems, {
+    sourceNode,
+    fallbackNode: {
+      ...SKILL_EMPTY_ITEM_TEMPLATE,
+      group,
+    },
+    idPrefix: `skill-${group}`,
+    insertAt,
+  });
+
+  return appendedItems.map((item, index) =>
+    index === insertAt
+      ? {
+          ...item,
+          group,
+        }
+      : item,
+  );
 }
 
 function isOverviewBulletLine(value: string) {
@@ -496,7 +753,7 @@ export function normalizeWorkExperienceItems(data: ExperienceSectionData): TealW
   }
 
   return rawItems.map((item, index) => {
-    const record = isObjectRecord(item) ? item : {};
+    const record: Record<string, unknown> = isObjectRecord(item) ? item : {};
     const fieldsRecord = isObjectRecord(record.fields) ? record.fields : null;
     const leftDateFromData = toSafeText(record.leftDate);
     const leftDateFromFields = toSafeText(fieldsRecord?.date);
@@ -530,7 +787,7 @@ export function normalizeWorkExperienceItems(data: ExperienceSectionData): TealW
   });
 }
 
-function normalizeActivityItems(data: ActivitiesSectionData): TealActivityItemData[] {
+export function normalizeActivityItems(data: ActivitiesSectionData): TealActivityItemData[] {
   const rawItems = Array.isArray(data.items) ? data.items : [];
 
   if (rawItems.length === 0) {
@@ -540,6 +797,7 @@ function normalizeActivityItems(data: ActivitiesSectionData): TealActivityItemDa
         leftDate: "",
         rightTitle: "",
         rightSubtitle: "",
+        rightDescription: "",
       },
     ];
   }
@@ -548,11 +806,13 @@ function normalizeActivityItems(data: ActivitiesSectionData): TealActivityItemDa
     const record = item as unknown as Record<string, unknown>;
     const startDate = toSafeText(record.startDate);
     const endDate = toSafeText(record.endDate);
+    const description = stripHtml(toSafeText(record.description) || toSafeText(record.rightDescription));
     return {
       id: toSafeText(record.id) || `act-${index + 1}`,
       leftDate: toSafeText(record.leftDate) || buildDateRangeLabel(startDate, endDate),
       rightTitle: toSafeText(record.rightTitle) || toSafeText(record.name),
       rightSubtitle: toSafeText(record.rightSubtitle) || toSafeText(record.role),
+      rightDescription: description,
     };
   });
 }
@@ -577,7 +837,7 @@ export function buildWorkExperiencePayload(title: string, items: TealWorkExperie
   };
 }
 
-function buildActivitiesPayload(title: string, items: TealActivityItemData[]) {
+export function buildActivitiesPayload(title: string, items: TealActivityItemData[]) {
   return {
     title,
     items: items.map((item, index) => {
@@ -592,7 +852,7 @@ function buildActivitiesPayload(title: string, items: TealActivityItemData[]) {
         endDate: hasRange ? dates.endDate : "",
         name: item.rightTitle,
         role: item.rightSubtitle,
-        description: item.rightSubtitle,
+        description: item.rightDescription || item.rightSubtitle,
       };
     }),
     text: items
@@ -744,7 +1004,7 @@ function buildCertificatesPayload(title: string, items: TealCertificateItemData[
   };
 }
 
-function normalizeLanguageItems(data: LanguagesSectionData): TealLanguageItemData[] {
+export function normalizeLanguageItems(data: LanguagesSectionData): TealLanguageItemData[] {
   const rawItems = Array.isArray(data.items) ? data.items : [];
 
   if (rawItems.length === 0) {
@@ -768,7 +1028,7 @@ function normalizeLanguageItems(data: LanguagesSectionData): TealLanguageItemDat
   });
 }
 
-function buildLanguagesPayload(title: string, items: TealLanguageItemData[]) {
+export function buildLanguagesPayload(title: string, items: TealLanguageItemData[]) {
   const normalizedItems = items.map((item, index) => ({
     id: item.id || `lang-${index + 1}`,
     name: item.name,
@@ -831,15 +1091,115 @@ export function buildAwardsPayload(title: string, items: TealAwardItemData[]) {
   };
 }
 
-export function SectionHeader({ title, icon, isSectionActive, onChangeTitle }: SectionHeaderProps) {
+export function SectionHeader({ title, icon, isSectionActive, onChangeTitle, onChangeIcon }: SectionHeaderProps) {
   const Icon = ICON_MAP[icon] ?? FileText;
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const canEditIcon = isSectionActive && typeof onChangeIcon === "function";
+
+  useEffect(() => {
+    if (!showIconPicker) {
+      return;
+    }
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      if (!pickerRef.current) {
+        return;
+      }
+
+      const targetNode = event.target as Node | null;
+      if (!targetNode || pickerRef.current.contains(targetNode)) {
+        return;
+      }
+
+      setShowIconPicker(false);
+    };
+
+    window.addEventListener("pointerdown", handleOutsidePointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", handleOutsidePointerDown);
+    };
+  }, [showIconPicker]);
+
+  useEffect(() => {
+    if (canEditIcon) {
+      return;
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowIconPicker(false);
+  }, [canEditIcon]);
 
   return (
     <div className="mb-1.5">
       <div className="flex items-center gap-2">
-        <span className="inline-flex h-5 w-5 items-center justify-center border border-teal-500 bg-teal-500 text-white">
-          <Icon size={11} />
-        </span>
+        <div className="relative" ref={pickerRef}>
+          <button
+            type="button"
+            onPointerDown={(event) => {
+              event.stopPropagation();
+
+              if (!canEditIcon) {
+                return;
+              }
+
+              event.preventDefault();
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+
+              if (!canEditIcon) {
+                return;
+              }
+
+              setShowIconPicker((previousState) => !previousState);
+            }}
+            className={cn(
+              "inline-flex h-5 w-5 items-center justify-center border text-white transition",
+              canEditIcon
+                ? "border-teal-500 bg-teal-500 hover:bg-teal-600"
+                : "border-teal-500 bg-teal-500",
+            )}
+            title={canEditIcon ? "Chọn biểu tượng mục" : "Biểu tượng mục"}
+          >
+            <Icon size={11} />
+          </button>
+
+          {canEditIcon && showIconPicker ? (
+            <div className="absolute left-0 top-6 z-40 grid min-w-35 grid-cols-4 gap-1 border border-slate-300 bg-white p-1.5 shadow-[0_16px_36px_-20px_rgba(15,23,42,0.55)]">
+              {ICON_PICKER_OPTIONS.map((iconToken) => {
+                const OptionIcon = ICON_MAP[iconToken] ?? FileText;
+                const isSelected = iconToken === icon;
+
+                return (
+                  <button
+                    key={iconToken}
+                    type="button"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onChangeIcon?.(iconToken);
+                      setShowIconPicker(false);
+                    }}
+                    className={cn(
+                      "inline-flex h-7 w-7 items-center justify-center border text-slate-600 transition",
+                      isSelected
+                        ? "border-teal-500 bg-teal-50 text-teal-700"
+                        : "border-slate-200 hover:border-teal-300 hover:text-teal-700",
+                    )}
+                    title={iconToken}
+                  >
+                    <OptionIcon size={13} />
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
         <div className="min-w-0 flex-1">
           <EditableText
             value={title}
@@ -892,6 +1252,86 @@ export function AddItemButton({ label, onClick }: AddItemButtonProps) {
   );
 }
 
+export function TealCustomSection({
+  data,
+  styleConfig,
+  isActive,
+  onEdit,
+  onAddAbove,
+  onAddBelow,
+}: CVSectionComponentProps<CustomSectionData>) {
+  const sectionTitle = toSafeText(data.title) || styleConfig.title;
+  const sectionText = toSafeText(data.text);
+  const listItems = Array.isArray(data.items) ? data.items.map((item) => toSafeText(item)) : [];
+  const hasList = Array.isArray(data.items);
+
+  return (
+    <div className="group relative break-inside-avoid-page" data-cv-section-shell>
+      <AddSectionButtons
+        isActive={isActive}
+        borderClassName={styleConfig.itemBorderClassName}
+        onAddAbove={onAddAbove}
+        onAddBelow={onAddBelow}
+      />
+
+      <div
+        className={cn(
+          "border px-1.5 py-1.5 transition-colors",
+          resolveTealSectionFrameClassName({
+            showSectionChrome: true,
+            isActive,
+          }),
+        )}
+      >
+        <SectionHeader
+          title={sectionTitle}
+          icon={styleConfig.icon}
+          isSectionActive={isActive}
+          onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+          onChangeTitle={(nextTitle) => onEdit({ ...data, title: nextTitle })}
+        />
+
+        <div className="space-y-2 pl-1" data-cv-section-content>
+          <EditableText
+            value={sectionText}
+            placeholder="Nhập nội dung mục tùy chỉnh"
+            isSectionActive={isActive}
+            onCommit={(nextValue) =>
+              onEdit({
+                ...data,
+                title: sectionTitle,
+                text: nextValue,
+                items: hasList ? listItems : undefined,
+              })}
+            multiline
+            minRows={3}
+            showToolbar
+            readClassName="px-0 py-0 text-[13px] leading-[1.8] text-slate-700"
+            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+          />
+
+          {hasList ? (
+            <EditableList
+              items={listItems}
+              placeholder="Thêm nội dung"
+              isSectionActive={isActive}
+              onCommit={(nextItems) =>
+                onEdit({
+                  ...data,
+                  title: sectionTitle,
+                  text: sectionText,
+                  items: nextItems.length > 0 ? nextItems : undefined,
+                })}
+              readClassName="px-0 py-0 text-[13px] leading-6 text-slate-800"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface OverviewItemProps {
   item: TealOverviewItemData;
   index: number;
@@ -917,13 +1357,16 @@ export function OverviewItem({
         "group/overview relative border px-1 py-0.5 transition-colors",
         isSectionActive && isSelected ? "border-slate-300 bg-white" : "border-transparent",
       )}
+      data-cv-split-item="true"
+      data-cv-item-id={item.id || ""}
+      data-cv-item-index={index}
       onMouseDown={() => onSelect(index)}
       onFocusCapture={() => onSelect(index)}
     >
       <EditableText
         value={item.content}
         placeholder="Nội dung overview"
-        isSectionActive={isSectionActive && isSelected}
+        isSectionActive={isSectionActive}
         onCommit={(nextValue) => onChange(index, nextValue)}
         multiline
         minRows={1}
@@ -959,7 +1402,15 @@ export function OverviewSection({
   onAddBelow,
 }: CVSectionComponentProps<SummarySectionData>) {
   const overviewItems = normalizeOverviewItems(data);
+  const rawOverviewItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawOverviewItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawOverviewItems);
   const sectionTitle = toSafeText(data.title) || styleConfig.title;
+  const showAddActions = isActive;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const safeSelectedIndex =
     isActive && selectedIndex !== null && selectedIndex < overviewItems.length
@@ -967,45 +1418,107 @@ export function OverviewSection({
       : null;
 
   const updateOverviewItems = (nextItems: TealOverviewItemData[]) => {
-    onEdit(buildOverviewPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildOverviewPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = nextItems.map((item, index) => {
+      const rawIndex = chunkStartIndex + index;
+      const sourceItem = isObjectRecord(fullRawOverviewItems[rawIndex])
+        ? (fullRawOverviewItems[rawIndex] as Record<string, unknown>)
+        : null;
+
+      return {
+        ...(sourceItem ?? {}),
+        id: item.id || toSafeText(sourceItem?.id) || `ov-${rawIndex + 1}`,
+        content: item.content,
+      };
+    });
+
+    const tailStartIndex = Math.min(chunkStartIndex + rawOverviewItems.length, fullRawOverviewItems.length);
+    const mergedItems = [
+      ...fullRawOverviewItems.slice(0, chunkStartIndex),
+      ...nextChunkItems,
+      ...fullRawOverviewItems.slice(tailStartIndex),
+    ];
+
+    onEdit({
+      title: sectionTitle,
+      items: mergedItems as SummarySectionData["items"],
+      text: mergedItems
+        .map((item) => toSafeText((item as Record<string, unknown>).content))
+        .join("\n"),
+    });
   };
 
   const addOverviewItem = () => {
-    const nextItem = createEmptyNodeFromSchema<TealOverviewItemData>({
-      sourceNode: overviewItems[overviewItems.length - 1],
-      fallbackNode: OVERVIEW_EMPTY_ITEM_TEMPLATE,
-      idPrefix: "ov",
-      indexHint: overviewItems.length,
+    const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+      fullRawItems: fullRawOverviewItems,
+      chunkStartIndex,
+      chunkLength: rawOverviewItems.length,
+      sourceItemsFromSplit,
     });
 
-    updateOverviewItems([
-      ...overviewItems,
-      nextItem,
-    ]);
-    setSelectedIndex(overviewItems.length);
+    const nextRawItems = appendTealTimelineItem<Record<string, unknown>>(fullRawOverviewItems, {
+      sourceNode: addTarget.sourceNode,
+      fallbackNode: OVERVIEW_EMPTY_ITEM_TEMPLATE,
+      idPrefix: "ov",
+      insertAt: addTarget.insertAt,
+    });
+
+    onEdit({
+      title: sectionTitle,
+      items: nextRawItems as SummarySectionData["items"],
+      text: nextRawItems
+        .map((item) => toSafeText((item as Record<string, unknown>).content))
+        .join("\n"),
+    });
+    setSelectedIndex(addTarget.selectedIndexWithinChunk);
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildOverviewPayload(nextTitle, overviewItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawOverviewItems as SummarySectionData["items"],
+                  text: fullRawOverviewItems
+                    .map((item) => toSafeText((item as Record<string, unknown>).content))
+                    .join("\n"),
+                });
+                return;
+              }
+
+              onEdit(buildOverviewPayload(nextTitle, overviewItems));
+            }}
+          />
+        ) : null}
 
         <div className="space-y-0.5" data-cv-section-content>
           {overviewItems.map((item, index) => (
@@ -1028,12 +1541,31 @@ export function OverviewSection({
                 updateOverviewItems(nextItems);
               }}
               onRemove={(targetIndex) => {
-                const nextItems = overviewItems.filter((_, currentIndex) => currentIndex !== targetIndex);
-                updateOverviewItems(nextItems.length > 0 ? nextItems : [{ ...OVERVIEW_EMPTY_ITEM_TEMPLATE }]);
+                const targetRawIndex = sourceItemsFromSplit
+                  ? chunkStartIndex + targetIndex
+                  : targetIndex;
+                const nextRawItems = fullRawOverviewItems.filter((_, currentIndex) => currentIndex !== targetRawIndex);
+                const nextOverviewRawItems = nextRawItems.length > 0
+                  ? nextRawItems
+                  : appendTealTimelineItem([], {
+                      fallbackNode: OVERVIEW_EMPTY_ITEM_TEMPLATE,
+                      idPrefix: "ov",
+                    });
+
+                onEdit({
+                  title: sectionTitle,
+                  items: nextOverviewRawItems as SummarySectionData["items"],
+                  text: nextOverviewRawItems
+                    .map((item) => toSafeText((item as Record<string, unknown>).content))
+                    .join("\n"),
+                });
+
                 setSelectedIndex((previousIndex) => {
-                  if (nextItems.length === 0) {
-                    return 0;
+                  if (sourceItemsFromSplit) {
+                    return null;
                   }
+
+                  const nextLength = nextRawItems.length > 0 ? nextRawItems.length : 1;
 
                   if (previousIndex === null) {
                     return null;
@@ -1043,8 +1575,8 @@ export function OverviewSection({
                     return previousIndex - 1;
                   }
 
-                  if (previousIndex >= nextItems.length) {
-                    return nextItems.length - 1;
+                  if (previousIndex >= nextLength) {
+                    return nextLength - 1;
                   }
 
                   return previousIndex;
@@ -1054,7 +1586,7 @@ export function OverviewSection({
           ))}
         </div>
 
-        {isActive ? (
+        {showAddActions ? (
           <div className="mt-1.5 flex justify-end">
             <AddItemButton label="Thêm nội dung" onClick={addOverviewItem} />
           </div>
@@ -1089,6 +1621,9 @@ export function WorkExperienceItem({
         "group/work relative border px-1 py-1 transition-colors",
         isSectionActive && isSelected ? "border-slate-300 bg-white" : "border-transparent",
       )}
+      data-cv-split-item="true"
+      data-cv-item-id={item.id || ""}
+      data-cv-item-index={index}
       onMouseDown={() => onSelect(index)}
       onFocusCapture={() => onSelect(index)}
     >
@@ -1097,7 +1632,7 @@ export function WorkExperienceItem({
           <EditableText
             value={item.leftDate}
             placeholder="01/2018 – Present"
-            isSectionActive={isSectionActive && isSelected}
+            isSectionActive={isSectionActive}
             onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
             multiline={false}
             showToolbar={false}
@@ -1110,7 +1645,7 @@ export function WorkExperienceItem({
           <EditableText
             value={item.rightTitle}
             placeholder="Tên công ty"
-            isSectionActive={isSectionActive && isSelected}
+            isSectionActive={isSectionActive}
             onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
             multiline={false}
             showToolbar={false}
@@ -1121,7 +1656,7 @@ export function WorkExperienceItem({
           <EditableText
             value={item.rightSubtitle}
             placeholder="Vị trí hoặc mô tả ngắn"
-            isSectionActive={isSectionActive && isSelected}
+            isSectionActive={isSectionActive}
             onCommit={(nextValue) => onChange(index, { rightSubtitle: nextValue })}
             multiline={false}
             showToolbar={false}
@@ -1132,7 +1667,7 @@ export function WorkExperienceItem({
           <EditableText
             value={item.rightDescription}
             placeholder="- Mô tả công việc\n- Thành tích chính"
-            isSectionActive={isSectionActive && isSelected}
+            isSectionActive={isSectionActive}
             onCommit={(nextValue) => onChange(index, { rightDescription: nextValue })}
             multiline
             minRows={1}
@@ -1170,45 +1705,98 @@ export function WorkExperienceSection({
 }: CVSectionComponentProps<ExperienceSectionData>) {
   const workItems = normalizeWorkExperienceItems(data);
   const rawWorkItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawWorkItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawWorkItems);
   const sectionTitle = toSafeText(data.title) || styleConfig.title;
+  const showAddActions = isActive;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const safeSelectedIndex =
     isActive && selectedIndex !== null && selectedIndex < workItems.length ? selectedIndex : null;
 
   const updateWorkItems = (nextItems: TealWorkExperienceItemData[]) => {
-    onEdit(buildWorkExperiencePayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildWorkExperiencePayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = nextItems.map((item, index) =>
+      buildWorkExperienceItemRecord(item, chunkStartIndex + index),
+    );
+    const tailStartIndex = Math.min(chunkStartIndex + rawWorkItems.length, fullRawWorkItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawWorkItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawWorkItems.slice(tailStartIndex),
+      ] as ExperienceSectionData["items"],
+    });
   };
 
   const addWorkExperienceItem = () => {
-    const nextRawItems = appendWorkExperienceItem(rawWorkItems);
+    const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+      fullRawItems: fullRawWorkItems,
+      chunkStartIndex,
+      chunkLength: rawWorkItems.length,
+      sourceItemsFromSplit,
+    });
+
+    const nextRawItems = appendWorkExperienceItem(fullRawWorkItems, {
+      insertAt: addTarget.insertAt,
+      sourceNode: addTarget.sourceNode,
+    });
+
     onEdit({
       title: sectionTitle,
       items: nextRawItems as ExperienceSectionData["items"],
     });
-    setSelectedIndex(nextRawItems.length - 1);
+    setSelectedIndex(addTarget.selectedIndexWithinChunk);
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildWorkExperiencePayload(nextTitle, workItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawWorkItems as ExperienceSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildWorkExperiencePayload(nextTitle, workItems));
+            }}
+          />
+        ) : null}
 
         <div className="divide-y divide-slate-300/70" data-cv-section-content>
           {workItems.map((item, index) => (
@@ -1231,7 +1819,10 @@ export function WorkExperienceSection({
                 updateWorkItems(nextItems);
               }}
               onRemove={(targetIndex) => {
-                const nextRawItems = rawWorkItems.filter((_, currentIndex) => currentIndex !== targetIndex);
+                const targetRawIndex = sourceItemsFromSplit
+                  ? chunkStartIndex + targetIndex
+                  : targetIndex;
+                const nextRawItems = fullRawWorkItems.filter((_, currentIndex) => currentIndex !== targetRawIndex);
                 onEdit({
                   title: sectionTitle,
                   items: (nextRawItems.length > 0
@@ -1239,6 +1830,10 @@ export function WorkExperienceSection({
                     : appendWorkExperienceItem([])) as ExperienceSectionData["items"],
                 });
                 setSelectedIndex((previousIndex) => {
+                  if (sourceItemsFromSplit) {
+                    return null;
+                  }
+
                   const nextLength = nextRawItems.length > 0 ? nextRawItems.length : 1;
 
                   if (nextLength === 0) {
@@ -1264,7 +1859,7 @@ export function WorkExperienceSection({
           ))}
         </div>
 
-        {isActive ? (
+        {showAddActions ? (
           <div className="mt-1.5 flex justify-end">
             <AddItemButton label="Thêm kinh nghiệm" onClick={addWorkExperienceItem} />
           </div>
@@ -1299,6 +1894,9 @@ export function ActivityItem({
         "group/activity relative border px-1 py-1 transition-colors",
         isSectionActive && isSelected ? "border-slate-300 bg-white" : "border-transparent",
       )}
+      data-cv-split-item="true"
+      data-cv-item-id={item.id || ""}
+      data-cv-item-index={index}
       onMouseDown={() => onSelect(index)}
       onFocusCapture={() => onSelect(index)}
     >
@@ -1306,7 +1904,7 @@ export function ActivityItem({
         <EditableText
           value={item.leftDate}
           placeholder="06/2016"
-          isSectionActive={isSectionActive && isSelected}
+          isSectionActive={isSectionActive}
           onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
           multiline={false}
           showToolbar={false}
@@ -1318,7 +1916,7 @@ export function ActivityItem({
           <EditableText
             value={item.rightTitle}
             placeholder="Tên hoạt động"
-            isSectionActive={isSectionActive && isSelected}
+            isSectionActive={isSectionActive}
             onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
             multiline={false}
             showToolbar={false}
@@ -1329,7 +1927,7 @@ export function ActivityItem({
           <EditableText
             value={item.rightSubtitle}
             placeholder="Vai trò"
-            isSectionActive={isSectionActive && isSelected}
+            isSectionActive={isSectionActive}
             onCommit={(nextValue) => onChange(index, { rightSubtitle: nextValue })}
             multiline={false}
             showToolbar={false}
@@ -1365,7 +1963,15 @@ export function TealActivitiesSection({
   onAddBelow,
 }: CVSectionComponentProps<ActivitiesSectionData>) {
   const activityItems = normalizeActivityItems(data);
+  const rawActivityItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawActivityItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawActivityItems);
   const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const showAddActions = isActive;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const safeSelectedIndex =
     isActive && selectedIndex !== null && selectedIndex < activityItems.length
@@ -1373,43 +1979,84 @@ export function TealActivitiesSection({
       : null;
 
   const updateActivityItems = (nextItems: TealActivityItemData[]) => {
-    onEdit(buildActivitiesPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildActivitiesPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = buildActivitiesPayload(sectionTitle, nextItems).items;
+    const tailStartIndex = Math.min(chunkStartIndex + rawActivityItems.length, fullRawActivityItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawActivityItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawActivityItems.slice(tailStartIndex),
+      ] as ActivitiesSectionData["items"],
+    });
   };
 
   const addActivityItem = () => {
-    updateActivityItems([
-      ...activityItems,
-      {
-        id: `act-${activityItems.length + 1}-${Date.now()}`,
-        leftDate: "",
-        rightTitle: "",
-        rightSubtitle: "",
-      },
-    ]);
-    setSelectedIndex(activityItems.length);
+    const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+      fullRawItems: fullRawActivityItems,
+      chunkStartIndex,
+      chunkLength: rawActivityItems.length,
+      sourceItemsFromSplit,
+    });
+
+    const nextRawItems = appendTealTimelineItem(fullRawActivityItems, {
+      sourceNode: addTarget.sourceNode,
+      fallbackNode: ACTIVITY_EMPTY_ITEM_TEMPLATE,
+      idPrefix: "act",
+      insertAt: addTarget.insertAt,
+    });
+    onEdit({
+      title: sectionTitle,
+      items: nextRawItems as ActivitiesSectionData["items"],
+    });
+    setSelectedIndex(addTarget.selectedIndexWithinChunk);
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildActivitiesPayload(nextTitle, activityItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawActivityItems as ActivitiesSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildActivitiesPayload(nextTitle, activityItems));
+            }}
+          />
+        ) : null}
 
         <div className="divide-y divide-slate-300/70" data-cv-section-content>
           {activityItems.map((item, index) => (
@@ -1432,23 +2079,25 @@ export function TealActivitiesSection({
                 updateActivityItems(nextItems);
               }}
               onRemove={(targetIndex) => {
-                const nextItems = activityItems.filter((_, currentIndex) => currentIndex !== targetIndex);
-                updateActivityItems(
-                  nextItems.length > 0
-                    ? nextItems
-                    : [
-                        {
-                          id: "act-1",
-                          leftDate: "",
-                          rightTitle: "",
-                          rightSubtitle: "",
-                        },
-                      ],
-                );
+                const targetRawIndex = sourceItemsFromSplit
+                  ? chunkStartIndex + targetIndex
+                  : targetIndex;
+                const nextRawItems = fullRawActivityItems.filter((_, currentIndex) => currentIndex !== targetRawIndex);
+                onEdit({
+                  title: sectionTitle,
+                  items: (nextRawItems.length > 0
+                    ? nextRawItems
+                    : appendTealTimelineItem([], {
+                        fallbackNode: ACTIVITY_EMPTY_ITEM_TEMPLATE,
+                        idPrefix: "act",
+                      })) as ActivitiesSectionData["items"],
+                });
                 setSelectedIndex((previousIndex) => {
-                  if (nextItems.length === 0) {
-                    return 0;
+                  if (sourceItemsFromSplit) {
+                    return null;
                   }
+
+                  const nextLength = nextRawItems.length > 0 ? nextRawItems.length : 1;
 
                   if (previousIndex === null) {
                     return null;
@@ -1458,8 +2107,8 @@ export function TealActivitiesSection({
                     return previousIndex - 1;
                   }
 
-                  if (previousIndex >= nextItems.length) {
-                    return nextItems.length - 1;
+                  if (previousIndex >= nextLength) {
+                    return nextLength - 1;
                   }
 
                   return previousIndex;
@@ -1469,7 +2118,7 @@ export function TealActivitiesSection({
           ))}
         </div>
 
-        {isActive ? (
+        {showAddActions ? (
           <div className="mt-1.5 flex justify-end">
             <AddItemButton label="Thêm hoạt động" onClick={addActivityItem} />
           </div>
@@ -1503,8 +2152,14 @@ function SkillGroupList({
       <span className="pt-0.5 font-bold text-slate-800">{label}</span>
 
       <ul className="ml-4 list-disc space-y-0.5">
-        {items.map((item) => (
-          <li key={item.id} className="group/skill-item relative pl-0.5 pr-6">
+        {items.map((item, index) => (
+          <li
+            key={item.id}
+            className="group/skill-item relative pl-0.5 pr-6"
+            data-cv-split-item="true"
+            data-cv-item-id={item.id || ""}
+            data-cv-item-index={index}
+          >
             <EditableText
               value={item.name}
               placeholder="Nội dung kỹ năng"
@@ -1544,25 +2199,95 @@ export function TealSkillsSection({
   onAddAbove,
   onAddBelow,
 }: CVSectionComponentProps<SkillsSectionData>) {
+  const splitContext = (data as SkillsSectionData & {
+    __splitContext?: {
+      startIndex?: unknown;
+      itemCount?: unknown;
+      totalCount?: unknown;
+      sourceItems?: unknown;
+      isContinuation?: unknown;
+    };
+  }).__splitContext;
   const skillItems = normalizeSkillItems(data);
-  const sectionTitle = styleConfig.title;
+  const rawSkillItems = Array.isArray(data.items) ? data.items : [];
+  const sourceItemsFromSplit = Array.isArray(splitContext?.sourceItems)
+    ? splitContext.sourceItems
+    : null;
+  const fullRawSkillItems = sourceItemsFromSplit ?? rawSkillItems;
+  const chunkStartIndex = Number.isFinite(Number(splitContext?.startIndex))
+    ? Math.max(0, Math.floor(Number(splitContext?.startIndex)))
+    : 0;
+  const chunkItemCount = Number.isFinite(Number(splitContext?.itemCount))
+    ? Math.max(0, Math.floor(Number(splitContext?.itemCount)))
+    : rawSkillItems.length;
+  const totalItemCount = Number.isFinite(Number(splitContext?.totalCount))
+    ? Math.max(0, Math.floor(Number(splitContext?.totalCount)))
+    : fullRawSkillItems.length;
+  const isSplitContinuation = splitContext?.isContinuation === true && chunkStartIndex > 0;
+  const showSectionChrome = !isSplitContinuation;
+  const showSkillAddActions = isActive;
+  const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
 
   const updateSkillItems = (nextItems: TealSkillItemData[]) => {
-    onEdit(buildSkillsPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildSkillsPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = buildSkillsPayload(sectionTitle, nextItems).items;
+    const tailStartIndex = Math.min(chunkStartIndex + rawSkillItems.length, fullRawSkillItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawSkillItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawSkillItems.slice(tailStartIndex),
+      ] as SkillsSectionData["items"],
+    });
   };
 
   const mainItems = skillItems.filter((item) => item.group === "main");
   const otherItems = skillItems.filter((item) => item.group === "other");
 
   const addSkillItem = (group: "main" | "other") => {
-    updateSkillItems([
-      ...skillItems,
-      {
-        id: `skill-${group}-${Date.now()}`,
-        name: "",
-        group,
-      },
-    ]);
+    if (sourceItemsFromSplit) {
+      const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+        fullRawItems: fullRawSkillItems,
+        chunkStartIndex,
+        chunkLength: chunkItemCount,
+        sourceItemsFromSplit,
+      });
+
+      const nextRawItems = appendTealTimelineItem<Record<string, unknown>>(fullRawSkillItems, {
+        sourceNode: addTarget.sourceNode,
+        fallbackNode: {
+          ...SKILL_EMPTY_ITEM_TEMPLATE,
+          group,
+        },
+        idPrefix: `skill-${group}`,
+        insertAt: addTarget.insertAt,
+      }).map((item, index) =>
+        index === addTarget.insertAt
+          ? {
+              ...item,
+              group,
+            }
+          : item,
+      );
+
+      onEdit({
+        title: sectionTitle,
+        items: nextRawItems as SkillsSectionData["items"],
+      });
+      return;
+    }
+
+    const nextRawItems = appendTealTimelineSkillItem(fullRawSkillItems, group);
+    onEdit({
+      title: sectionTitle,
+      items: nextRawItems as SkillsSectionData["items"],
+    });
   };
 
   const updateSkillName = (skillId: string, nextName: string) => {
@@ -1585,25 +2310,43 @@ export function TealSkillsSection({
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildSkillsPayload(nextTitle, skillItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawSkillItems as SkillsSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildSkillsPayload(nextTitle, skillItems));
+            }}
+          />
+        ) : null}
 
         <div className="space-y-2.5 pl-1" data-cv-section-content>
           <SkillGroupList
@@ -1622,7 +2365,7 @@ export function TealSkillsSection({
           />
         </div>
 
-        {isActive ? (
+        {showSkillAddActions ? (
           <div className="mt-2 flex flex-wrap justify-end gap-1.5">
             <AddItemButton label="Thêm kỹ năng chính" onClick={() => addSkillItem("main")} />
             <AddItemButton label="Thêm kỹ năng khác" onClick={() => addSkillItem("other")} />
@@ -1641,12 +2384,26 @@ interface TealAwardLineProps {
   onRemove: (index: number) => void;
 }
 
-function TealAwardLine({ item, index, isSectionActive, onChange, onRemove }: TealAwardLineProps) {
-  const hasDate = item.date.trim().length > 0;
+export function shouldRenderExpandedAwardLine(item: TealAwardItemData, isSectionActive: boolean) {
+  if (isSectionActive) {
+    return true;
+  }
 
-  if (!hasDate) {
+  return [item.date, item.issuer, item.detail]
+    .some((value) => value.trim().length > 0);
+}
+
+function TealAwardLine({ item, index, isSectionActive, onChange, onRemove }: TealAwardLineProps) {
+  const shouldRenderExpandedLine = shouldRenderExpandedAwardLine(item, isSectionActive);
+
+  if (!shouldRenderExpandedLine) {
     return (
-      <div className="group/award-item relative pl-0.5">
+      <div
+        className="group/award-item relative pl-0.5"
+        data-cv-split-item="true"
+        data-cv-item-id={item.id || ""}
+        data-cv-item-index={index}
+      >
         <EditableText
           value={item.title}
           placeholder="Nội dung giải thưởng nổi bật"
@@ -1676,7 +2433,12 @@ function TealAwardLine({ item, index, isSectionActive, onChange, onRemove }: Tea
   }
 
   return (
-    <div className="group/award-item relative grid grid-cols-[5.25rem_1fr] gap-x-4">
+    <div
+      className="group/award-item relative grid grid-cols-[5.25rem_1fr] gap-x-4"
+      data-cv-split-item="true"
+      data-cv-item-id={item.id || ""}
+      data-cv-item-index={index}
+    >
       <EditableText
         value={item.date}
         placeholder="06/2016"
@@ -1750,33 +2512,74 @@ export function TealAwardsSection({
   onAddBelow,
 }: CVSectionComponentProps<AwardsSectionData>) {
   const awardItems = normalizeAwardItems(data);
-  const sectionTitle = styleConfig.title;
+  const rawAwardItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawAwardItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawAwardItems);
+  const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const showAddActions = isActive;
 
   const updateAwardItems = (nextItems: TealAwardItemData[]) => {
-    onEdit(buildAwardsPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildAwardsPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = buildAwardsPayload(sectionTitle, nextItems).items;
+    const tailStartIndex = Math.min(chunkStartIndex + rawAwardItems.length, fullRawAwardItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawAwardItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawAwardItems.slice(tailStartIndex),
+      ] as AwardsSectionData["items"],
+    });
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildAwardsPayload(nextTitle, awardItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawAwardItems as AwardsSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildAwardsPayload(nextTitle, awardItems));
+            }}
+          />
+        ) : null}
 
         <div className="space-y-2 pl-1" data-cv-section-content>
           {awardItems.map((item, index) => (
@@ -1797,33 +2600,46 @@ export function TealAwardsSection({
                 updateAwardItems(nextItems);
               }}
               onRemove={(targetIndex) => {
-                const nextItems = awardItems.filter((_, currentIndex) => currentIndex !== targetIndex);
-                updateAwardItems(
-                  nextItems.length > 0
-                    ? nextItems
-                    : [{ ...AWARD_EMPTY_ITEM_TEMPLATE }],
-                );
+                const targetRawIndex = sourceItemsFromSplit
+                  ? chunkStartIndex + targetIndex
+                  : targetIndex;
+                const nextRawItems = fullRawAwardItems.filter((_, currentIndex) => currentIndex !== targetRawIndex);
+                onEdit({
+                  title: sectionTitle,
+                  items: (nextRawItems.length > 0
+                    ? nextRawItems
+                    : appendTealTimelineItem([], {
+                        fallbackNode: AWARD_RAW_EMPTY_ITEM_TEMPLATE,
+                        idPrefix: "award",
+                      })) as AwardsSectionData["items"],
+                });
               }}
             />
           ))}
         </div>
 
-        {isActive ? (
+        {showAddActions ? (
           <div className="mt-2 flex justify-end">
             <AddItemButton
               label="Thêm giải thưởng"
               onClick={() => {
-                const nextItem = createEmptyNodeFromSchema<TealAwardItemData>({
-                  sourceNode: awardItems[awardItems.length - 1],
-                  fallbackNode: AWARD_EMPTY_ITEM_TEMPLATE,
-                  idPrefix: "award",
-                  indexHint: awardItems.length,
+                const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+                  fullRawItems: fullRawAwardItems,
+                  chunkStartIndex,
+                  chunkLength: rawAwardItems.length,
+                  sourceItemsFromSplit,
                 });
 
-                updateAwardItems([
-                  ...awardItems,
-                  nextItem,
-                ]);
+                const nextRawItems = appendTealTimelineItem(fullRawAwardItems, {
+                  sourceNode: addTarget.sourceNode,
+                  fallbackNode: AWARD_RAW_EMPTY_ITEM_TEMPLATE,
+                  idPrefix: "award",
+                  insertAt: addTarget.insertAt,
+                });
+                onEdit({
+                  title: sectionTitle,
+                  items: nextRawItems as AwardsSectionData["items"],
+                });
               }}
             />
           </div>
@@ -1841,34 +2657,74 @@ export function TealProjectsSection({
   onAddAbove,
   onAddBelow,
 }: CVSectionComponentProps<ProjectsSectionData>) {
+  const rawProjectItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawProjectItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawProjectItems);
   const projectItems = normalizeProjectsModel(data);
-  const sectionTitle = styleConfig.title;
+  const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
 
   const updateProjectItems = (nextItems: typeof projectItems) => {
-    onEdit(buildProjectsSectionPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildProjectsSectionPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = buildProjectsSectionPayload(sectionTitle, nextItems).items;
+    const tailStartIndex = Math.min(chunkStartIndex + rawProjectItems.length, fullRawProjectItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawProjectItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawProjectItems.slice(tailStartIndex),
+      ] as ProjectsSectionData["items"],
+    });
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildProjectsSectionPayload(nextTitle, projectItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawProjectItems as ProjectsSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildProjectsSectionPayload(nextTitle, projectItems));
+            }}
+          />
+        ) : null}
 
         <div className="space-y-3 pl-1" data-cv-section-content>
           <ProjectCollectionEditor projects={projectItems} isSectionActive={isActive} onChange={updateProjectItems} />
@@ -1887,37 +2743,84 @@ export function TealEducationSection({
   onAddBelow,
 }: CVSectionComponentProps<EducationSectionData>) {
   const educationItems = normalizeEducationItems(data);
-  const sectionTitle = styleConfig.title;
+  const rawEducationItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawEducationItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawEducationItems);
+  const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const showAddActions = isActive;
 
   const updateEducationItems = (nextItems: TealEducationItemData[]) => {
-    onEdit(buildEducationPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildEducationPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = buildEducationPayload(sectionTitle, nextItems).items;
+    const tailStartIndex = Math.min(chunkStartIndex + rawEducationItems.length, fullRawEducationItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawEducationItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawEducationItems.slice(tailStartIndex),
+      ] as EducationSectionData["items"],
+    });
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildEducationPayload(nextTitle, educationItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawEducationItems as EducationSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildEducationPayload(nextTitle, educationItems));
+            }}
+          />
+        ) : null}
 
         <div className="space-y-2" data-cv-section-content>
           {educationItems.map((item, index) => (
-            <div key={item.id || `education-item-${index}`} className="group/edu-item relative grid grid-cols-[7.5rem_1fr] gap-x-3 border-b border-slate-200/75 px-0.5 py-1.5 last:border-b-0">
+            <div
+              key={item.id || `education-item-${index}`}
+              className="group/edu-item relative grid grid-cols-[7.5rem_1fr] gap-x-3 border-b border-slate-200/75 px-0.5 py-1.5 last:border-b-0"
+              data-cv-split-item="true"
+              data-cv-item-id={item.id || ""}
+              data-cv-item-index={index}
+            >
               <div>
                 <EditableText
                   value={`${item.startDate}${item.endDate ? ` - ${item.endDate}` : ""}`}
@@ -1996,8 +2899,19 @@ export function TealEducationSection({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    const nextItems = educationItems.filter((_, currentIndex) => currentIndex !== index);
-                    updateEducationItems(nextItems.length > 0 ? nextItems : normalizeEducationItems({ items: [] }));
+                    const targetRawIndex = sourceItemsFromSplit
+                      ? chunkStartIndex + index
+                      : index;
+                    const nextRawItems = fullRawEducationItems.filter((_, currentIndex) => currentIndex !== targetRawIndex);
+                    onEdit({
+                      title: sectionTitle,
+                      items: (nextRawItems.length > 0
+                        ? nextRawItems
+                        : appendTealTimelineItem([], {
+                            fallbackNode: EDUCATION_EMPTY_ITEM_TEMPLATE,
+                            idPrefix: "edu",
+                          })) as EducationSectionData["items"],
+                    });
                   }}
                   className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center text-slate-400 hover:text-rose-600"
                   title="Xóa học vấn"
@@ -2009,21 +2923,28 @@ export function TealEducationSection({
           ))}
         </div>
 
-        {isActive ? (
+        {showAddActions ? (
           <div className="mt-1.5 flex justify-end">
             <AddItemButton
               label="Thêm học vấn"
               onClick={() => {
-                updateEducationItems([
-                  ...educationItems,
-                  {
-                    id: `edu-${educationItems.length + 1}-${Date.now()}`,
-                    institution: "",
-                    degree: "",
-                    startDate: "",
-                    endDate: "",
-                  },
-                ]);
+                const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+                  fullRawItems: fullRawEducationItems,
+                  chunkStartIndex,
+                  chunkLength: rawEducationItems.length,
+                  sourceItemsFromSplit,
+                });
+
+                const nextRawItems = appendTealTimelineItem(fullRawEducationItems, {
+                  sourceNode: addTarget.sourceNode,
+                  fallbackNode: EDUCATION_EMPTY_ITEM_TEMPLATE,
+                  idPrefix: "edu",
+                  insertAt: addTarget.insertAt,
+                });
+                onEdit({
+                  title: sectionTitle,
+                  items: nextRawItems as EducationSectionData["items"],
+                });
               }}
             />
           </div>
@@ -2042,37 +2963,84 @@ export function TealCertificatesSection({
   onAddBelow,
 }: CVSectionComponentProps<CertificatesSectionData>) {
   const certificateItems = normalizeCertificateItems(data);
-  const sectionTitle = styleConfig.title;
+  const rawCertificateItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawCertificateItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawCertificateItems);
+  const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const showAddActions = isActive;
 
   const updateCertificateItems = (nextItems: TealCertificateItemData[]) => {
-    onEdit(buildCertificatesPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildCertificatesPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = buildCertificatesPayload(sectionTitle, nextItems).items;
+    const tailStartIndex = Math.min(chunkStartIndex + rawCertificateItems.length, fullRawCertificateItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawCertificateItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawCertificateItems.slice(tailStartIndex),
+      ] as CertificatesSectionData["items"],
+    });
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildCertificatesPayload(nextTitle, certificateItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawCertificateItems as CertificatesSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildCertificatesPayload(nextTitle, certificateItems));
+            }}
+          />
+        ) : null}
 
         <div className="space-y-2" data-cv-section-content>
           {certificateItems.map((item, index) => (
-            <div key={item.id || `certificate-item-${index}`} className="group/cert-item relative rounded-md border border-slate-300 bg-white px-2 py-2">
+            <div
+              key={item.id || `certificate-item-${index}`}
+              className="group/cert-item relative rounded-md border border-slate-300 bg-white px-2 py-2"
+              data-cv-split-item="true"
+              data-cv-item-id={item.id || ""}
+              data-cv-item-index={index}
+            >
               <EditableText
                 value={item.name}
                 placeholder="Nhập tên chứng chỉ"
@@ -2168,8 +3136,19 @@ export function TealCertificatesSection({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    const nextItems = certificateItems.filter((_, currentIndex) => currentIndex !== index);
-                    updateCertificateItems(nextItems.length > 0 ? nextItems : normalizeCertificateItems({ items: [] }));
+                    const targetRawIndex = sourceItemsFromSplit
+                      ? chunkStartIndex + index
+                      : index;
+                    const nextRawItems = fullRawCertificateItems.filter((_, currentIndex) => currentIndex !== targetRawIndex);
+                    onEdit({
+                      title: sectionTitle,
+                      items: (nextRawItems.length > 0
+                        ? nextRawItems
+                        : appendTealTimelineItem([], {
+                            fallbackNode: CERTIFICATE_EMPTY_ITEM_TEMPLATE,
+                            idPrefix: "cert",
+                          })) as CertificatesSectionData["items"],
+                    });
                   }}
                   className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center text-slate-400 hover:text-rose-600"
                   title="Xóa chứng chỉ"
@@ -2181,21 +3160,28 @@ export function TealCertificatesSection({
           ))}
         </div>
 
-        {isActive ? (
+        {showAddActions ? (
           <div className="mt-1.5 flex justify-end">
             <AddItemButton
               label="Thêm chứng chỉ"
               onClick={() => {
-                updateCertificateItems([
-                  ...certificateItems,
-                  {
-                    id: `cert-${certificateItems.length + 1}-${Date.now()}`,
-                    name: "",
-                    issuer: "",
-                    date: "",
-                    url: "",
-                  },
-                ]);
+                const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+                  fullRawItems: fullRawCertificateItems,
+                  chunkStartIndex,
+                  chunkLength: rawCertificateItems.length,
+                  sourceItemsFromSplit,
+                });
+
+                const nextRawItems = appendTealTimelineItem(fullRawCertificateItems, {
+                  sourceNode: addTarget.sourceNode,
+                  fallbackNode: CERTIFICATE_EMPTY_ITEM_TEMPLATE,
+                  idPrefix: "cert",
+                  insertAt: addTarget.insertAt,
+                });
+                onEdit({
+                  title: sectionTitle,
+                  items: nextRawItems as CertificatesSectionData["items"],
+                });
               }}
             />
           </div>
@@ -2214,37 +3200,84 @@ export function TealLanguagesSection({
   onAddBelow,
 }: CVSectionComponentProps<LanguagesSectionData>) {
   const languageItems = normalizeLanguageItems(data);
-  const sectionTitle = styleConfig.title;
+  const rawLanguageItems = Array.isArray(data.items) ? data.items : [];
+  const {
+    sourceItemsFromSplit,
+    fullRawItems: fullRawLanguageItems,
+    chunkStartIndex,
+    showSectionChrome,
+  } = resolveRepeatableSplitState(data, rawLanguageItems);
+  const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const showAddActions = isActive;
 
   const updateLanguageItems = (nextItems: TealLanguageItemData[]) => {
-    onEdit(buildLanguagesPayload(sectionTitle, nextItems));
+    if (!sourceItemsFromSplit) {
+      onEdit(buildLanguagesPayload(sectionTitle, nextItems));
+      return;
+    }
+
+    const nextChunkItems = buildLanguagesPayload(sectionTitle, nextItems).items;
+    const tailStartIndex = Math.min(chunkStartIndex + rawLanguageItems.length, fullRawLanguageItems.length);
+
+    onEdit({
+      title: sectionTitle,
+      items: [
+        ...fullRawLanguageItems.slice(0, chunkStartIndex),
+        ...nextChunkItems,
+        ...fullRawLanguageItems.slice(tailStartIndex),
+      ] as LanguagesSectionData["items"],
+    });
   };
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
-      <AddSectionButtons
-        isActive={isActive}
-        borderClassName={styleConfig.itemBorderClassName}
-        onAddAbove={onAddAbove}
-        onAddBelow={onAddBelow}
-      />
+      {showSectionChrome ? (
+        <AddSectionButtons
+          isActive={isActive}
+          borderClassName={styleConfig.itemBorderClassName}
+          onAddAbove={onAddAbove}
+          onAddBelow={onAddBelow}
+        />
+      ) : null}
 
       <div
         className={cn(
           "border px-1.5 py-1.5 transition-colors",
-          isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent",
+          resolveTealSectionFrameClassName({
+            showSectionChrome,
+            isActive,
+          }),
         )}
       >
-        <SectionHeader
-          title={sectionTitle}
-          icon={styleConfig.icon}
-          isSectionActive={isActive}
-          onChangeTitle={(nextTitle) => onEdit(buildLanguagesPayload(nextTitle, languageItems))}
-        />
+        {showSectionChrome ? (
+          <SectionHeader
+            title={sectionTitle}
+            icon={styleConfig.icon}
+            isSectionActive={isActive}
+            onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
+            onChangeTitle={(nextTitle) => {
+              if (sourceItemsFromSplit) {
+                onEdit({
+                  title: nextTitle,
+                  items: fullRawLanguageItems as LanguagesSectionData["items"],
+                });
+                return;
+              }
+
+              onEdit(buildLanguagesPayload(nextTitle, languageItems));
+            }}
+          />
+        ) : null}
 
         <ul className="list-disc space-y-1 pl-5" data-cv-section-content>
           {languageItems.map((item, index) => (
-            <li key={item.id || `language-item-${index}`} className="group/lang-item relative pr-6">
+            <li
+              key={item.id || `language-item-${index}`}
+              className="group/lang-item relative pr-6"
+              data-cv-split-item="true"
+              data-cv-item-id={item.id || ""}
+              data-cv-item-index={index}
+            >
               <div className="flex flex-wrap items-center gap-1">
                 <EditableText
                   value={item.name}
@@ -2296,8 +3329,19 @@ export function TealLanguagesSection({
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    const nextItems = languageItems.filter((_, currentIndex) => currentIndex !== index);
-                    updateLanguageItems(nextItems.length > 0 ? nextItems : normalizeLanguageItems({ items: [] }));
+                    const targetRawIndex = sourceItemsFromSplit
+                      ? chunkStartIndex + index
+                      : index;
+                    const nextRawItems = fullRawLanguageItems.filter((_, currentIndex) => currentIndex !== targetRawIndex);
+                    onEdit({
+                      title: sectionTitle,
+                      items: (nextRawItems.length > 0
+                        ? nextRawItems
+                        : appendTealTimelineItem([], {
+                            fallbackNode: LANGUAGE_EMPTY_ITEM_TEMPLATE,
+                            idPrefix: "lang",
+                          })) as LanguagesSectionData["items"],
+                    });
                   }}
                   className="absolute right-0 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-50 text-rose-500 opacity-0 transition group-hover/lang-item:opacity-100 hover:bg-rose-100"
                   title="Xóa ngôn ngữ"
@@ -2309,19 +3353,28 @@ export function TealLanguagesSection({
           ))}
         </ul>
 
-        {isActive ? (
+        {showAddActions ? (
           <div className="mt-1.5 flex justify-end">
             <AddItemButton
               label="Thêm ngôn ngữ"
               onClick={() => {
-                updateLanguageItems([
-                  ...languageItems,
-                  {
-                    id: `lang-${languageItems.length + 1}-${Date.now()}`,
-                    name: "",
-                    level: "",
-                  },
-                ]);
+                const addTarget = resolveRepeatableAddTarget<Record<string, unknown>>({
+                  fullRawItems: fullRawLanguageItems,
+                  chunkStartIndex,
+                  chunkLength: rawLanguageItems.length,
+                  sourceItemsFromSplit,
+                });
+
+                const nextRawItems = appendTealTimelineItem(fullRawLanguageItems, {
+                  sourceNode: addTarget.sourceNode,
+                  fallbackNode: LANGUAGE_EMPTY_ITEM_TEMPLATE,
+                  idPrefix: "lang",
+                  insertAt: addTarget.insertAt,
+                });
+                onEdit({
+                  title: sectionTitle,
+                  items: nextRawItems as LanguagesSectionData["items"],
+                });
               }}
             />
           </div>

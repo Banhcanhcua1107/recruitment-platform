@@ -28,8 +28,8 @@ export function ZoomControls({
           "inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-600 transition",
           "hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40",
         )}
-        aria-label="Thu nho"
-        title="Thu nho"
+        aria-label="Thu nhỏ"
+        title="Thu nhỏ"
       >
         <Minus size={14} />
       </button>
@@ -44,8 +44,8 @@ export function ZoomControls({
           "inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-600 transition",
           "hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40",
         )}
-        aria-label="Phong to"
-        title="Phong to"
+        aria-label="Phóng to"
+        title="Phóng to"
       >
         <Plus size={14} />
       </button>

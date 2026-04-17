@@ -1,10 +1,10 @@
 "use client";
 
-import { Fragment, useCallback, useMemo } from "react";
+import { Fragment, useCallback, useMemo, type ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import { SectionShell } from "../SectionShell";
 import { EditableList, EditableText } from "./inline-editors";
-import { TEMPLATE_SECTION_COMPONENTS } from "./template-section-registry";
+import { TEMPLATE_SECTION_COMPONENTS, type SharedTemplateSectionComponentProps } from "./template-section-registry";
 import {
   fromSharedSectionPayload,
   toSharedSectionPayload,
@@ -136,7 +136,12 @@ export function SectionRenderer({
   onAddAbove,
   onAddBelow,
 }: SectionRendererProps) {
-  const TemplateSectionComponent = TEMPLATE_SECTION_COMPONENTS[section.type];
+  const TemplateSectionComponent = section.type in TEMPLATE_SECTION_COMPONENTS
+    ? TEMPLATE_SECTION_COMPONENTS[section.type as keyof typeof TEMPLATE_SECTION_COMPONENTS]
+    : undefined;
+  const TypedTemplateSectionComponent = TemplateSectionComponent as
+    | ((props: SharedTemplateSectionComponentProps<unknown>) => ReactElement)
+    | undefined;
 
   const payload = useMemo(() => toSharedSectionPayload(section), [section]);
   const isValidPayload = validateSharedSectionPayload(payload);
@@ -348,7 +353,7 @@ export function SectionRenderer({
     [canEdit, mode, template.colorPalette.mutedTextClassName, updateNode],
   );
 
-  const renderNode = (node: SharedSectionNode, path: NodePath, depth: number): JSX.Element => {
+  const renderNode = (node: SharedSectionNode, path: NodePath, depth: number): ReactElement => {
     if (node.sectionType === "info") {
       return renderInfoNode(node, path, depth);
     }
@@ -428,10 +433,10 @@ export function SectionRenderer({
     );
   };
 
-  if (TemplateSectionComponent) {
+  if (TypedTemplateSectionComponent) {
     return (
-      <TemplateSectionComponent
-        data={section.data}
+      <TypedTemplateSectionComponent
+        data={section.data as unknown}
         mode={mode}
         onChange={(updates) => {
           onEdit(updates as Record<string, unknown>);
