@@ -39,6 +39,8 @@ export async function POST(request: Request) {
 
     const formData = await request.formData();
     const file = formData.get("file");
+    const startProcessingRaw = String(formData.get("start_processing") ?? "").trim().toLowerCase();
+    const startProcessing = ["1", "true", "yes", "on"].includes(startProcessingRaw);
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Missing file upload." }, { status: 400 });
     }
@@ -57,7 +59,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const payload = await createCVImportFromUpload(user.id, file);
+    const payload = await createCVImportFromUpload(user.id, file, {
+      startProcessing,
+    });
     return NextResponse.json(payload, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create CV import.";

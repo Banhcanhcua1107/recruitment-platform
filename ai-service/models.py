@@ -18,6 +18,10 @@ class ParseCVContactModel(BaseModel):
     phone: Optional[str] = None
     linkedin: Optional[str] = None
     address: Optional[str] = None
+    current_school: Optional[str] = None
+    academic_year: Optional[str] = None
+    location: Optional[str] = None
+    links: list[MappedSectionLinkModel] = Field(default_factory=list)
 
 
 class ParseCVExperienceModel(BaseModel):
@@ -41,6 +45,10 @@ class ParseCVProjectModel(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     technologies: list[str] = Field(default_factory=list)
+    role: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    github: Optional[str] = None
     url: Optional[str] = None
 
 
@@ -48,6 +56,7 @@ class ParseCVCertificationModel(BaseModel):
     name: Optional[str] = None
     issuer: Optional[str] = None
     date_obtained: Optional[str] = None
+    url: Optional[str] = None
 
 
 class ParseCVProfileModel(BaseModel):
@@ -57,18 +66,135 @@ class ParseCVProfileModel(BaseModel):
     summary: Optional[str] = None
 
 
+class MappedSectionTextModel(BaseModel):
+    text: str = ""
+
+
+class MappedSectionCandidateModel(BaseModel):
+    name: str = ""
+    job_title: str = ""
+    avatar_url: str = ""
+
+
+class MappedSectionLinkModel(BaseModel):
+    label: str = ""
+    url: str = ""
+
+
+class MappedSectionPersonalInfoModel(BaseModel):
+    email: str = ""
+    phone: str = ""
+    address: str = ""
+    current_school: str = ""
+    academic_year: str = ""
+    location: str = ""
+    links: list[MappedSectionLinkModel] = Field(default_factory=list)
+
+
+class MappedSectionEducationModel(BaseModel):
+    school: str = ""
+    degree: str = ""
+    major: str = ""
+    gpa: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    description: str = ""
+
+
+class MappedSectionProjectModel(BaseModel):
+    name: str = ""
+    description: str = ""
+    technologies: list[str] = Field(default_factory=list)
+    role: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    github: str = ""
+    url: str = ""
+
+
+class MappedSectionExperienceModel(BaseModel):
+    company: str = ""
+    role: str = ""
+    description: str = ""
+    start_date: str = ""
+    end_date: str = ""
+
+
+class MappedSectionCertificateModel(BaseModel):
+    name: str = ""
+    issuer: str = ""
+    year: str = ""
+    url: str = ""
+
+
+class MappedSectionLanguageModel(BaseModel):
+    name: str = ""
+    proficiency: str = ""
+
+
+class MappedSectionAwardModel(BaseModel):
+    name: str = ""
+    issuer: str = ""
+    year: str = ""
+    description: str = ""
+
+
+class MappedSectionSkillsModel(BaseModel):
+    programming_languages: list[str] = Field(default_factory=list)
+    frontend: list[str] = Field(default_factory=list)
+    backend: list[str] = Field(default_factory=list)
+    database: list[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+    soft_skills: list[str] = Field(default_factory=list)
+    others: list[str] = Field(default_factory=list)
+
+
+class MappedSectionsModel(BaseModel):
+    candidate: MappedSectionCandidateModel = Field(default_factory=MappedSectionCandidateModel)
+    personal_info: MappedSectionPersonalInfoModel = Field(default_factory=MappedSectionPersonalInfoModel)
+    summary: MappedSectionTextModel = Field(default_factory=MappedSectionTextModel)
+    career_objective: MappedSectionTextModel = Field(default_factory=MappedSectionTextModel)
+    education: list[MappedSectionEducationModel] = Field(default_factory=list)
+    skills: MappedSectionSkillsModel = Field(default_factory=MappedSectionSkillsModel)
+    projects: list[MappedSectionProjectModel] = Field(default_factory=list)
+    experience: list[MappedSectionExperienceModel] = Field(default_factory=list)
+    certificates: list[MappedSectionCertificateModel] = Field(default_factory=list)
+    hobbies: list[str] = Field(default_factory=list)
+    languages: list[MappedSectionLanguageModel] = Field(default_factory=list)
+    awards: list[MappedSectionAwardModel] = Field(default_factory=list)
+    others: list[str] = Field(default_factory=list)
+
+
+class CorrectionLogEntryModel(BaseModel):
+    field: str = ""
+    before: str = ""
+    after: str = ""
+    reason: str = ""
+
+
+class DocumentAnalysisModel(BaseModel):
+    document_type: str = "unknown"
+    level: str = "unknown"
+    role: str = "unknown"
+    render_folder: str = "/cv/unknown/unknown/"
+
+
 class ParseCVDataModel(BaseModel):
     full_name: Optional[str] = None
     job_title: Optional[str] = None
     profile: ParseCVProfileModel = Field(default_factory=ParseCVProfileModel)
     contact: ParseCVContactModel = Field(default_factory=ParseCVContactModel)
     summary: Optional[str] = None
+    career_objective: Optional[str] = None
     skills: list[str] = Field(default_factory=list)
     experience: list[ParseCVExperienceModel] = Field(default_factory=list)
     education: list[ParseCVEducationModel] = Field(default_factory=list)
     projects: list[ParseCVProjectModel] = Field(default_factory=list)
     certifications: list[ParseCVCertificationModel] = Field(default_factory=list)
     languages: list[str] = Field(default_factory=list)
+    awards: list[dict[str, Any]] = Field(default_factory=list)
+    hobbies: list[str] = Field(default_factory=list)
+    others: list[str] = Field(default_factory=list)
     raw_text: str = ""
 
 
@@ -82,7 +208,12 @@ class ParseCVResponse(BaseModel):
     raw_text: str = Field(default="", description="Extracted text before normalization")
     clean_text: str = Field(default="", description="LLM-normalized text")
     cv_json: dict[str, Any] = Field(default_factory=dict, description="Structured CV data")
+    mapped_sections: MappedSectionsModel = Field(default_factory=MappedSectionsModel)
+    cleaned_json: MappedSectionsModel = Field(default_factory=MappedSectionsModel)
+    document_analysis: DocumentAnalysisModel = Field(default_factory=DocumentAnalysisModel)
+    correction_log: list[CorrectionLogEntryModel] = Field(default_factory=list)
     avatar_url: Optional[str] = Field(default=None, description="Data-URI of avatar image if detected")
+    clean_html: str = Field(default="", description="Sanitized CV HTML ready for rich-text editing")
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -160,12 +291,17 @@ class UploadCVResponse(BaseModel):
     timings: OCRProcessingTimingsModel = Field(default_factory=OCRProcessingTimingsModel)
     warnings: list[str] = Field(default_factory=list)
     data: ParseCVDataModel = Field(default_factory=ParseCVDataModel)
+    mapped_sections: MappedSectionsModel = Field(default_factory=MappedSectionsModel)
+    cleaned_json: MappedSectionsModel = Field(default_factory=MappedSectionsModel)
+    document_analysis: DocumentAnalysisModel = Field(default_factory=DocumentAnalysisModel)
+    correction_log: list[CorrectionLogEntryModel] = Field(default_factory=list)
     detected_sections: list[DetectedSectionModel] = Field(default_factory=list)
     builder_sections: list[dict[str, Any]] = Field(default_factory=list)
     layout: dict[str, Any] = Field(default_factory=dict)
     markdown_pages: list[str] = Field(default_factory=list)
     raw_text: str = ""
     content: str = ""
+    clean_html: str = ""
     meta: dict[str, Any] = Field(default_factory=dict)
     debug: dict[str, Any] = Field(default_factory=dict)
     raw_ocr: dict[str, Any] = Field(default_factory=dict)
@@ -185,6 +321,19 @@ class MatchJobResponse(BaseModel):
     match_percentage: float = Field(..., ge=0, le=100)
     missing_keywords: list[str] = Field(default_factory=list)
     common_keywords: list[str] = Field(default_factory=list)
+    model_used: str = "ollama/qwen3:4b"
+
+
+class CVSuggestionsRequest(BaseModel):
+    clean_html: str = ""
+    structured_json: dict[str, Any] = Field(default_factory=dict)
+    raw_text: str = ""
+    max_items: int = Field(default=5, ge=1, le=10)
+
+
+class CVSuggestionsResponse(BaseModel):
+    success: bool = True
+    suggestions: list[str] = Field(default_factory=list)
     model_used: str = "ollama/qwen3:4b"
 
 

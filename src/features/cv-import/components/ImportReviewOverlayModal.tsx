@@ -1,40 +1,68 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Loader2, RefreshCcw, X } from "lucide-react";
-import type { CVDocumentDetailResponse } from "@/types/cv-import";
-import { fetchCVImport } from "@/features/cv-import/api/client";
+import { fetchCVImport, isAPIClientError } from "@/features/cv-import/api/client";
 import { ImportReviewClient } from "@/features/cv-import/components/ImportReviewClient";
+import { shouldDeferReviewFetchError } from "@/features/cv-import/review/import-review-detail";
+import type { CVDocumentDetailResponse } from "@/types/cv-import";
 
 interface ImportReviewOverlayModalProps {
   documentId: string | null;
+  initialDetail?: CVDocumentDetailResponse | null;
   onClose: () => void;
 }
 
 export function ImportReviewOverlayModal({
   documentId,
+  initialDetail = null,
   onClose,
 }: ImportReviewOverlayModalProps) {
   const isOpen = Boolean(documentId);
   const [detail, setDetail] = useState<CVDocumentDetailResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const detailRef = useRef<CVDocumentDetailResponse | null>(null);
+  const seededDetail = useMemo(
+    () => (documentId && initialDetail?.document.id === documentId ? initialDetail : null),
+    [documentId, initialDetail],
+  );
 
-  const loadDetail = useCallback(async () => {
-    if (!documentId) return;
-    setIsLoading(true);
-    setErrorMessage(null);
+  useEffect(() => {
+    detailRef.current = detail;
+  }, [detail]);
 
-    try {
-      const response = await fetchCVImport(documentId);
-      setDetail(response);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Không thể tải dữ liệu review.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [documentId]);
+  const loadDetail = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!documentId) return;
+
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        setIsLoading(true);
+      }
+      setErrorMessage(null);
+
+      try {
+        const response = await fetchCVImport(documentId);
+        setDetail(response);
+      } catch (error) {
+        const currentDetail = detailRef.current ?? seededDetail;
+        const status = isAPIClientError(error) ? error.status : undefined;
+        if (shouldDeferReviewFetchError(status, currentDetail)) {
+          setDetail(currentDetail);
+          return;
+        }
+
+        setErrorMessage(error instanceof Error ? error.message : "Khong the tai du lieu review.");
+      } finally {
+        if (!silent) {
+          setIsLoading(false);
+        }
+      }
+    },
+    [documentId, seededDetail],
+  );
 
   useEffect(() => {
     if (!documentId) {
@@ -44,8 +72,11 @@ export function ImportReviewOverlayModal({
       return;
     }
 
-    void loadDetail();
-  }, [documentId, loadDetail]);
+    setDetail(seededDetail);
+    setErrorMessage(null);
+    setIsLoading(!seededDetail);
+    void loadDetail({ silent: Boolean(seededDetail) });
+  }, [documentId, loadDetail, seededDetail]);
 
   if (!isOpen) return null;
 
@@ -60,7 +91,7 @@ export function ImportReviewOverlayModal({
       >
         <motion.button
           type="button"
-          aria-label="Đóng hộp xem lại CV"
+          aria-label="Dong hop xem lai CV"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -79,7 +110,7 @@ export function ImportReviewOverlayModal({
             type="button"
             onClick={onClose}
             className="absolute right-4 top-4 z-30 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200 transition-colors hover:bg-slate-50 hover:text-slate-700 md:right-5 md:top-5"
-            aria-label="Đóng modal review"
+            aria-label="Dong modal review"
           >
             <X size={17} />
           </button>
@@ -88,20 +119,16 @@ export function ImportReviewOverlayModal({
             <div className="flex h-full items-center justify-center bg-white">
               <div className="text-center">
                 <Loader2 size={24} className="mx-auto animate-spin text-blue-600" />
-                <p className="mt-3 text-base font-semibold text-slate-900">
-                  Đang tải hộp xem lại CV
-                </p>
+                <p className="mt-3 text-base font-semibold text-slate-900">Dang tai hop xem lai CV</p>
                 <p className="mt-2 text-[13px] text-slate-500">
-                  Dữ liệu pipeline sẽ được hiển thị ngay khi sẵn sàng.
+                  Du lieu pipeline se duoc hien thi ngay khi san sang.
                 </p>
               </div>
             </div>
           ) : errorMessage ? (
             <div className="flex h-full items-center justify-center bg-white">
               <div className="max-w-md text-center">
-                <p className="text-base font-semibold text-slate-900">
-                  Không thể mở bản xem lại
-                </p>
+                <p className="text-base font-semibold text-slate-900">Khong the mo ban xem lai</p>
                 <p className="mt-2 text-[13px] leading-5 text-slate-500">{errorMessage}</p>
                 <div className="mt-4 flex items-center justify-center gap-2.5">
                   <button
@@ -110,14 +137,14 @@ export function ImportReviewOverlayModal({
                     className="inline-flex h-9 items-center gap-2 rounded-[18px] bg-slate-900 px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-slate-800"
                   >
                     <RefreshCcw size={16} />
-                    Tải lại
+                    Tai lai
                   </button>
                   <button
                     type="button"
                     onClick={onClose}
                     className="inline-flex h-9 items-center gap-2 rounded-[18px] border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-700 transition-colors hover:bg-slate-50"
                   >
-                    Đóng
+                    Dong
                   </button>
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { BadgeCheck, BriefcaseBusiness, Building2, MapPin, Wallet } from "lucide-react";
 import type { Job } from "@/types/job";
 
 const OPTIMIZED_IMAGE_HOSTS = new Set([
@@ -8,6 +9,8 @@ const OPTIMIZED_IMAGE_HOSTS = new Set([
   "images.careerviet.vn",
   "placehold.co",
   "via.placeholder.com",
+  "images.unsplash.com",
+  "res.cloudinary.com",
 ]);
 
 interface JobDetailHeaderProps {
@@ -46,15 +49,21 @@ function CoverImage({ src, alt }: { src: string; alt: string }) {
         alt={alt}
         fill
         priority
-        sizes="(min-width: 1280px) 720px, 100vw"
+        fetchPriority="high"
+        quality={72}
+        sizes="(min-width: 1536px) 980px, (min-width: 1280px) 62vw, 100vw"
         className="object-cover"
       />
     );
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} className="h-full w-full object-cover" loading="eager" />
+    <div
+      className="absolute inset-0 bg-linear-to-br from-slate-200 via-slate-100 to-slate-50"
+      aria-hidden="true"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(30,77,183,0.2),transparent_55%)]" />
+    </div>
   );
 }
 
@@ -105,28 +114,36 @@ export function JobDetailHeader({
   const hasCompanyLogo = Boolean(job.logo_url && !job.logo_url.includes("placeholder"));
   const coverUrl = job.cover_url || "https://placehold.co/1200x720?text=TalentFlow";
   const factCards = [
-    { icon: "location_on", label: "Địa điểm", value: resolveValue(job.location) },
     {
-      icon: "payments",
+      icon: <MapPin className="size-5" aria-hidden="true" />,
+      label: "Địa điểm",
+      value: resolveValue(job.location),
+    },
+    {
+      icon: <Wallet className="size-5" aria-hidden="true" />,
       label: "Mức lương",
       value: resolveValue(job.salary, "Thỏa thuận"),
       accent: true,
     },
     {
-      icon: "work",
+      icon: <BriefcaseBusiness className="size-5" aria-hidden="true" />,
       label: "Loại công việc",
       value: resolveValue(job.employment_type, "Toàn thời gian"),
     },
-    { icon: "badge", label: "Cấp bậc", value: resolveValue(job.level, "Đang cập nhật") },
+    {
+      icon: <BadgeCheck className="size-5" aria-hidden="true" />,
+      label: "Cấp bậc",
+      value: resolveValue(job.level, "Đang cập nhật"),
+    },
   ];
   const heroLead =
     job.description?.[0] ??
     "Vị trí đang mở tuyển và sẵn sàng trao đổi thêm với những ứng viên phù hợp.";
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.55fr)_390px] lg:items-start">
-      <div className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_20px_50px_-36px_rgba(15,23,42,0.24)]">
-        <div className="relative h-52 overflow-hidden border-b border-slate-200 bg-slate-100 sm:h-64">
+    <section className="grid gap-6 lg:grid-cols-[minmax(0,1.65fr)_390px] xl:grid-cols-[minmax(0,1.78fr)_410px] lg:items-start">
+      <div className="overflow-hidden rounded-4xl border border-slate-200 bg-white shadow-[0_20px_50px_-36px_rgba(15,23,42,0.24)]">
+        <div className="relative hidden h-52 overflow-hidden border-b border-slate-200 bg-slate-100 sm:block sm:h-64">
           <CoverImage src={coverUrl} alt={`Ảnh bìa tuyển dụng ${job.company_name}`} />
           <div className="absolute inset-0 bg-linear-to-r from-slate-950/70 via-slate-950/25 to-transparent" />
         </div>
@@ -151,15 +168,16 @@ export function JobDetailHeader({
               </h1>
               <Link
                 href={companyHref}
+                prefetch={false}
                 className="mt-4 inline-flex items-center gap-2 text-lg font-bold text-slate-600 transition-colors hover:text-primary"
               >
-                <span className="material-symbols-outlined text-[20px]">apartment</span>
+                <Building2 className="size-5" aria-hidden="true" />
                 {job.company_name}
               </Link>
               <p className="mt-5 max-w-[68ch] text-base leading-8 text-slate-600">{heroLead}</p>
             </div>
 
-            <div className="w-full max-w-sm rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center gap-4">
                 <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white p-3">
                   {hasCompanyLogo ? (
@@ -197,7 +215,7 @@ export function JobDetailHeader({
                       fact.accent ? "bg-primary text-white" : "bg-slate-100 text-slate-600",
                     ].join(" ")}
                   >
-                    <span className="material-symbols-outlined text-[20px]">{fact.icon}</span>
+                    {fact.icon}
                   </span>
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
@@ -210,7 +228,7 @@ export function JobDetailHeader({
             ))}
           </div>
 
-          <div className="grid gap-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5">
+          <div className="grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
                 Thông tin thêm

@@ -1,7 +1,7 @@
 """
 CV Parser Service
 ─────────────────
-Pipeline:
+Flow:
     Upload file
     ↓
     detect_file_type() → "pdf" | "image" | "docx"
@@ -15,7 +15,7 @@ Pipeline:
     {"raw_text", "clean_text", "cv_json", "avatar_url"}
 
 Models (Ollama):
-    OLLAMA_CV_PARSER_MODEL  = qwen2.5-coder:7b  (normalize + parse)
+    OLLAMA_CV_PARSER_MODEL  = qwen3:4b          (normalize + parse)
     OLLAMA_CV_SUGGEST_MODEL = qwen3:4b           (suggestions — untouched)
 """
 
@@ -29,15 +29,23 @@ import os
 import re
 from typing import Any
 
-import pdfplumber
 import requests
 from PIL import Image
-from services.ocr_service import extract_full_text, run_ocr
+from services.cv_content_cleaner import postprocess_mapped_sections
+from services.cv_html_renderer import render_clean_cv_html
+from services.google_vision_ocr import extract_clean_text, run_google_vision_ocr
+from services.mapped_sections import (
+    build_empty_document_analysis,
+    mapped_sections_schema_json,
+    mapped_sections_to_structured_data,
+    normalize_document_analysis,
+    normalize_mapped_sections,
+)
 
 logger = logging.getLogger("cv_parser")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_CV_PARSER_MODEL = os.getenv("OLLAMA_CV_PARSER_MODEL", "qwen2.5-coder:7b")
+OLLAMA_CV_PARSER_MODEL = os.getenv("OLLAMA_CV_PARSER_MODEL", "qwen3:4b")
 
 # ─────────────────────────────────────────────────────────────────────
 # Step 1 — File-type detection
@@ -86,22 +94,20 @@ def _extract_avatar_b64(pdf_bytes: bytes) -> str | None:
         return None
 
 
-def extract_text_from_pdf(pdf_bytes: bytes) -> tuple[str, str | None, int]:
+def extract_text_from_pdf(pdf_bytes: bytes, filename: str = "document.pdf") -> tuple[str, str | None, int]:
     """
-    Use pdfplumber to extract the selectable text layer from a PDF.
-    Returns (raw_text, avatar_base64_or_None).
+    OCR full PDF content with Google Vision DOCUMENT_TEXT_DETECTION.
+    Returns (raw_text, avatar_base64_or_None, page_count).
     """
-    text_parts: list[str] = []
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        page_count = len(pdf.pages)
-        for page in pdf.pages:
-            t = page.extract_text()
-            if t:
-                text_parts.append(t.strip())
-
-    raw_text = "\n\n".join(text_parts).strip()
+    ocr_result = run_google_vision_ocr(
+        pdf_bytes,
+        content_type="application/pdf",
+        filename=filename,
+    )
+    page_results = ocr_result["pages"]
+    raw_text = extract_clean_text(page_results)
     avatar_b64 = _extract_avatar_b64(pdf_bytes)
-    return raw_text, avatar_b64, page_count
+    return raw_text, avatar_b64, len(page_results)
 
 
 def extract_text_from_image(
@@ -109,13 +115,13 @@ def extract_text_from_image(
     content_type: str = "image/jpeg",
     filename: str = "image.jpg",
 ) -> tuple[str, int]:
-    page_results = run_ocr(
+    ocr_result = run_google_vision_ocr(
         image_bytes,
         content_type=content_type,
         filename=filename,
-        apply_llm_correction=True,
     )
-    return extract_full_text(page_results), len(page_results)
+    page_results = ocr_result["pages"]
+    return extract_clean_text(page_results), len(page_results)
 
 
 def extract_text_from_docx(docx_bytes: bytes) -> str:
@@ -192,7 +198,32 @@ def clean_ocr_text(text: str) -> str:
     t = re.sub(r"[ \t]+", " ", t)
     # Collapse excess blank lines
     t = re.sub(r"\n{3,}", "\n\n", t)
-    return t.strip()
+
+    deduped_lines: list[str] = []
+    seen_lines: set[str] = set()
+    previous_key: str | None = None
+    for raw_line in t.splitlines():
+        cleaned_line = raw_line.strip()
+        if not cleaned_line:
+            if deduped_lines and deduped_lines[-1] != "":
+                deduped_lines.append("")
+            continue
+
+        key = re.sub(r"\W+", "", cleaned_line).lower()
+        if not key:
+            continue
+        if previous_key == key:
+            continue
+        if key in seen_lines and len(key) > 12:
+            continue
+
+        seen_lines.add(key)
+        deduped_lines.append(cleaned_line)
+        previous_key = key
+
+    cleaned_text = "\n".join(deduped_lines)
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)
+    return cleaned_text.strip()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -289,90 +320,52 @@ OCR TEXT:
 # Step 5 — Parse structured JSON
 # ─────────────────────────────────────────────────────────────────────
 
-_CV_SCHEMA = """{
-  "personal_information": {
-    "name": "",
-    "email": "",
-    "phone": "",
-    "address": "",
-    "linkedin": ""
-  },
-  "job_title": "",
-  "career_objective": "",
-  "education": [
-    {
-      "institution": "",
-      "degree": "",
-      "field_of_study": "",
-      "start_date": "",
-      "end_date": "",
-      "gpa": ""
-    }
-  ],
-  "skills": [],
-  "projects": [
-    {
-      "name": "",
-      "description": "",
-      "technologies": [],
-      "role": "",
-      "url": ""
-    }
-  ],
-  "experience": [
-    {
-      "company": "",
-      "title": "",
-      "start_date": "",
-      "end_date": "",
-      "description": ""
-    }
-  ],
-  "certificates": [
-    {
-      "name": "",
-      "issuer": "",
-      "date_obtained": ""
-    }
-  ],
-  "interests": []
-}"""
+_CV_SCHEMA = mapped_sections_schema_json()
 
 
-def parse_cv_json(clean_text: str) -> dict[str, Any]:
-    """
-    LLM call #2 — extract structured CV data from clean text.
-    Returns a dict matching _CV_SCHEMA.
-    """
-    prompt = f"""Bạn là chuyên gia phân tích CV.
-Trích xuất thông tin từ văn bản CV dưới đây và trả về JSON theo đúng schema.
+def build_parse_cv_mapping_prompt(source_payload: Any) -> str:
+    payload = source_payload if isinstance(source_payload, dict) else {"clean_text": str(source_payload or "")}
+    return f"""Ban la AI map du lieu CV JSON vao dung section giao dien.
 
-Quy tắc nghiêm ngặt:
-1. Chỉ trả về JSON hợp lệ — không giải thích, không thêm text.
-2. Giữ trường rỗng ("") nếu không có thông tin, mảng rỗng ([]) cho list.
-3. Không bịa thêm thông tin.
-4. Không đổi ngôn ngữ nội dung.
+Hay doc JSON dau vao va gan tung field vao dung box hien thi sau:
+- candidate
+- personal_info
+- summary
+- career_objective
+- education
+- skills
+- projects
+- experience
+- certificates
+- hobbies
+- languages
+- awards
+- others
+
+Quy tac:
+- Khong sua noi dung.
+- Khong them du lieu.
+- Chi phan loai dung section.
+- Neu khong ro, cho vao others.
+- Candidate chi chua ten ung vien, vi tri ung tuyen, avatar.
+- Summary va career_objective la hai section khac nhau.
+- Luon tra day du tat ca top-level keys trong schema, doi tuong rong hoac mang rong neu khong co du lieu.
+- Chi tra ve JSON hop le, khong markdown, khong giai thich.
 
 SCHEMA:
 {_CV_SCHEMA}
 
-VĂN BẢN CV:
-{clean_text}"""
+INPUT JSON:
+{json.dumps(payload, ensure_ascii=False, indent=2)}"""
 
-    try:
-        raw = _call_llm(prompt)
-    except Exception as e:
-        logger.error("Parse LLM failed: %s", e)
-        return {}
 
-    # Strip markdown code fences if present
+def _extract_first_json_object(raw: str) -> dict[str, Any]:
     content = raw
     if content.startswith("```"):
         content = re.sub(r"^```(?:json)?\s*", "", content)
         content = re.sub(r"\s*```$", "", content)
     content = content.strip()
 
-    # Extract first JSON object
     start = content.find("{")
     end = content.rfind("}")
     if start == -1 or end == -1 or end <= start:
@@ -386,6 +379,44 @@ VĂN BẢN CV:
         return {}
 
 
+def parse_cv_json(source_payload: Any) -> dict[str, Any]:
+    """
+    LLM call #2 — map OCR/text context into mapped_sections.
+    """
+    payload = source_payload if isinstance(source_payload, dict) else {"clean_text": str(source_payload or "")}
+    prompt = f"""Ban la AI chuyen phan tich du lieu CV/ho so ung vien tu JSON OCR tho.
+
+Nhiem vu:
+1. Doc toan bo JSON dau vao.
+2. Hieu ngu nghia tung field, ke ca khi key dat sai hoac khong chuan.
+3. Phan loai du lieu vao dung nhom noi dung de hien thi tren giao dien CV.
+4. Tra ve JSON hop le theo dung schema.
+
+Quy tac:
+1. Chi tra ve JSON hop le, khong them giai thich hay markdown.
+2. Khong duoc bịa them du lieu.
+3. Neu mot field chua ro, dua vao others.
+4. Neu du lieu bi lan nhieu y trong cung field, tach logic neu co the.
+5. Candidate chi chua ten ung vien, vi tri ung tuyen, avatar.
+6. Summary va career_objective la hai section khac nhau.
+7. Luon tra day du tat ca top-level keys trong schema, doi tuong rong hoac mang rong neu khong co du lieu.
+
+SCHEMA:
+{_CV_SCHEMA}
+
+INPUT JSON:
+{json.dumps(payload, ensure_ascii=False, indent=2)}"""
+    prompt = build_parse_cv_mapping_prompt(source_payload)
+
+    try:
+        raw = _call_llm(prompt)
+    except Exception as e:
+        logger.error("Parse LLM failed: %s", e)
+        return normalize_mapped_sections({})
+
+    return normalize_mapped_sections(_extract_first_json_object(raw))
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Public orchestrator
 # ─────────────────────────────────────────────────────────────────────
@@ -396,7 +427,7 @@ def parse_cv(
     filename: str = "",
 ) -> dict[str, Any]:
     """
-    Full pipeline. Returns both:
+    Full parsing flow. Returns both:
     - legacy fields: raw_text, clean_text, cv_json, avatar_url
     - builder fields: success, extraction_method, data, page_count, warnings
     """
@@ -410,26 +441,11 @@ def parse_cv(
 
     # ── Extract
     if file_type == "pdf":
-        raw_text, avatar_b64, page_count = extract_text_from_pdf(file_bytes)
-        extraction_method = "pdf_text_layer"
-        # If pdfplumber yields too little text, the PDF is likely scanned/image-based.
-        # Fall back to OCR on all pages via RapidOCR.
-        if len(raw_text.split()) < 30:
-            logger.info("PDF text layer thin (%d words) — falling back to image OCR", len(raw_text.split()))
-            try:
-                page_results = run_ocr(
-                    file_bytes,
-                    content_type="application/pdf",
-                    filename=filename or "document.pdf",
-                    apply_llm_correction=True,
-                )
-                raw_text = extract_full_text(page_results)
-                page_count = len(page_results)
-                extraction_method = "pdf_ocr_fallback"
-                warnings.append("PDF text layer mỏng, đã chuyển sang OCR fallback.")
-            except Exception as e:
-                logger.warning("Fallback OCR failed: %s", e)
-                warnings.append(f"OCR fallback failed: {e}")
+        raw_text, avatar_b64, page_count = extract_text_from_pdf(
+            file_bytes,
+            filename=filename or "document.pdf",
+        )
+        extraction_method = "google_vision_document_text_detection_pdf"
 
     elif file_type == "image":
         raw_text, page_count = extract_text_from_image(
@@ -437,7 +453,7 @@ def parse_cv(
             content_type=content_type,
             filename=filename or "image.jpg",
         )
-        extraction_method = "image_ocr"
+        extraction_method = "google_vision_document_text_detection_image"
 
     elif file_type == "docx":
         raw_text = extract_text_from_docx(file_bytes)
@@ -455,6 +471,12 @@ def parse_cv(
             "data": {
                 "full_name": None,
                 "job_title": None,
+                "profile": {
+                    "full_name": None,
+                    "job_title": None,
+                    "career_objective": None,
+                    "summary": None,
+                },
                 "contact": {
                     "email": None,
                     "phone": None,
@@ -462,12 +484,16 @@ def parse_cv(
                     "address": None,
                 },
                 "summary": None,
+                "career_objective": None,
                 "skills": [],
                 "experience": [],
                 "education": [],
                 "projects": [],
                 "certifications": [],
                 "languages": [],
+                "awards": [],
+                "hobbies": [],
+                "others": [],
                 "raw_text": "",
             },
             "page_count": page_count,
@@ -475,40 +501,50 @@ def parse_cv(
             "raw_text": "",
             "clean_text": "",
             "cv_json": {},
+            "mapped_sections": normalize_mapped_sections({}),
+            "cleaned_json": normalize_mapped_sections({}),
+            "document_analysis": normalize_document_analysis(build_empty_document_analysis()),
+            "correction_log": [],
             "avatar_url": None,
+            "clean_html": "",
         }
 
     # ── Pre-clean OCR artifacts, then normalize via LLM
     pre_cleaned = clean_ocr_text(raw_text)
     clean_text = normalize_text(pre_cleaned)
 
-    # ── Parse JSON
-    cv_json = parse_cv_json(clean_text)
-
     # ── Build avatar URL string (data URI for direct <img src=...> usage)
     avatar_url: str | None = None
     if avatar_b64:
         avatar_url = f"data:image/jpeg;base64,{avatar_b64}"
 
-    personal_info = cv_json.get("personal_information", {}) if isinstance(cv_json, dict) else {}
-    structured_data = {
-        "full_name": personal_info.get("name") or None,
-        "job_title": cv_json.get("job_title") or None,
-        "contact": {
-            "email": personal_info.get("email") or None,
-            "phone": personal_info.get("phone") or None,
-            "linkedin": personal_info.get("linkedin") or None,
-            "address": personal_info.get("address") or None,
-        },
-        "summary": cv_json.get("career_objective") or cv_json.get("summary") or None,
-        "skills": cv_json.get("skills") or [],
-        "experience": cv_json.get("experience") or [],
-        "education": cv_json.get("education") or [],
-        "projects": cv_json.get("projects") or [],
-        "certifications": cv_json.get("certificates") or cv_json.get("certifications") or [],
-        "languages": cv_json.get("languages") or [],
+    source_payload = {
+        "source_kind": file_type,
+        "filename": filename,
+        "page_count": page_count,
         "raw_text": raw_text,
+        "clean_text": clean_text,
     }
+    mapped_sections = normalize_mapped_sections(
+        parse_cv_json(source_payload),
+        avatar_url=avatar_url,
+    )
+    postprocess_result = postprocess_mapped_sections(mapped_sections, call_llm=_call_llm)
+    cleaned_json = normalize_mapped_sections(
+        postprocess_result.get("mapped_sections") or mapped_sections,
+        avatar_url=avatar_url,
+    )
+    document_analysis = normalize_document_analysis(
+        postprocess_result.get("document_analysis"),
+        mapped_sections=cleaned_json,
+    )
+    correction_log = postprocess_result.get("correction_log") or []
+    structured_data = mapped_sections_to_structured_data(cleaned_json, raw_text=raw_text)
+    clean_html = render_clean_cv_html(
+        structured_data=structured_data,
+        mapped_sections=cleaned_json,
+        raw_text=raw_text,
+    )
 
     return {
         "success": True,
@@ -518,6 +554,11 @@ def parse_cv(
         "warnings": warnings,
         "raw_text": raw_text,
         "clean_text": clean_text,
-        "cv_json": cv_json,
+        "cv_json": cleaned_json,
+        "mapped_sections": mapped_sections,
+        "cleaned_json": cleaned_json,
+        "document_analysis": document_analysis,
+        "correction_log": correction_log,
         "avatar_url": avatar_url,
+        "clean_html": clean_html,
     }

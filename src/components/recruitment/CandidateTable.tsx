@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CandidateDetailModal } from "@/components/recruitment/CandidateDetailModal";
+import { useEffect, useMemo, useState } from "react";
+import { ApplicationDetailModal } from "@/components/recruitment/ApplicationDetailModal";
 import { CandidateRow } from "@/components/recruitment/CandidateRow";
 import { PaginationBar } from "@/components/recruitment/PaginationBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type {
+  EmployerCandidateApplicationDetail,
   PaginatedResult,
   RecruitmentCandidate,
   RecruitmentPipelineStatus,
@@ -23,46 +23,42 @@ import type {
 interface CandidateTableProps {
   data: PaginatedResult<RecruitmentCandidate>;
   query: Record<string, string | undefined>;
+  focusApplicationId?: string;
 }
 
-export function CandidateTable({ data, query }: CandidateTableProps) {
-  const router = useRouter();
-  const [selectedCandidate, setSelectedCandidate] = useState<RecruitmentCandidate | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+export function CandidateTable({
+  data,
+  query,
+  focusApplicationId,
+}: CandidateTableProps) {
   const [statusOverrides, setStatusOverrides] = useState<
     Record<string, RecruitmentPipelineStatus>
   >({});
+  const [selectedApplication, setSelectedApplication] =
+    useState<RecruitmentCandidate | null>(null);
+  const [openDetail, setOpenDetail] = useState(false);
+  const [hasOpenedFocusApplication, setHasOpenedFocusApplication] = useState(false);
 
-  useEffect(() => {
-    if (!notice) {
-      return;
-    }
+  const items = useMemo(
+    () =>
+      data.items.map((item) => {
+        const overriddenStatus = statusOverrides[item.applicationId];
 
-    const timeout = window.setTimeout(() => {
-      setNotice(null);
-    }, 2800);
+        if (!overriddenStatus) {
+          return item;
+        }
 
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
-
-  const items = data.items.map((candidate) =>
-    statusOverrides[candidate.applicationId]
-      ? { ...candidate, status: statusOverrides[candidate.applicationId] }
-      : candidate
+        return {
+          ...item,
+          status: overriddenStatus,
+        };
+      }),
+    [data.items, statusOverrides],
   );
 
-  const activeCandidate = selectedCandidate
-    ? items.find((candidate) => candidate.applicationId === selectedCandidate.applicationId) ??
-      selectedCandidate
-    : null;
-
-  const handleCandidateClick = (candidate: RecruitmentCandidate) => {
-    if (candidate.hasPublicProfile) {
-      router.push(`/hr/candidates/${candidate.candidateId}`);
-      return;
-    }
-
-    setNotice("Ứng viên không công khai hồ sơ");
+  const handleOpenDetail = (candidate: RecruitmentCandidate) => {
+    setSelectedApplication(candidate);
+    setOpenDetail(true);
   };
 
   const handleStatusUpdated = (
@@ -73,22 +69,98 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
       ...current,
       [applicationId]: status,
     }));
+
+    setSelectedApplication((current) =>
+      current && current.applicationId === applicationId
+        ? { ...current, status }
+        : current
+    );
   };
+
+  useEffect(() => {
+    setHasOpenedFocusApplication(false);
+  }, [focusApplicationId]);
+
+  useEffect(() => {
+    if (!focusApplicationId || hasOpenedFocusApplication) {
+      return;
+    }
+
+    const matchedApplication = items.find(
+      (item) => item.applicationId === focusApplicationId
+    );
+
+    if (matchedApplication) {
+      setSelectedApplication(matchedApplication);
+      setOpenDetail(true);
+      setHasOpenedFocusApplication(true);
+      return;
+    }
+
+    let active = true;
+
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/applications/${encodeURIComponent(focusApplicationId)}`,
+          {
+            cache: "no-store",
+          }
+        );
+
+        const result = (await response.json()) as {
+          detail?: EmployerCandidateApplicationDetail;
+          error?: string;
+        };
+
+        if (!response.ok || !result.detail || !active) {
+          return;
+        }
+
+        const detail = result.detail;
+        const fallbackApplication: RecruitmentCandidate = {
+          applicationId: detail.applicationId,
+          candidateId: detail.candidateId,
+          candidateCode: detail.candidateCode,
+          fullName: detail.fullName,
+          email: detail.email,
+          phone: detail.phone,
+          resumeUrl: detail.resumeUrl,
+          introduction: detail.introduction,
+          coverLetter: detail.coverLetter,
+          appliedPosition: detail.job.title,
+          jobId: detail.job.id,
+          jobUrl: detail.job.url,
+          status: detail.status,
+          rawStatus: detail.rawStatus,
+          appliedAt: detail.appliedAt,
+          hasPublicProfile: false,
+        };
+
+        setSelectedApplication(fallbackApplication);
+        setOpenDetail(true);
+      } catch {
+        // Keep page usable even if deep-link lookup fails.
+      } finally {
+        if (active) {
+          setHasOpenedFocusApplication(true);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [focusApplicationId, hasOpenedFocusApplication, items]);
 
   return (
     <>
-      {notice ? (
-        <div className="fixed right-4 top-4 z-[100] max-w-sm rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
-          {notice}
-        </div>
-      ) : null}
-
-      <Card className="overflow-hidden rounded-[36px] border-slate-200/80 shadow-[0_22px_60px_-36px_rgba(15,23,42,0.26)]">
+      <Card className="overflow-hidden rounded-[26px] border-slate-200/85 bg-white/95 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.24)]">
         <CardHeader className="border-b border-slate-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,0.98)_100%)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-primary">
-                ATS Snapshot
+                Tổng quan ATS
               </p>
               <CardTitle>Danh sách ứng tuyển</CardTitle>
               <p className="max-w-3xl text-sm leading-6 text-slate-500">
@@ -98,7 +170,7 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                   Tổng đơn
                 </p>
@@ -106,12 +178,12 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
                   {data.total}
                 </p>
               </div>
-              <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
                   Mã ứng viên
                 </p>
                 <p className="mt-2 font-mono text-sm font-semibold tracking-[0.14em] text-slate-700">
-                  ID: CAND-YYYY-NNNN
+                  Mẫu: CAND-YYYY-NNNN
                 </p>
               </div>
             </div>
@@ -119,7 +191,7 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
         </CardHeader>
 
         <CardContent className="px-0 pb-0">
-          <Table className="min-w-[960px]">
+          <Table className="min-w-240">
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="pl-6">Ứng viên</TableHead>
@@ -157,8 +229,7 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
                   <CandidateRow
                     key={candidate.applicationId}
                     candidate={candidate}
-                    onCandidateClick={handleCandidateClick}
-                    onOpenDetail={setSelectedCandidate}
+                    onOpenDetail={handleOpenDetail}
                   />
                 ))
               )}
@@ -174,10 +245,10 @@ export function CandidateTable({ data, query }: CandidateTableProps) {
         </CardContent>
       </Card>
 
-      <CandidateDetailModal
-        isOpen={Boolean(activeCandidate)}
-        candidate={activeCandidate}
-        onClose={() => setSelectedCandidate(null)}
+      <ApplicationDetailModal
+        isOpen={openDetail}
+        application={selectedApplication}
+        onClose={() => setOpenDetail(false)}
         onStatusUpdated={handleStatusUpdated}
       />
     </>

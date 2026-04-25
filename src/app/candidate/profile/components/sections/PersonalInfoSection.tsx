@@ -14,6 +14,8 @@ interface PersonalInfoSectionProps {
 
 export default function PersonalInfoSection({ sectionId, content, isEditing }: PersonalInfoSectionProps) {
   const { updateSection, setEditingSection } = useProfileBuilder();
+  const fieldClassName =
+    'w-full rounded-xl border border-slate-300/90 bg-white/75 px-4 py-3 text-slate-900 shadow-[inset_0_1px_2px_rgba(15,23,42,0.06)] backdrop-blur-[2px] transition-all placeholder:text-slate-400 focus:border-primary focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/25';
 
   const provinces = useMemo(() => {
     return (provincesData as Array<{ name: string }>).map(p => p.name);
@@ -82,7 +84,7 @@ export default function PersonalInfoSection({ sectionId, content, isEditing }: P
             value={content.fullName || ''}
             onChange={(e) => handleChange('fullName', e.target.value)}
             placeholder="Nguyễn Văn A"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all"
+            className={fieldClassName}
           />
         </div>
 
@@ -96,7 +98,7 @@ export default function PersonalInfoSection({ sectionId, content, isEditing }: P
             value={content.email || ''}
             onChange={(e) => handleChange('email', e.target.value)}
             placeholder="email@example.com"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all"
+            className={fieldClassName}
           />
         </div>
 
@@ -110,7 +112,7 @@ export default function PersonalInfoSection({ sectionId, content, isEditing }: P
             value={content.phone || ''}
             onChange={(e) => handleChange('phone', e.target.value)}
             placeholder="0901 234 567"
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all"
+            className={fieldClassName}
           />
         </div>
 
@@ -133,7 +135,8 @@ export default function PersonalInfoSection({ sectionId, content, isEditing }: P
             type="date"
             value={content.dateOfBirth || ''}
             onChange={(e) => handleChange('dateOfBirth', e.target.value)}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all"
+            aria-label="Ngay sinh"
+            className={fieldClassName}
           />
         </div>
 
@@ -145,7 +148,8 @@ export default function PersonalInfoSection({ sectionId, content, isEditing }: P
           <select
             value={content.gender || ''}
             onChange={(e) => handleChange('gender', e.target.value)}
-            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white transition-all"
+            aria-label="Gioi tinh"
+            className={fieldClassName}
           >
             <option value="">-- Chọn --</option>
             <option value="male">Nam</option>

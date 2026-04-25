@@ -12,5 +12,9 @@ export async function GET(
     return NextResponse.json({ error: "Không tìm thấy tin tuyển dụng." }, { status: 404 });
   }
 
-  return NextResponse.json(job);
+  return NextResponse.json(job, {
+    headers: {
+      "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+    },
+  });
 }

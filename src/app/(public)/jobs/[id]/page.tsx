@@ -1,11 +1,25 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, CalendarDays, CheckCheck, CircleDot, MapPin } from "lucide-react";
 import { ApplyJobCard } from "@/components/jobs/ApplyJobCard";
 import { JobDetailHeader } from "@/components/jobs/JobDetailHeader";
-import { companySlug, getJobsByCompanySlug } from "@/lib/companies";
-import { getAllJobs, getJobById } from "@/lib/jobs";
+import { companySlug, getRelatedJobsByCompanySlug } from "@/lib/companies";
+import { getJobById } from "@/lib/jobs";
+
+export const revalidate = 300;
+export const dynamicParams = true;
+
+const OPTIMIZED_IMAGE_HOSTS = new Set([
+  "careerviet.vn",
+  "images.careerviet.vn",
+  "placehold.co",
+  "via.placeholder.com",
+  "images.unsplash.com",
+  "res.cloudinary.com",
+]);
 
 function formatDateLabel(value?: string | null) {
   if (!value) {
@@ -28,9 +42,24 @@ function resolveValue(value?: string | null, fallback = "Đang cập nhật") {
   return value && value.trim() ? value : fallback;
 }
 
+function canUseNextImage(src: string) {
+  if (!src) {
+    return false;
+  }
+
+  if (src.startsWith("/")) {
+    return true;
+  }
+
+  try {
+    return OPTIMIZED_IMAGE_HOSTS.has(new URL(src).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function generateStaticParams() {
-  const jobs = await getAllJobs();
-  return jobs.map((job) => ({ id: job.id }));
+  return [];
 }
 
 export async function generateMetadata({
@@ -71,9 +100,6 @@ export default async function JobDetailPage({
   }
 
   const slug = companySlug(job.company_name);
-  const relatedJobs = (await getJobsByCompanySlug(slug))
-    .filter((item) => item.id !== job.id)
-    .slice(0, 6);
   const postedDateLabel = formatDateLabel(job.posted_date);
   const deadlineLabel = formatDateLabel(job.deadline);
   const sidebarItems = [
@@ -89,13 +115,14 @@ export default async function JobDetailPage({
   const companyCover = job.cover_url || "https://placehold.co/1200x720?text=TalentFlow";
 
   return (
-    <main className="min-h-[100dvh] bg-slate-50">
-      <div className="mx-auto max-w-[1400px] px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pb-24 lg:pt-10">
+    <main className="min-h-dvh bg-slate-50">
+      <div className="mx-auto w-full max-w-425 px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pb-24 lg:pt-10">
         <Link
           href="/jobs"
+          prefetch={false}
           className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-primary/30 hover:text-primary"
         >
-          <span className="material-symbols-outlined text-base">arrow_back</span>
+          <ArrowLeft className="size-4" aria-hidden="true" />
           Danh sách việc làm
         </Link>
 
@@ -117,7 +144,7 @@ export default async function JobDetailPage({
           />
         </div>
 
-        <section className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.5fr)_380px]">
+        <section className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1.62fr)_380px] xl:grid-cols-[minmax(0,1.72fr)_400px]">
           <div className="space-y-6">
             {job.description?.length ? (
               <PageSection
@@ -125,7 +152,10 @@ export default async function JobDetailPage({
                 title="Mô tả công việc"
                 description="Các đầu việc chính và phạm vi trách nhiệm của vị trí."
               >
-                <BulletList items={job.description} icon="radio_button_checked" />
+                <BulletList
+                  items={job.description}
+                  icon={<CircleDot className="size-4.5" aria-hidden="true" />}
+                />
               </PageSection>
             ) : null}
 
@@ -135,7 +165,10 @@ export default async function JobDetailPage({
                 title="Yêu cầu ứng viên"
                 description="Những kỹ năng, kinh nghiệm và tiêu chí phù hợp với vị trí đang tuyển."
               >
-                <BulletList items={job.requirements} icon="done_all" />
+                <BulletList
+                  items={job.requirements}
+                  icon={<CheckCheck className="size-4.5" aria-hidden="true" />}
+                />
               </PageSection>
             ) : null}
 
@@ -177,29 +210,52 @@ export default async function JobDetailPage({
 
             <Link
               href={`/companies/${slug}`}
+              prefetch={false}
               className="group block overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 hover:border-primary/30"
             >
               <div className="relative h-40 overflow-hidden bg-slate-100">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={companyCover}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover"
-                />
+                {canUseNextImage(companyCover) ? (
+                  <Image
+                    src={companyCover}
+                    alt=""
+                    fill
+                    quality={62}
+                    sizes="(min-width: 1280px) 380px, (min-width: 1024px) 32vw, 100vw"
+                    className="object-cover"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={companyCover}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                  />
+                )}
                 <div className="absolute inset-0 bg-linear-to-t from-slate-950/80 via-slate-950/20 to-transparent" />
                 <div className="absolute inset-x-5 bottom-5 flex items-center gap-3">
                   <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/30 bg-white/90 p-2">
                     {hasCompanyLogo ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={job.logo_url}
-                        alt={job.company_name}
-                        loading="lazy"
-                        decoding="async"
-                        className="h-full w-full object-contain"
-                      />
+                      canUseNextImage(job.logo_url) ? (
+                        <Image
+                          src={job.logo_url}
+                          alt={job.company_name}
+                          width={56}
+                          height={56}
+                          sizes="56px"
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={job.logo_url}
+                          alt={job.company_name}
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-contain"
+                        />
+                      )
                     ) : (
                       <span className="text-xl font-black text-primary">{companyInitial}</span>
                     )}
@@ -220,58 +276,80 @@ export default async function JobDetailPage({
                 </p>
                 <span className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
                   Xem trang công ty
-                  <span className="material-symbols-outlined text-[18px] transition-transform group-hover:translate-x-1">
-                    arrow_forward
-                  </span>
+                  <ArrowRight className="size-4.5 transition-transform group-hover:translate-x-1" aria-hidden="true" />
                 </span>
               </div>
             </Link>
           </aside>
         </section>
 
-        {relatedJobs.length ? (
-          <section className="mt-12">
-            <div className="mb-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Cùng doanh nghiệp
-              </p>
-              <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
-                Việc làm khác tại {job.company_name}
-              </h2>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {relatedJobs.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/jobs/${item.id}`}
-                  className="group rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 hover:border-primary/30"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h3 className="line-clamp-2 text-lg font-black leading-snug text-slate-950 transition-colors group-hover:text-primary">
-                        {item.title}
-                      </h3>
-                      <p className="mt-2 text-sm font-semibold text-slate-500">{item.company_name}</p>
-                    </div>
-                    <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                      {resolveValue(item.salary, "Thỏa thuận")}
-                    </span>
-                  </div>
-
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <InlineMeta icon="location_on" text={resolveValue(item.location)} />
-                    {item.deadline ? (
-                      <InlineMeta icon="event" text={formatDateLabel(item.deadline)} />
-                    ) : null}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-        ) : null}
+        <Suspense fallback={null}>
+          <RelatedJobsSection slug={slug} currentJobId={job.id} companyName={job.company_name} />
+        </Suspense>
       </div>
     </main>
+  );
+}
+
+async function RelatedJobsSection({
+  slug,
+  currentJobId,
+  companyName,
+}: {
+  slug: string;
+  currentJobId: string;
+  companyName: string;
+}) {
+  const relatedJobs = await getRelatedJobsByCompanySlug(slug, {
+    excludeJobId: currentJobId,
+    limit: 6,
+  });
+
+  if (!relatedJobs.length) {
+    return null;
+  }
+
+  return (
+    <section className="mt-12">
+      <div className="mb-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+          Cùng doanh nghiệp
+        </p>
+        <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+          Việc làm khác tại {companyName}
+        </h2>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {relatedJobs.map((item) => (
+          <Link
+            key={item.id}
+            href={`/jobs/${item.id}`}
+            prefetch={false}
+            className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.2)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 hover:border-primary/30"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="line-clamp-2 text-lg font-black leading-snug text-slate-950 transition-colors group-hover:text-primary">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm font-semibold text-slate-500">{item.company_name}</p>
+              </div>
+              <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                {resolveValue(item.salary, "Thỏa thuận")}
+              </span>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <InlineMeta icon={<MapPin className="size-4" aria-hidden="true" />} text={resolveValue(item.location)} />
+              {item.deadline ? (
+                <InlineMeta icon={<CalendarDays className="size-4" aria-hidden="true" />} text={formatDateLabel(item.deadline)} />
+              ) : null}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -305,14 +383,14 @@ function BulletList({
   icon,
 }: {
   items: string[];
-  icon: string;
+  icon: ReactNode;
 }) {
   return (
     <ul className="space-y-3">
       {items.map((item, index) => (
         <li key={`${item}-${index}`} className="flex items-start gap-3">
           <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <span className="material-symbols-outlined text-[18px]">{icon}</span>
+            {icon}
           </span>
           <span className="text-sm leading-7 text-slate-700">{item}</span>
         </li>
@@ -342,12 +420,12 @@ function InlineMeta({
   icon,
   text,
 }: {
-  icon: string;
+  icon: ReactNode;
   text: string;
 }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">
-      <span className="material-symbols-outlined text-[16px]">{icon}</span>
+      {icon}
       {text}
     </span>
   );

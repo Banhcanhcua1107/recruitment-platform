@@ -10,6 +10,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { CVSection, RichOutlineNode } from "../../types";
+import { normalizeCvSections } from "../../section-normalization";
 
 interface DetectedSectionPayload {
   type: string;
@@ -57,13 +58,16 @@ const DETECTED_SECTION_LABELS: Record<string, string> = {
   document_content: "Nội dung trích xuất",
 };
 
-function renderRichOutlineNodes(nodes: RichOutlineNode[]): React.ReactNode {
+function renderRichOutlineNodes(
+  nodes: RichOutlineNode[],
+  path = "root",
+): React.ReactNode {
   if (!nodes.length) return null;
 
   return (
     <div className="space-y-2">
-      {nodes.map((node) => (
-        <div key={node.id} className="space-y-1">
+      {nodes.map((node, index) => (
+        <div key={`${node.id}-${path}-${index}`} className="space-y-1">
           <p
             className={
               node.kind === "heading"
@@ -77,7 +81,7 @@ function renderRichOutlineNodes(nodes: RichOutlineNode[]): React.ReactNode {
           </p>
           {node.children.length > 0 ? (
             <div className="ml-4 border-l border-slate-200 pl-3">
-              {renderRichOutlineNodes(node.children)}
+              {renderRichOutlineNodes(node.children, `${path}-${index}`)}
             </div>
           ) : null}
         </div>
@@ -121,8 +125,8 @@ function renderSectionData(section: CVSection): React.ReactNode {
 
       return (
         <div className="space-y-2">
-          {rows.map((row) => (
-            <p key={row} className="text-sm leading-6 text-slate-700">
+          {rows.map((row, index) => (
+            <p key={`${row}-${index}`} className="text-sm leading-6 text-slate-700">
               {row}
             </p>
           ))}
@@ -143,9 +147,9 @@ function renderSectionData(section: CVSection): React.ReactNode {
       };
       return (
         <div className="flex flex-wrap gap-2">
-          {(data.items || []).map((item) => (
+          {(data.items || []).map((item, index) => (
             <span
-              key={item.id}
+              key={`${item.id}-${index}`}
               className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-sm font-medium text-amber-800"
             >
               {item.name}
@@ -163,7 +167,7 @@ function renderSectionData(section: CVSection): React.ReactNode {
         <div className="space-y-4">
           {(data.items || []).map((item, index) => (
             <div
-              key={String(item.id || index)}
+              key={`${String(item.id || "item")}-${index}`}
               className="rounded-xl border border-slate-100 bg-slate-50 p-4"
             >
               {Object.entries(item).map(([key, value]) => {
@@ -274,8 +278,10 @@ function normalizeSections(
   detectedSections: DetectedSectionPayload[],
   fallbackSections: CVSection[],
 ) {
-  if (hasMeaningfulStructuredSections(fallbackSections)) {
-    return fallbackSections
+  const normalizedFallbackSections = normalizeCvSections(fallbackSections);
+
+  if (hasMeaningfulStructuredSections(normalizedFallbackSections)) {
+    return normalizedFallbackSections
       .filter((section) => isMeaningfulStructuredSection(section))
       .map((section) => ({
         key: section.id,
@@ -300,7 +306,7 @@ function normalizeSections(
       .filter((section) => section.content.length > 0);
   }
 
-  return fallbackSections.map((section) => ({
+  return normalizedFallbackSections.map((section) => ({
     key: section.id,
     title: section.title || SECTION_TITLE_MAP[section.type] || "Nội dung",
     content: "",

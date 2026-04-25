@@ -1,0 +1,70 @@
+{
+  "baseUrl": "http://localhost:3000",
+  "runtimeEditUrl": "http://localhost:3000/candidate/cv-builder/9a8f9280-3daa-4b9c-ae38-ad788387d36d/edit",
+  "providedTarget": {
+    "url": "http://localhost:3000/candidate/cv-builder/9c92e112-40da-44eb-84d3-cc9488236348/edit",
+    "finalUrl": "http://localhost:3000/candidate/cv-builder/9c92e112-40da-44eb-84d3-cc9488236348/edit",
+    "accessible": false,
+    "blocked": true
+  },
+  "leftRightIndependentScroll": {
+    "previewCanScroll": true,
+    "rightCanScroll": true,
+    "previewScrollDoesNotMoveRight": true,
+    "rightScrollDoesNotMovePreview": true
+  },
+  "selectedSyncChecks": [
+    {
+      "type": "overview",
+      "clickedLabel": "Tổng quan",
+      "outlineText": "Tổng quan",
+      "outlineSynced": true,
+      "jumpedTop": true,
+      "focusedField": true,
+      "fieldLabel": "Nội dung tổng quan",
+      "fieldPlaceholder": "Lập trình viên Fullstack có kinh nghiệm xây dựng sản phẩm, tối ưu hiệu năng và nâng tỷ lệ chuyển đổi...",
+      "signatureChanged": true
+    },
+    {
+      "type": "skills",
+      "clickedLabel": "Kỹ năng",
+      "outlineText": "Kỹ năng",
+      "outlineSynced": true,
+      "jumpedTop": true,
+      "focusedField": true,
+      "fieldLabel": "Kỹ năng",
+      "fieldPlaceholder": "Frontend: React, Next.js, TypeScript, Tailwind CSS",
+      "signatureChanged": true
+    },
+    {
+      "type": "experience",
+      "clickedLabel": "Kinh nghiệm làm việc",
+      "outlineText": "Kinh nghiệm làm việc",
+      "outlineSynced": true,
+      "jumpedTop": true,
+      "focusedField": true,
+      "fieldLabel": "Công ty",
+      "fieldPlaceholder": "F8 TECHNOLOGY EDUCATION.,JSC",
+      "signatureChanged": true
+    },
+    {
+      "type": "projects",
+      "clickedLabel": "Dự án",
+      "outlineText": "Dự án",
+      "outlineSynced": true,
+      "jumpedTop": true,
+      "focusedField": true,
+      "fieldLabel": "Tên dự án",
+      "fieldPlaceholder": "CV Builder 2.0",
+      "signatureChanged": true
+    }
+  ],
+  "rapidSwitch": {
+    "expectedLabel": "Kinh nghiệm làm việc",
+    "outlineText": "Kinh nghiệm làm việc",
+    "outlineSynced": true,
+    "jumpedTop": true,
+    "focusedField": true
+  },
+  "screenshotPath": "artifacts/responsive-qa/cv-editor-layout-sync.png"
+}

@@ -38,6 +38,8 @@ export interface GroupableLayoutBlock {
   bbox_normalized: BoundingBox;
   type?: string | null;
   sequence: number;
+  source_line_ids?: string[];
+  source_block_ids?: string[];
   suggested_json_path?: string | null;
   suggested_mapping_role?: string | null;
   suggested_compose_strategy?: SyncStrategy | null;
@@ -96,8 +98,22 @@ function bboxRight(box: BoundingBox) {
   return box.x + box.width;
 }
 
+function bboxCenterY(box: BoundingBox) {
+  return box.y + box.height / 2;
+}
+
+function bboxCenterX(box: BoundingBox) {
+  return box.x + box.width / 2;
+}
+
 function overlapLength(a1: number, a2: number, b1: number, b2: number) {
   return Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
+}
+
+function verticalOverlapRatio(top: BoundingBox, bottom: BoundingBox) {
+  const overlap = overlapLength(top.y, bboxBottom(top), bottom.y, bboxBottom(bottom));
+  const base = Math.min(top.height, bottom.height);
+  return base > 0 ? overlap / base : 0;
 }
 
 function horizontalOverlapRatio(left: BoundingBox, right: BoundingBox) {
@@ -117,6 +133,10 @@ function unionBoxes(boxes: BoundingBox[]): BoundingBox {
     width: Math.max(0, x2 - x1),
     height: Math.max(0, y2 - y1),
   };
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.length > 0))];
 }
 
 function normalizeBox(box: BoundingBox): BoundingBox {
@@ -140,6 +160,141 @@ function inferColumn(box: BoundingBox): BlockColumn {
     return "right";
   }
   return "full_width";
+}
+
+function textDensity(block: GroupableLayoutBlock) {
+  const trimmed = block.text.trim();
+  const charCount = trimmed.replace(/\s+/g, "").length;
+  return charCount > 0 ? block.bbox_normalized.width / charCount : block.bbox_normalized.width;
+}
+
+function needsSpaceBetween(leftText: string, rightText: string) {
+  if (!leftText || !rightText) return false;
+  const leftChar = leftText[leftText.length - 1];
+  const rightChar = rightText[0];
+  if (/\s/.test(leftChar) || /\s/.test(rightChar)) return false;
+  if ("([/-".includes(leftChar)) return false;
+  if (",.;:!?%)]/".includes(rightChar)) return false;
+  return true;
+}
+
+function joinLineText(parts: GroupableLayoutBlock[]) {
+  const ordered = [...parts].sort((left, right) => left.bbox_normalized.x - right.bbox_normalized.x);
+  return ordered.reduce((text, part, index) => {
+    const next = part.text.trim();
+    if (!next) return text;
+    if (index === 0) return next;
+    return `${text}${needsSpaceBetween(text, next) ? " " : ""}${next}`;
+  }, "");
+}
+
+function canMergeIntoLine(current: GroupableLayoutBlock[], candidate: GroupableLayoutBlock) {
+  const previous = current[current.length - 1];
+  if (!previous || previous.page !== candidate.page) return false;
+
+  const union = unionBoxes(current.map((item) => item.bbox_normalized));
+  const avgHeight =
+    current.reduce((sum, item) => sum + item.bbox_normalized.height, 0) / Math.max(current.length, 1);
+  const maxHeight = Math.max(
+    avgHeight,
+    previous.bbox_normalized.height,
+    candidate.bbox_normalized.height,
+  );
+  const verticalDelta = Math.abs(
+    bboxCenterY(previous.bbox_normalized) - bboxCenterY(candidate.bbox_normalized),
+  );
+  const overlap = verticalOverlapRatio(previous.bbox_normalized, candidate.bbox_normalized);
+  const gap = candidate.bbox_normalized.x - bboxRight(previous.bbox_normalized);
+  const density = textDensity(previous);
+  const maxForwardGap = Math.max(0.014, maxHeight * 2.6, density * 2.2);
+  const maxBackwardOverlap = Math.max(0.01, maxHeight * 0.55);
+  const columnShift = Math.abs(bboxCenterX(union) - bboxCenterX(candidate.bbox_normalized));
+
+  if (verticalDelta > Math.max(0.01, maxHeight * 0.7)) return false;
+  if (overlap < 0.33 && verticalDelta > Math.max(0.006, maxHeight * 0.45)) return false;
+  if (gap > maxForwardGap) return false;
+  if (gap < -maxBackwardOverlap) return false;
+  if (columnShift > Math.max(0.22, union.width * 0.8)) return false;
+  return true;
+}
+
+function createLineBlock(blocks: GroupableLayoutBlock[], pageNumber: number, sequence: number): GroupableLayoutBlock {
+  const ordered = [...blocks].sort(
+    (left, right) => left.bbox_normalized.x - right.bbox_normalized.x || left.sequence - right.sequence,
+  );
+  const confidences = ordered
+    .map((block) => block.confidence)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  return {
+    id: `line-${pageNumber}-${sequence}-${ordered[0]?.id ?? "0"}`,
+    page: pageNumber,
+    text: joinLineText(ordered),
+    confidence:
+      confidences.length > 0
+        ? Number((confidences.reduce((sum, value) => sum + value, 0) / confidences.length).toFixed(4))
+        : null,
+    bbox_px: roundBox(unionBoxes(ordered.map((block) => block.bbox_px))),
+    bbox_normalized: normalizeBox(roundBox(unionBoxes(ordered.map((block) => block.bbox_normalized)))),
+    type: ordered.some((block) => block.type === "title") ? "title" : ordered[0]?.type || "text",
+    sequence,
+    source_line_ids: [`line-${pageNumber}-${sequence}-${ordered[0]?.id ?? "0"}`],
+    source_block_ids: uniqueStrings(
+      ordered.flatMap((block) => block.source_block_ids ?? [block.id]),
+    ),
+    suggested_json_path: ordered.find((block) => block.suggested_json_path)?.suggested_json_path ?? null,
+    suggested_mapping_role:
+      ordered.find((block) => block.suggested_mapping_role)?.suggested_mapping_role ?? null,
+    suggested_compose_strategy:
+      ordered.find((block) => block.suggested_compose_strategy)?.suggested_compose_strategy ?? null,
+    suggested_parse_strategy:
+      ordered.find((block) => block.suggested_parse_strategy)?.suggested_parse_strategy ?? null,
+    mapping_confidence:
+      ordered.find((block) => typeof block.mapping_confidence === "number")?.mapping_confidence ?? null,
+  };
+}
+
+export function mergeBlocksToLines(sourceBlocks: GroupableLayoutBlock[]): GroupableLayoutBlock[] {
+  const byPage = new Map<number, GroupableLayoutBlock[]>();
+  for (const block of sortBlocksForGrouping(sourceBlocks)) {
+    const trimmed = block.text.trim();
+    if (!trimmed) continue;
+    const blocks = byPage.get(block.page) ?? [];
+    blocks.push({
+      ...block,
+      source_line_ids: block.source_line_ids ?? [block.id],
+      source_block_ids: block.source_block_ids ?? [block.id],
+    });
+    byPage.set(block.page, blocks);
+  }
+
+  const merged: GroupableLayoutBlock[] = [];
+
+  for (const [pageNumber, pageBlocks] of byPage.entries()) {
+    const ordered = [...pageBlocks].sort((left, right) => {
+      const topDiff = left.bbox_normalized.y - right.bbox_normalized.y;
+      if (Math.abs(topDiff) > 0.0025) return topDiff;
+      return left.bbox_normalized.x - right.bbox_normalized.x;
+    });
+
+    const lines: GroupableLayoutBlock[][] = [];
+    for (const block of ordered) {
+      const targetLine = [...lines]
+        .reverse()
+        .find((line) => canMergeIntoLine(line, block));
+      if (targetLine) {
+        targetLine.push(block);
+      } else {
+        lines.push([block]);
+      }
+    }
+
+    lines.forEach((line, index) => {
+      merged.push(createLineBlock(line, pageNumber, index));
+    });
+  }
+
+  return merged.sort((left, right) => left.page - right.page || left.sequence - right.sequence);
 }
 
 function sectionHint(text: string): string | null {
@@ -430,15 +585,19 @@ function createGroupedBlock(
       version: 1,
       lock_state: "unlocked",
       column,
-      source_line_ids: ordered.map((block) => block.id),
-      source_block_ids: ordered.map((block) => block.id),
+      source_line_ids: uniqueStrings(
+        ordered.flatMap((block) => block.source_line_ids ?? [block.id]),
+      ),
+      source_block_ids: uniqueStrings(
+        ordered.flatMap((block) => block.source_block_ids ?? [block.id]),
+      ),
       section_hint: sectionHint(text),
     },
   };
 }
 
 export function toLegacyCompatibleBlocks(sourceBlocks: GroupableLayoutBlock[]): LegacyCompatibleLayoutBlock[] {
-  return groupBlocksToParagraphs(sourceBlocks).map((block) => ({
+  return groupBlocksToParagraphs(mergeBlocksToLines(sourceBlocks)).map((block) => ({
     id: block.id,
     text: block.text,
     page: block.page,
@@ -471,6 +630,8 @@ export function toGroupableLayoutBlockFromRecord(record: CVOCRBlockRecord, pageN
     bbox_normalized: record.bbox_normalized,
     type: record.type,
     sequence: record.sequence,
+    source_line_ids: [record.id],
+    source_block_ids: [record.id],
     suggested_json_path: record.suggested_json_path,
     suggested_mapping_role: record.suggested_mapping_role,
     suggested_compose_strategy: record.suggested_compose_strategy,

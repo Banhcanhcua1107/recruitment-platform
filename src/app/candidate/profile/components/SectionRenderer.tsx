@@ -1,21 +1,36 @@
 'use client';
 
-import { Section, SectionContent, PersonalInfoContent, SkillsContent, LanguagesContent, ExperienceContent, EducationContent, SummaryContent, CareerGoalContent } from '../types/profile';
+import type {
+  CareerGoalContent,
+  CertificationsContent,
+  EducationContent,
+  ExperienceContent,
+  LanguagesContent,
+  PersonalInfoContent,
+  Section,
+  SkillsContent,
+  SummaryContent,
+} from '../types/profile';
 import { useProfileBuilder } from '../stores/profileBuilderStore';
+import EmptyState from './EmptyState';
 import SectionCard from './SectionCard';
+import EducationSection from './sections/EducationSection';
+import ExperienceSection from './sections/ExperienceSection';
+import CertificationsSection from './sections/CertificationsSection';
+import LanguagesSection from './sections/LanguagesSection';
 import PersonalInfoSection from './sections/PersonalInfoSection';
 import SkillsSection from './sections/SkillsSection';
-import LanguagesSection from './sections/LanguagesSection';
-import ExperienceSection from './sections/ExperienceSection';
-import EducationSection from './sections/EducationSection';
 import TextSection from './sections/TextSection';
-import EmptyState from './EmptyState';
 
 interface SectionRendererProps {
   section: Section;
+  readOnly?: boolean;
 }
 
-export default function SectionRenderer({ section }: SectionRendererProps) {
+export default function SectionRenderer({
+  section,
+  readOnly = false,
+}: SectionRendererProps) {
   const { editingSectionId } = useProfileBuilder();
   const isEditing = editingSectionId === section.id;
 
@@ -66,14 +81,23 @@ export default function SectionRenderer({ section }: SectionRendererProps) {
           />
         );
 
+      case 'certifications':
+        return (
+          <CertificationsSection
+            sectionId={section.id}
+            content={section.content as CertificationsContent}
+            isEditing={isEditing}
+          />
+        );
+
       case 'summary':
         return (
           <TextSection
             sectionId={section.id}
             content={section.content as SummaryContent}
             isEditing={isEditing}
-            placeholder="Viết về bản thân bạn: kinh nghiệm, điểm mạnh, thành tựu nổi bật..."
-            emptyMessage="Chưa có giới thiệu bản thân"
+            placeholder="Viết về bản thân, điểm mạnh nổi bật và giá trị bạn mang lại cho nhà tuyển dụng."
+            emptyMessage="Chưa có phần giới thiệu bản thân."
           />
         );
 
@@ -83,29 +107,38 @@ export default function SectionRenderer({ section }: SectionRendererProps) {
             sectionId={section.id}
             content={section.content as CareerGoalContent}
             isEditing={isEditing}
-            placeholder="Mục tiêu nghề nghiệp ngắn hạn và dài hạn của bạn..."
-            emptyMessage="Chưa có mục tiêu nghề nghiệp"
+            placeholder="Mô tả mục tiêu nghề nghiệp ngắn hạn và định hướng bạn đang theo đuổi."
+            emptyMessage="Chưa có mục tiêu nghề nghiệp."
           />
         );
 
-      // Placeholder for other sections
-      case 'certifications':
       case 'projects':
+        return (
+          <EmptyState
+            sectionType={section.type}
+            description="Mục dự án sẽ được hoàn thiện ở pha tiếp theo."
+          />
+        );
+
       case 'links':
         return (
           <EmptyState
             sectionType={section.type}
-            description="Section này đang được phát triển"
+            description="Thêm liên kết LinkedIn, GitHub hoặc portfolio để hồ sơ nổi bật hơn."
           />
         );
 
       default:
-        return <div className="text-slate-400">Unknown section type</div>;
+        return (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm font-medium text-slate-500">
+            Thành phần này hiện chưa được hỗ trợ.
+          </div>
+        );
     }
   };
 
   return (
-    <SectionCard section={section}>
+    <SectionCard section={section} readOnly={readOnly}>
       {renderContent()}
     </SectionCard>
   );

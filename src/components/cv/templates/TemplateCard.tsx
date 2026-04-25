@@ -1,94 +1,91 @@
 "use client";
 
-import Link from "next/link";
-
-export interface GalleryTemplate {
-  id: string;
-  name: string;
-  preview: string;
-  categories: string[];
-  colors: string[];
-  description: string;
-  accent: string;
-}
+import { Eye, Loader2, Sparkles } from "lucide-react";
+import type { CVTemplateDefinition } from "@/components/cv/templates/templateCatalog";
+import { ResumeTemplateThumbnail } from "@/components/cv/templates/ResumeTemplateThumbnail";
 
 interface TemplateCardProps {
-  template: GalleryTemplate;
+  template: CVTemplateDefinition;
+  onPreview: (template: CVTemplateDefinition) => void;
+  onUseTemplate: (template: CVTemplateDefinition) => void;
+  isCreating: boolean;
+  disabled: boolean;
 }
 
-export function TemplateCard({ template }: TemplateCardProps) {
+export function TemplateCard({
+  template,
+  onPreview,
+  onUseTemplate,
+  isCreating,
+  disabled,
+}: TemplateCardProps) {
+  const leadTag = template.tags[0] ?? "Mẫu";
+  const tagList = template.tags.length > 0 ? template.tags : [template.category];
+
   return (
-    <Link
-      href={`/candidate/cv-builder?template=${template.id}`}
-      className="group relative flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:scale-[1.02] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 focus-visible:ring-offset-4"
-    >
-      <div className="relative aspect-[3/4] overflow-hidden rounded-t-xl bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_rgba(241,245,249,0.95)_50%,_rgba(226,232,240,0.9))] p-4 sm:p-5">
-        <div className="absolute inset-x-8 bottom-4 h-8 rounded-full bg-slate-900/10 blur-xl transition-all duration-300 group-hover:bg-slate-900/15" />
-        <div className="relative mx-auto h-full max-w-[82%] overflow-hidden rounded-lg border border-slate-200/80 bg-white shadow-[0_24px_50px_-28px_rgba(15,23,42,0.4)] transition-transform duration-300 group-hover:-translate-y-1 group-hover:rotate-[0.4deg]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={template.preview}
-            alt={template.name}
-            className="h-full w-full object-contain object-top bg-white"
-          />
-        </div>
+    <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-(--app-shadow-soft) transition-all duration-300 hover:-translate-y-1.5 hover:border-slate-300 hover:shadow-[0_28px_60px_-34px_rgba(15,23,42,0.4)] focus-within:ring-2 focus-within:ring-sky-300/60 focus-within:ring-offset-2 focus-within:ring-offset-slate-100">
+      <div className="relative bg-[linear-gradient(180deg,rgba(248,250,252,0.72),rgba(226,232,240,0.7))] p-3">
+        <ResumeTemplateThumbnail
+          template={template}
+          density="card"
+          className="transition-transform duration-500 group-hover:-translate-y-0.5 group-hover:scale-[1.01]"
+        />
 
-        <div className="pointer-events-none absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          <div className="flex h-full items-center justify-center px-6">
-            <div className="rounded-lg bg-green-500 px-4 py-2 text-sm font-bold text-white shadow-xl">
-              Sử dụng mẫu này
-            </div>
-          </div>
-        </div>
-
-        <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/60 bg-white/85 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-slate-700 backdrop-blur-md">
+        <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
+          <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur-md">
+            {template.category}
+          </span>
           <span
-            className="size-2.5 rounded-full"
-            style={{ backgroundColor: template.accent }}
-            aria-hidden="true"
-          />
-          TalentFlow
+            className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              template.badge === "PRO"
+                ? "bg-slate-900/90 text-white"
+                : "bg-white/90 text-slate-700"
+            }`}
+          >
+            {template.badge}
+          </span>
         </div>
       </div>
 
       <div className="flex flex-1 flex-col p-5">
-        <div className="mb-4">
-          <h3 className="text-lg font-black tracking-tight text-slate-900">
-            {template.name}
-          </h3>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            {template.description}
-          </p>
-        </div>
+        <h3 className="text-lg font-black tracking-tight text-slate-900">{template.name}</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-500">{template.description}</p>
 
-        <div className="mb-5 flex flex-wrap gap-2">
-          {template.categories.map((category) => (
+        <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{leadTag}</p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {tagList.map((tag) => (
             <span
-              key={category}
-              className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-600"
+              key={`${template.id}-${tag}`}
+              className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600"
             >
-              {category}
+              {tag}
             </span>
           ))}
         </div>
 
-        <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-4">
-          <div className="flex items-center gap-2" aria-label="Bảng màu template">
-            {template.colors.map((color) => (
-              <span
-                key={`${template.id}-${color}`}
-                className="size-4 rounded-full border border-slate-200 shadow-sm"
-                style={{ backgroundColor: color }}
-                title={color}
-              />
-            ))}
-          </div>
+        <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
+          <button
+            type="button"
+            onClick={() => onPreview(template)}
+            className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60"
+          >
+            <Eye size={15} />
+            Xem trước
+          </button>
 
-          <span className="text-sm font-bold text-emerald-700 transition-transform duration-200 group-hover:translate-x-1">
-            Bắt đầu
-          </span>
+          <button
+            type="button"
+            onClick={() => onUseTemplate(template)}
+            disabled={disabled || isCreating}
+            aria-label={isCreating ? "Đang tạo CV" : "Dùng mẫu này"}
+            title={isCreating ? "Đang tạo CV" : "Dùng mẫu này"}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isCreating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+          </button>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }

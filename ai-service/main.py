@@ -7,7 +7,7 @@ Endpoints
 POST /parse-cv      Extract and structure a CV from uploaded file.
 POST /match-job     Compute semantic similarity between CV text and JD.
 GET  /health        Liveness probe.
-POST /ocr/upload    Raw OCR (PP-OCRv5 bounding boxes) — kept for editor.
+POST /ocr/upload    Raw OCR (Google Vision bounding boxes) — kept for editor.
 
 Run
 ---
@@ -35,6 +35,8 @@ from fastapi.responses import Response
 from models import (
     CVDocumentJobRequest,
     CVDocumentJobResponse,
+    CVSuggestionsRequest,
+    CVSuggestionsResponse,
     DetectedSectionModel,
     ErrorResponse,
     MatchJobRequest,
@@ -47,14 +49,17 @@ from models import (
     UploadCVResponse,
 )
 from celery_app import celery_app
+from services.cv_html_renderer import render_clean_cv_html
 from services.cv_parser import parse_cv
 from services.cv_layout_parser import parse_structured_cv_from_ocr
-from services.ocr_pipeline import (
+from services.cv_suggestions import suggest_cv_improvements
+from services.google_vision_ocr import extract_clean_text, run_google_vision_ocr, run_google_vision_on_pages
+from services.cv_processing import (
+    _prepare_document_pages,
+    CVProcessingError,
     InvalidCVFormatError,
-    OCRPipelineError,
     build_preview_payload,
-    process_cv,
-    run_ppocrv5,
+    process_cv_document,
 )
 
 # ── Logging ──────────────────────────────────────────────────
@@ -130,7 +135,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="CV Processing API",
-    description="AI-powered CV parsing (PP-OCRv5 / PP-StructureV3) and job-matching (Ollama).",
+    description="AI-powered CV parsing (Google Vision OCR + Ollama local parsing) and job-matching (Ollama).",
     version="3.0.0",
     lifespan=lifespan,
     responses={
@@ -243,10 +248,10 @@ async def endpoint_parse_cv(
     - **clean_text** – LLM-normalized text
     - **cv_json** – structured data dict
     - **avatar_url** – data-URI of the detected avatar (PDF only)
+    - **clean_html** – sanitized HTML for rich-text editing (TipTap compatible)
 
     Routing:
-    - **PDF** → pdfplumber text layer (+ RapidOCR fallback for scanned PDFs)
-    - **Image** → RapidOCR sorted by bbox position
+    - **PDF / Image** → Google Vision API DOCUMENT_TEXT_DETECTION
     - **DOCX** → python-docx
     """
     ct = (file.content_type or "").lower()
@@ -309,11 +314,10 @@ async def endpoint_parse_cv_v2(
     }
     ```
 
-    - **PDF / Image** → OCR bounding boxes in `blocks`
+    - **PDF / Image** → Google Vision OCR bounding boxes in `blocks`
     - **DOCX** → direct text extraction; `blocks` is empty list
     """
-    from services.cv_parser import detect_file_type, extract_text_from_docx, extract_text_from_image, extract_text_from_pdf
-    from services.ocr_service import run_ocr
+    from services.cv_parser import detect_file_type, extract_text_from_docx
 
     ct = (file.content_type or "").lower()
     fname = file.filename or ""
@@ -347,32 +351,22 @@ async def endpoint_parse_cv_v2(
         if file_type == "docx":
             extracted_text = extract_text_from_docx(file_bytes)
 
-        elif file_type == "pdf":
-            raw_text, _avatar, _pages = extract_text_from_pdf(file_bytes)
-            extracted_text = raw_text
-            # Also run OCR to get bounding boxes
-            try:
-                page_results = run_ocr(file_bytes, content_type=ct, filename=fname)
-                for page in page_results:
-                    for blk in page.blocks:
-                        if blk.bbox and len(blk.bbox) >= 2:
-                            x1 = blk.bbox[0][0]; y1 = blk.bbox[0][1]
-                            x2 = blk.bbox[2][0]; y2 = blk.bbox[2][1]
-                            blocks.append({"text": blk.text, "bbox": [x1, y1, x2, y2]})
-            except Exception as ocr_err:
-                logger.warning("OCR blocks skipped for PDF: %s", ocr_err)
-
-        else:  # image
-            page_results = run_ocr(file_bytes, content_type=ct, filename=fname)
-            text_parts = []
+        else:  # pdf | image
+            ocr_result = run_google_vision_ocr(
+                file_bytes,
+                content_type=ct,
+                filename=fname,
+            )
+            page_results = ocr_result["pages"]
             for page in page_results:
                 for blk in page.blocks:
-                    text_parts.append(blk.text)
-                    if blk.bbox and len(blk.bbox) >= 2:
-                        x1 = blk.bbox[0][0]; y1 = blk.bbox[0][1]
-                        x2 = blk.bbox[2][0]; y2 = blk.bbox[2][1]
+                    if blk.bbox and len(blk.bbox) >= 3:
+                        x1 = blk.bbox[0][0]
+                        y1 = blk.bbox[0][1]
+                        x2 = blk.bbox[2][0]
+                        y2 = blk.bbox[2][1]
                         blocks.append({"text": blk.text, "bbox": [x1, y1, x2, y2]})
-            extracted_text = "\n".join(text_parts)
+            extracted_text = extract_clean_text(page_results)
 
     except Exception as exc:
         logger.exception("parse-cv-v2 failed")
@@ -426,6 +420,31 @@ async def endpoint_match_job(payload: MatchJobRequest):
     )
 
 
+@app.post(
+    "/cv-suggestions",
+    response_model=CVSuggestionsResponse,
+    tags=["cv"],
+    summary="Suggest CV improvements via local Ollama (qwen3:4b)",
+)
+async def endpoint_cv_suggestions(payload: CVSuggestionsRequest):
+    try:
+        result = suggest_cv_improvements(
+            clean_html=payload.clean_html,
+            structured_json=payload.structured_json,
+            raw_text=payload.raw_text,
+            max_items=payload.max_items,
+        )
+    except Exception as exc:
+        logger.exception("CV suggestions failed")
+        raise HTTPException(status_code=500, detail=f"Failed to generate CV suggestions: {exc}") from exc
+
+    return CVSuggestionsResponse(
+        success=True,
+        suggestions=result.get("suggestions") or [],
+        model_used=str(result.get("model_used") or f"ollama/{os.getenv('OLLAMA_CV_SUGGEST_MODEL', 'qwen3:4b')}"),
+    )
+
+
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  POST /ocr/upload  (raw OCR for editor overlay)             ║
 # ╚══════════════════════════════════════════════════════════════╝
@@ -474,7 +493,7 @@ def _validate_upload_bytes(
     return ct, ext
 
 
-def _run_ocr_pipeline(
+def _run_ocr_processing(
     file_bytes: bytes,
     content_type: str,
     filename: str,
@@ -482,17 +501,20 @@ def _run_ocr_pipeline(
     apply_llm_correction: bool,
 ):
     del apply_llm_correction
-    result = run_ppocrv5(
-        file_bytes,
-        content_type=content_type,
-        filename=filename,
-        min_confidence=min_confidence,
-    )
+    try:
+        prepared_pages = _prepare_document_pages(
+            file_bytes,
+            content_type=content_type,
+            filename=filename,
+        )
+        result = run_google_vision_on_pages(prepared_pages, min_confidence=min_confidence)
+    except Exception as exc:
+        raise CVProcessingError(f"Google Vision OCR failed: {exc}") from exc
     return result["pages"]
 
 
 def _build_page_results_from_blocks(blocks: list) -> list:
-    from services.ocr_service import OCRBlock, OCRPageResult
+    from services.ocr_common import OCRBlock, OCRPageResult
 
     pages_by_number: dict[int, list] = {}
     for block in blocks:
@@ -572,7 +594,7 @@ def _serialize_raw_ocr_pages(page_results) -> dict[str, object]:
 
 def _build_upload_meta(
     *,
-    pipeline_version: str,
+    processing_version: str,
     document_type: str,
     document_confidence: float,
     document_signals: list[str],
@@ -584,7 +606,9 @@ def _build_upload_meta(
     timings: dict[str, object],
 ) -> dict[str, object]:
     return {
-        "pipeline_version": pipeline_version,
+        # Keep legacy key for backward compatibility with existing clients.
+        "pipeline_version": processing_version,
+        "processing_version": processing_version,
         "document_type": document_type,
         "document_confidence": document_confidence,
         "document_signals": document_signals,
@@ -652,6 +676,17 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
         DetectedSectionModel(**section)
         for section in parsed["detected_sections"]
     ]
+    clean_html = render_clean_cv_html(
+        structured_data=parsed.get("data") if isinstance(parsed.get("data"), dict) else {},
+        mapped_sections=(
+            parsed.get("cleaned_json")
+            if isinstance(parsed.get("cleaned_json"), dict)
+            else parsed.get("mapped_sections")
+            if isinstance(parsed.get("mapped_sections"), dict)
+            else {}
+        ),
+        raw_text=str(parsed.get("raw_text") or ""),
+    )
 
     return UploadCVResponse(
         success=True,
@@ -668,14 +703,19 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
         timings=OCRProcessingTimingsModel(total_seconds=round(elapsed, 3)),
         warnings=warnings,
         data=parsed["data"],
+        mapped_sections=parsed.get("mapped_sections") or {},
+        cleaned_json=parsed.get("cleaned_json") or parsed.get("mapped_sections") or {},
+        document_analysis=parsed.get("document_analysis") or {},
+        correction_log=parsed.get("correction_log") or [],
         detected_sections=detected_sections,
         builder_sections=parsed["builder_sections"],
         layout=parsed["layout"],
         markdown_pages=[],
         raw_text=parsed["raw_text"],
         content=parsed["raw_text"],
+        clean_html=clean_html,
         meta=_build_upload_meta(
-            pipeline_version="v2-reparse",
+            processing_version="v2-reparse",
             document_type="cv",
             document_confidence=1.0,
             document_signals=["manual_parse_ocr_blocks"],
@@ -695,7 +735,7 @@ def _build_upload_cv_response(page_results, parsed: dict, elapsed: float, warnin
     )
 
 
-def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings: list[str]) -> UploadCVResponse:
+def _build_upload_cv_response_from_processing(result: dict[str, object], warnings: list[str]) -> UploadCVResponse:
     from models import OCRBlockModel, OCRPageModel
 
     page_results = result["page_results"]
@@ -726,6 +766,17 @@ def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings:
 
     detected_sections = [DetectedSectionModel(**section) for section in result["detected_sections"]]
     structured_blocks = [StructuredOCRBlockModel(**block) for block in result["blocks"]]
+    clean_html = str(result.get("clean_html") or "").strip() or render_clean_cv_html(
+        structured_data=result.get("data") if isinstance(result.get("data"), dict) else {},
+        mapped_sections=(
+            result.get("cleaned_json")
+            if isinstance(result.get("cleaned_json"), dict)
+            else result.get("mapped_sections")
+            if isinstance(result.get("mapped_sections"), dict)
+            else {}
+        ),
+        raw_text=str(result.get("raw_text") or ""),
+    )
 
     return UploadCVResponse(
         success=True,
@@ -742,14 +793,19 @@ def _build_upload_cv_response_from_pipeline(result: dict[str, object], warnings:
         timings=OCRProcessingTimingsModel(**result["timings"]),
         warnings=warnings,
         data=result["data"],
+        mapped_sections=result.get("mapped_sections") or {},
+        cleaned_json=result.get("cleaned_json") or result.get("mapped_sections") or {},
+        document_analysis=result.get("document_analysis") or {},
+        correction_log=result.get("correction_log") or [],
         detected_sections=detected_sections,
         builder_sections=result["builder_sections"],
         layout=result["layout"],
         markdown_pages=result["markdown_pages"],
         raw_text=str(result["raw_text"]),
         content=str(result.get("content") or result["raw_text"]),
+        clean_html=clean_html,
         meta=_build_upload_meta(
-            pipeline_version="v2",
+            processing_version="v2",
             document_type=str(result.get("document_type") or "cv"),
             document_confidence=float(result.get("document_confidence") or 0.0),
             document_signals=[str(item) for item in result.get("document_signals", [])],
@@ -804,7 +860,7 @@ async def endpoint_prepare_cv_preview(
         )
     except InvalidCVFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OCRPipelineError as exc:
+    except CVProcessingError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Preview generation failed")
@@ -854,7 +910,7 @@ async def endpoint_get_cv_preview(preview_id: str):
     "/upload-cv",
     response_model=UploadCVResponse,
     tags=["cv"],
-    summary="PP-OCRv5 + PP-StructureV3 CV extraction in one pass",
+    summary="Google Vision OCR + Ollama CV extraction in one pass",
     responses={
         400: {"model": ErrorResponse},
         503: {"model": ErrorResponse},
@@ -879,7 +935,7 @@ async def endpoint_upload_cv(
     warnings: list[str] = []
 
     try:
-        pipeline_result = process_cv(
+        processing_result = process_cv_document(
             file_bytes=file_bytes,
             content_type=ct,
             filename=file.filename or "",
@@ -887,19 +943,19 @@ async def endpoint_upload_cv(
         )
     except InvalidCVFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OCRPipelineError as exc:
-        logger.error("Upload CV OCR pipeline error: %s", exc)
+    except CVProcessingError as exc:
+        logger.error("Upload CV OCR processing error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("Upload CV pipeline failed")
+        logger.exception("Upload CV processing failed")
         raise HTTPException(status_code=500, detail=f"Failed to process CV: {exc}") from exc
 
     elapsed = time.perf_counter() - start
     if elapsed > 2.0:
         warnings.append(f"Processing took {elapsed:.1f}s (target < 2s).")
-    warnings.extend([str(item) for item in pipeline_result.get("warnings", []) if str(item).strip()])
-    return _build_upload_cv_response_from_pipeline(
-        result=pipeline_result,
+    warnings.extend([str(item) for item in processing_result.get("warnings", []) if str(item).strip()])
+    return _build_upload_cv_response_from_processing(
+        result=processing_result,
         warnings=warnings,
     )
 
@@ -927,7 +983,7 @@ async def endpoint_parse_ocr_blocks(
         page_results = _build_page_results_from_blocks(payload.blocks)
         parsed = parse_structured_cv_from_ocr(page_results)
     except RuntimeError as exc:
-        logger.error("Parse OCR blocks pipeline error: %s", exc)
+        logger.error("Parse OCR blocks processing error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Parse OCR blocks failed")
@@ -955,7 +1011,7 @@ async def endpoint_parse_ocr_blocks(
     "/ocr/upload",
     response_model=OCRUploadResponse,
     tags=["ocr"],
-    summary="PP-OCRv5: detect and return text-region bounding boxes",
+    summary="Google Vision OCR: detect and return text-region bounding boxes",
     responses={
         400: {"model": ErrorResponse},
         503: {"model": ErrorResponse},
@@ -981,7 +1037,7 @@ async def endpoint_ocr_upload(
 
     try:
         from models import OCRBlockModel, OCRPageModel
-        page_results = _run_ocr_pipeline(
+        page_results = _run_ocr_processing(
             file_bytes=file_bytes,
             content_type=ct,
             filename=file.filename or "",
@@ -991,8 +1047,8 @@ async def endpoint_ocr_upload(
 
     except InvalidCVFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except OCRPipelineError as exc:
-        logger.error("OCR pipeline error: %s", exc)
+    except CVProcessingError as exc:
+        logger.error("OCR processing error: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("OCR inference failed")

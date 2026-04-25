@@ -1,288 +1,473 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { getAllJobs } from "@/lib/jobs";
-import { rankJobsWithGemini } from "@/lib/gemini";
+import { getLatestPublicJobSummaries } from "@/lib/public-job-summaries";
 import type { Job } from "@/types/job";
 import { recommendJobs, preFilterForGemini } from "@/lib/recommend";
+import {
+  buildCandidateRecommendationText,
+  buildCandidateRecommendationTextForUser,
+} from "@/lib/recommend/candidate-text";
 
 export const dynamic = "force-dynamic";
 
-/* ── helpers to extract text from profile document ── */
-interface ProfileSection {
-  type: string;
-  isHidden?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  content: any;
+type FitLevel = "High" | "Medium" | "Low";
+
+interface RecommendationEntry {
+  jobId: string;
+  matchScore: number;
+  fitLevel: FitLevel;
+  reasons: string[];
+  matchedSkills: string[];
+  missingSkills: string[];
 }
-interface ProfileDocument {
-  sections?: ProfileSection[];
+
+interface RecommendationItem extends RecommendationEntry {
+  job: Job;
 }
 
-function extractCandidateTextFromDocument(doc: ProfileDocument): string {
-  const parts: string[] = [];
-  const sections = doc?.sections ?? [];
+interface RecommendationResponse {
+  candidateSummary: string;
+  suggestedRoles: string[];
+  suggestedCompanies: string[];
+  items: RecommendationItem[];
+  source?: "cache" | "ai" | "rule-fallback" | "recent-fallback" | "guest-fallback" | "no-jobs";
+  cachedAt?: string;
+}
 
-  for (const sec of sections) {
-    if (sec.isHidden) continue;
-    const c = sec.content;
-    if (!c) continue;
+const TOP_K = 6;
+const GET_TOP_K = 5;
+const AUTH_GET_CACHE_TTL_MS = 30_000;
+const AUTH_GET_CACHE_MAX_ENTRIES = 80;
 
-    switch (sec.type) {
-      case "personal_info":
-        if (c.fullName) parts.push(`Tên: ${c.fullName}`);
-        if (c.address) parts.push(`Địa điểm: ${c.address}`);
-        break;
+type AuthGetCacheEntry = {
+  expiresAt: number;
+  promise: Promise<RecommendationResponse>;
+};
 
-      case "summary":
-      case "career_goal":
-        if (c.content) {
-          const label = sec.type === "summary" ? "Giới thiệu" : "Mục tiêu nghề nghiệp";
-          parts.push(`${label}: ${c.content}`);
-        }
-        break;
+const authGetCache = new Map<string, AuthGetCacheEntry>();
 
-      case "skills":
-        if (Array.isArray(c.skills) && c.skills.length > 0) {
-          const names = c.skills.map((s: { name?: string }) => s.name).filter(Boolean);
-          if (names.length) parts.push(`Kỹ năng: ${names.join(", ")}`);
-        }
-        break;
+function hasSupabaseAuthCookieHeader(request: Request) {
+  const cookieHeader = request.headers.get("cookie") || "";
+  return cookieHeader
+    .split(";")
+    .map((cookie) => cookie.trim().split("=")[0])
+    .some((name) => (
+      /^sb-.+-auth-token(?:\.\d+)?$/.test(name)
+      || name === "supabase-auth-token"
+      || /^supabase-auth-token\.\d+$/.test(name)
+    ));
+}
 
-      case "languages":
-        if (Array.isArray(c.languages) && c.languages.length > 0) {
-          const names = c.languages.map((l: { name?: string; level?: string }) =>
-            l.level ? `${l.name} (${l.level})` : l.name
-          );
-          parts.push(`Ngoại ngữ: ${names.join(", ")}`);
-        }
-        break;
-
-      case "experience":
-        if (Array.isArray(c.items) && c.items.length > 0) {
-          const expTexts = c.items.map(
-            (e: { title?: string; company?: string; description?: string[] }) => {
-              const line = [e.title, e.company].filter(Boolean).join(" tại ");
-              const desc = e.description?.slice(0, 2).join("; ") ?? "";
-              return desc ? `${line} – ${desc}` : line;
-            }
-          );
-          parts.push(`Kinh nghiệm:\n${expTexts.join("\n")}`);
-        }
-        break;
-
-      case "education":
-        if (Array.isArray(c.items) && c.items.length > 0) {
-          const eduTexts = c.items.map(
-            (e: { school?: string; major?: string; degree?: string }) =>
-              [e.degree, e.major, e.school].filter(Boolean).join(" – ")
-          );
-          parts.push(`Học vấn: ${eduTexts.join("; ")}`);
-        }
-        break;
-
-      case "certifications":
-        if (Array.isArray(c.items) && c.items.length > 0) {
-          const names = c.items.map((i: { name?: string }) => i.name).filter(Boolean);
-          if (names.length) parts.push(`Chứng chỉ: ${names.join(", ")}`);
-        }
-        break;
-
-      case "projects":
-        if (Array.isArray(c.items) && c.items.length > 0) {
-          const projTexts = c.items.map(
-            (p: { name?: string; technologies?: string[] }) => {
-              const tech = p.technologies?.join(", ") ?? "";
-              return tech ? `${p.name} (${tech})` : p.name;
-            }
-          );
-          parts.push(`Dự án: ${projTexts.join("; ")}`);
-        }
-        break;
+function sweepAuthGetCache(now = Date.now()) {
+  for (const [key, entry] of authGetCache.entries()) {
+    if (entry.expiresAt <= now) {
+      authGetCache.delete(key);
     }
   }
 
-  return parts.join("\n");
+  while (authGetCache.size > AUTH_GET_CACHE_MAX_ENTRIES) {
+    const firstKey = authGetCache.keys().next().value;
+    if (!firstKey) {
+      break;
+    }
+    authGetCache.delete(firstKey);
+  }
 }
 
-/* ─── GET: return cached recommendations for the logged-in user ─── */
-export async function GET() {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ items: [], candidateSummary: "" });
-    }
+function deleteAuthGetCache(userId: string) {
+  authGetCache.delete(userId);
+}
 
-    const { data: cached } = await supabase
-      .from("job_recommendations")
-      .select("items, candidate_summary, suggested_roles, suggested_companies, updated_at")
-      .eq("user_id", user.id)
-      .single();
+async function getAllJobsForRecommendation(): Promise<Job[]> {
+  const { getAllJobs } = await import("@/lib/jobs");
+  return getAllJobs();
+}
 
-    if (!cached) {
-      return NextResponse.json({ items: [], candidateSummary: "", suggestedRoles: [], suggestedCompanies: [] });
-    }
+function normalizeStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [] as string[];
+  }
 
-    return NextResponse.json({
-      items: cached.items ?? [],
+  return value
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean);
+}
+
+function clampScore(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return Math.max(0, Math.min(100, Math.round(fallback)));
+  }
+
+  return Math.max(0, Math.min(100, Math.round(parsed)));
+}
+
+function resolveFitLevel(value: unknown, score: number): FitLevel {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "high") {
+    return "High";
+  }
+
+  if (normalized === "medium") {
+    return "Medium";
+  }
+
+  if (normalized === "low") {
+    return "Low";
+  }
+
+  if (score >= 80) {
+    return "High";
+  }
+
+  if (score >= 60) {
+    return "Medium";
+  }
+
+  return "Low";
+}
+
+function sortJobsByFreshness(jobs: Job[]) {
+  return [...jobs].sort((left, right) => {
+    const leftDate = +new Date(left.posted_date || "");
+    const rightDate = +new Date(right.posted_date || "");
+    return rightDate - leftDate;
+  });
+}
+
+function toRecommendationItems(
+  recommendations: RecommendationEntry[],
+  jobs: Job[],
+  topK: number,
+): RecommendationItem[] {
+  const jobMap = new Map(jobs.map((job) => [job.id, job]));
+
+  return recommendations
+    .map((recommendation) => {
+      const job = jobMap.get(recommendation.jobId);
+      if (!job) {
+        return null;
+      }
+
+      return {
+        ...recommendation,
+        job,
+      } satisfies RecommendationItem;
+    })
+    .filter((item): item is RecommendationItem => Boolean(item))
+    .sort((left, right) => right.matchScore - left.matchScore)
+    .slice(0, topK);
+}
+
+function buildRecentFallbackItems(jobs: Job[], topK: number): RecommendationItem[] {
+  return sortJobsByFreshness(jobs)
+    .slice(0, topK)
+    .map((job, index) => {
+      const score = Math.max(55, 80 - index * 5);
+      return {
+        jobId: job.id,
+        matchScore: score,
+        fitLevel: resolveFitLevel(null, score),
+        reasons: [
+          index === 0
+            ? "Việc làm mới nhất trên hệ thống"
+            : "Đang được quan tâm trong danh sách tuyển dụng",
+        ],
+        matchedSkills: [],
+        missingSkills: [],
+        job,
+      } satisfies RecommendationItem;
+    });
+}
+
+function buildRuleBasedFallback(
+  candidateText: string,
+  jobs: Job[],
+  topK: number,
+): RecommendationResponse {
+  const ruleResult = recommendJobs(candidateText, jobs, topK);
+
+  const recommendations: RecommendationEntry[] = ruleResult.recommendations.map((item) => {
+    const score = clampScore(item.matchScore);
+    return {
+      jobId: item.jobId,
+      matchScore: score,
+      fitLevel: resolveFitLevel(item.fitLevel, score),
+      reasons: normalizeStringList(item.reasons).slice(0, 2),
+      matchedSkills: normalizeStringList(item.matchedSkills).slice(0, 6),
+      missingSkills: normalizeStringList(item.missingSkills).slice(0, 4),
+    };
+  });
+
+  const items = toRecommendationItems(recommendations, jobs, topK);
+  const safeItems = items.length > 0 ? items : buildRecentFallbackItems(jobs, topK);
+  const suggestedRoles = ruleResult.profile.desired_roles.slice(0, 8);
+  const suggestedCompanies = [
+    ...new Set(safeItems.map((item) => item.job.company_name).filter(Boolean)),
+  ].slice(0, 8);
+
+  const skillPreview = ruleResult.profile.hard_skills.slice(0, 4).join(", ");
+  const rolePreview = suggestedRoles.slice(0, 3).join(", ");
+
+  let candidateSummary = "Gợi ý dựa trên hồ sơ hiện có và dữ liệu việc làm đang mở.";
+  if (rolePreview && skillPreview) {
+    candidateSummary = `Gợi ý theo vai trò ${rolePreview} và nhóm kỹ năng ${skillPreview}.`;
+  } else if (rolePreview) {
+    candidateSummary = `Gợi ý theo định hướng vai trò ${rolePreview}.`;
+  } else if (skillPreview) {
+    candidateSummary = `Gợi ý theo kỹ năng nổi bật: ${skillPreview}.`;
+  }
+
+  return {
+    candidateSummary,
+    suggestedRoles,
+    suggestedCompanies,
+    items: safeItems,
+    source: items.length > 0 ? "rule-fallback" : "recent-fallback",
+  };
+}
+
+function buildGuestFallback(jobs: Job[]): RecommendationResponse {
+  const items = buildRecentFallbackItems(jobs, GET_TOP_K);
+
+  return {
+    candidateSummary:
+      "Đăng nhập để cá nhân hóa gợi ý theo CV và kỹ năng. Dưới đây là các việc làm mới đáng chú ý.",
+    suggestedRoles: [],
+    suggestedCompanies: [
+      ...new Set(items.map((item) => item.job.company_name).filter(Boolean)),
+    ].slice(0, 8),
+    items,
+    source: "guest-fallback",
+  };
+}
+
+function buildEmptyResponse(source: RecommendationResponse["source"] = "no-jobs"): RecommendationResponse {
+  return {
+    candidateSummary: "",
+    suggestedRoles: [],
+    suggestedCompanies: [],
+    items: [],
+    source,
+  };
+}
+
+async function buildAuthenticatedGetResponse(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<RecommendationResponse> {
+  const { data: cached, error: cacheError } = await supabase
+    .from("job_recommendations")
+    .select("items, candidate_summary, suggested_roles, suggested_companies, updated_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!cacheError && Array.isArray(cached?.items) && cached.items.length > 0) {
+    return {
       candidateSummary: cached.candidate_summary ?? "",
       suggestedRoles: cached.suggested_roles ?? [],
       suggestedCompanies: cached.suggested_companies ?? [],
+      items: cached.items,
       cachedAt: cached.updated_at,
-    });
+      source: "cache",
+    } satisfies RecommendationResponse;
+  }
+
+  const allJobs = await getAllJobsForRecommendation();
+
+  if (allJobs.length === 0) {
+    return buildEmptyResponse("no-jobs");
+  }
+
+  const candidateText = await buildCandidateRecommendationTextForUser(supabase, userId);
+  const fallback = buildRuleBasedFallback(candidateText, allJobs, GET_TOP_K);
+
+  if (fallback.items.length > 0) {
+    await supabase.from("job_recommendations").upsert(
+      {
+        user_id: userId,
+        items: fallback.items,
+        candidate_summary: fallback.candidateSummary,
+        suggested_roles: fallback.suggestedRoles,
+        suggested_companies: fallback.suggestedCompanies,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
+  }
+
+  return fallback;
+}
+
+function getAuthenticatedGetResponse(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+) {
+  const now = Date.now();
+  const cached = authGetCache.get(userId);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise;
+  }
+
+  const promise = buildAuthenticatedGetResponse(supabase, userId).catch((error) => {
+    deleteAuthGetCache(userId);
+    throw error;
+  });
+
+  authGetCache.set(userId, {
+    expiresAt: now + AUTH_GET_CACHE_TTL_MS,
+    promise,
+  });
+  sweepAuthGetCache(now);
+
+  return promise;
+}
+
+/* GET: cached-first, but never dead-empty if jobs exist */
+export async function GET(request: Request) {
+  try {
+    if (!hasSupabaseAuthCookieHeader(request)) {
+      const allJobs = (await getLatestPublicJobSummaries(GET_TOP_K)) as Job[];
+      return NextResponse.json(
+        allJobs.length > 0 ? buildGuestFallback(allJobs) : buildEmptyResponse("no-jobs"),
+      );
+    }
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      const allJobs = (await getLatestPublicJobSummaries(GET_TOP_K)) as Job[];
+      return NextResponse.json(
+        allJobs.length > 0 ? buildGuestFallback(allJobs) : buildEmptyResponse("no-jobs"),
+      );
+    }
+
+    return NextResponse.json(await getAuthenticatedGetResponse(supabase, user.id));
   } catch (err: unknown) {
     console.error("recommend-jobs GET error:", err);
-    return NextResponse.json({ items: [], candidateSummary: "" });
+    return NextResponse.json(buildEmptyResponse("no-jobs"));
   }
 }
 
 export async function POST(request: Request) {
   try {
-    // ---------- 1. Resolve candidate text ----------
-    let candidateText = "";
-
-    // Check for explicit body text first (manual input from UI)
-    let bodyText = "";
+    let manualText = "";
     try {
-      const body = await request.json();
-      if (body.candidate_text) {
-        bodyText = body.candidate_text;
-      }
+      const body = (await request.json()) as { candidate_text?: unknown };
+      manualText = typeof body?.candidate_text === "string" ? body.candidate_text.trim() : "";
     } catch {
-      // empty body is fine
+      manualText = "";
     }
 
-    // If user provided custom text, prioritise it
-    if (bodyText) {
-      candidateText = bodyText;
-    } else {
-      // Otherwise try auth-based profile
-      const supabase = await createClient();
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
+    const authUser = hasSupabaseAuthCookieHeader(request)
+      ? (await (async () => {
+          const supabase = await createClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          return { supabase, user };
+        })())
+      : null;
 
-      if (authUser) {
-        // Pull profile document (JSONB)
-        const { data: profile } = await supabase
-          .from("candidate_profiles")
-          .select("document")
-          .eq("user_id", authUser.id)
-          .single();
+    const candidateText = authUser?.user
+      ? await buildCandidateRecommendationTextForUser(authUser.supabase, authUser.user.id, manualText)
+      : await buildCandidateRecommendationText(manualText);
+    const allJobs: Job[] = await getAllJobsForRecommendation();
 
-        if (profile?.document) {
-          candidateText = extractCandidateTextFromDocument(
-            profile.document as ProfileDocument
-          );
-        }
-
-        // Try to get latest CV text as extra context
-        const { data: cvRows } = await supabase
-          .from("cvs")
-          .select("content")
-          .eq("user_id", authUser.id)
-          .order("updated_at", { ascending: false })
-          .limit(1);
-
-        if (cvRows?.[0]?.content) {
-          const cvContent =
-            typeof cvRows[0].content === "string"
-              ? cvRows[0].content
-              : JSON.stringify(cvRows[0].content);
-          candidateText += `\nCV:\n${cvContent.slice(0, 3000)}`;
-        }
-      }
+    if (allJobs.length === 0) {
+      return NextResponse.json(buildEmptyResponse("no-jobs"));
     }
 
-    if (!candidateText) {
-      candidateText =
-        "Ứng viên đang tìm việc tại Việt Nam, quan tâm công nghệ, marketing và kinh doanh.";
-    }
-
-    // ---------- 2. Load all jobs ----------
-    const allJobs: Job[] = await getAllJobs();
-
-    // ---------- 3. Pre-filter + Ollama (with local pipeline fallback) ----------
-    const TOP_K = 6;
+    let source: RecommendationResponse["source"] = "ai";
     let candidateSummary = "";
     let suggestedRoles: string[] = [];
     let suggestedCompanies: string[] = [];
-    let recommendations: {
-      jobId: string;
-      jobTitle: string;
-      companyName: string;
-      matchScore: number;
-      fitLevel: "High" | "Medium" | "Low";
-      reasons: string[];
-      matchedSkills: string[];
-      missingSkills: string[];
-    }[];
+    let recommendations: RecommendationEntry[] = [];
 
     try {
-      // Pre-filter: send only relevant jobs to Ollama (saves tokens & avoids noise)
-      const { filteredJobs } = preFilterForGemini(candidateText, allJobs, 30);
-
+      const { filteredJobs } = preFilterForGemini(candidateText, allJobs, 40);
+      const { rankJobsWithGemini } = await import("@/lib/gemini");
       const aiResult = await rankJobsWithGemini({
         candidateText,
         jobs: filteredJobs.length > 0 ? filteredJobs : allJobs,
         topK: TOP_K,
       });
-      candidateSummary = aiResult.candidateSummary;
-      suggestedRoles = aiResult.suggestedRoles ?? [];
-      suggestedCompanies = aiResult.suggestedCompanies ?? [];
-      recommendations = aiResult.recommendations;
+
+      candidateSummary = String(aiResult.candidateSummary ?? "").trim();
+      suggestedRoles = normalizeStringList(aiResult.suggestedRoles).slice(0, 8);
+      suggestedCompanies = normalizeStringList(aiResult.suggestedCompanies).slice(0, 8);
+
+      recommendations = aiResult.recommendations.map((item) => {
+        const score = clampScore(item.matchScore);
+        return {
+          jobId: item.jobId,
+          matchScore: score,
+          fitLevel: resolveFitLevel(item.fitLevel, score),
+          reasons: normalizeStringList(item.reasons).slice(0, 2),
+          matchedSkills: normalizeStringList(item.matchedSkills).slice(0, 6),
+          missingSkills: normalizeStringList(item.missingSkills).slice(0, 4),
+        };
+      });
+
+      if (recommendations.length === 0) {
+        source = "rule-fallback";
+      }
     } catch (aiErr) {
-      console.warn("Ollama unavailable, using local recommendation pipeline:", aiErr instanceof Error ? aiErr.message : aiErr);
-      // Local pipeline fallback — uses hard filter + weighted scoring
-      const result = recommendJobs(candidateText, allJobs, TOP_K);
-      recommendations = result.recommendations.map((r) => ({
-        ...r,
-        jobTitle: "",
-        companyName: "",
-      }));
+      source = "rule-fallback";
+      console.warn(
+        "Ollama unavailable, using local recommendation pipeline:",
+        aiErr instanceof Error ? aiErr.message : aiErr,
+      );
     }
 
-    // ---------- 4. Map IDs back to full job objects ----------
-    const jobMap = new Map(allJobs.map((j) => [j.id, j]));
+    let items = toRecommendationItems(recommendations, allJobs, TOP_K);
 
-    const items = recommendations
-      .map((rec) => {
-        const job = jobMap.get(rec.jobId);
-        if (!job) return null;
-        return {
-          jobId: rec.jobId,
-          matchScore: rec.matchScore,
-          fitLevel: rec.fitLevel,
-          reasons: rec.reasons,
-          matchedSkills: rec.matchedSkills,
-          missingSkills: rec.missingSkills,
-          job,
-        };
-      })
-      .filter(Boolean);
+    if (items.length === 0) {
+      const fallback = buildRuleBasedFallback(candidateText, allJobs, TOP_K);
+      items = fallback.items;
+      source = fallback.source ?? "rule-fallback";
 
-    // ---------- 5. Persist to Supabase for the logged-in user ----------
-    try {
-      const supabase = await createClient();
-      const { data: { user: authUser2 } } = await supabase.auth.getUser();
-      if (authUser2 && items.length > 0) {
-        await supabase
-          .from("job_recommendations")
-          .upsert(
-            {
-              user_id: authUser2.id,
-              items,
-              candidate_summary: candidateSummary,
-              suggested_roles: suggestedRoles,
-              suggested_companies: suggestedCompanies,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id" }
-          );
+      if (!candidateSummary) {
+        candidateSummary = fallback.candidateSummary;
       }
-    } catch (saveErr) {
-      // Non-fatal — don't fail the response if caching fails
-      console.warn("Failed to cache recommendations:", saveErr);
+
+      if (suggestedRoles.length === 0) {
+        suggestedRoles = fallback.suggestedRoles;
+      }
+
+      if (suggestedCompanies.length === 0) {
+        suggestedCompanies = fallback.suggestedCompanies;
+      }
+    }
+
+    if (!candidateSummary) {
+      candidateSummary = "Gợi ý được làm mới tự động theo hồ sơ và nhu cầu tuyển dụng hiện có.";
+    }
+
+    if (suggestedCompanies.length === 0) {
+      suggestedCompanies = [
+        ...new Set(items.map((item) => item.job.company_name).filter(Boolean)),
+      ].slice(0, 8);
+    }
+
+    if (authUser?.user && items.length > 0) {
+      await authUser.supabase
+        .from("job_recommendations")
+        .upsert(
+          {
+            user_id: authUser.user.id,
+            items,
+            candidate_summary: candidateSummary,
+            suggested_roles: suggestedRoles,
+            suggested_companies: suggestedCompanies,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" },
+        );
+      deleteAuthGetCache(authUser.user.id);
     }
 
     return NextResponse.json({
@@ -290,12 +475,11 @@ export async function POST(request: Request) {
       suggestedRoles,
       suggestedCompanies,
       items,
-    });
+      source,
+    } satisfies RecommendationResponse);
   } catch (err: unknown) {
     console.error("recommend-jobs error:", err);
     const message = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ error: message, items: [] }, { status: 500 });
+    return NextResponse.json({ error: message, ...buildEmptyResponse("no-jobs") }, { status: 500 });
   }
 }
-
-// Old localFallbackMatch removed — replaced by src/lib/recommend/ pipeline

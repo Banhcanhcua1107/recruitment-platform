@@ -1,5 +1,9 @@
 "use server";
 
+import { existsSync } from "node:fs";
+import { fetchWithTimeout, UpstreamTimeoutError } from "@/lib/upstream-http";
+import { CV_WRITER_SYSTEM_PROMPT_VI, CV_WRITER_SYSTEM_PROMPT_EN } from "./ai-config";
+
 // ── Language detection ──────────────────────────────────────
 // Returns "vi" if the text contains Vietnamese diacritics, otherwise "en"
 function detectLanguage(text: string): "vi" | "en" {
@@ -27,6 +31,48 @@ function detectFormat(text: string): ContentFormat {
   if (lines.length >= 2 && text.length > 120) return "paragraph";
 
   return "short";
+}
+
+function normalizeForSimilarity(value: string) {
+  return value
+    .replace(/<[^>]*>/g, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\s\n\r]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function calculateDiceSimilarity(original: string, suggestion: string): number {
+  const a = normalizeForSimilarity(original);
+  const b = normalizeForSimilarity(suggestion);
+
+  if (!a || !b) {
+    return 0;
+  }
+
+  if (a === b) {
+    return 1;
+  }
+
+  const bigrams = (source: string): Set<string> => {
+    const set = new Set<string>();
+    for (let i = 0; i < source.length - 1; i++) {
+      set.add(source.slice(i, i + 2));
+    }
+    return set;
+  };
+
+  const sourceA = bigrams(a);
+  const sourceB = bigrams(b);
+  let overlap = 0;
+  sourceA.forEach((gram) => {
+    if (sourceB.has(gram)) {
+      overlap += 1;
+    }
+  });
+
+  return (2 * overlap) / (sourceA.size + sourceB.size);
 }
 
 // ── Extract actual output, stripping model reasoning ────────────────
@@ -106,30 +152,30 @@ function extractOutput(raw: string, lang: "vi" | "en"): string {
 // ── Similarity check ─────────────────────────────────────────
 // Simple word-overlap ratio to detect when model just copied the input
 function isTooSimilar(original: string, suggestion: string, threshold = 0.80): boolean {
-  const normalize = (s: string) =>
-    s.replace(/<[^>]*>/g, "").replace(/[\s\n\r]+/g, " ").trim().toLowerCase();
-
-  const a = normalize(original);
-  const b = normalize(suggestion);
-
-  if (!a || !b) return false;
-
-  // Character-level overlap (Sørensen–Dice on bigrams)
-  const bigrams = (s: string): Set<string> => {
-    const set = new Set<string>();
-    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
-    return set;
-  };
-  const ba = bigrams(a);
-  const bb = bigrams(b);
-  let overlap = 0;
-  ba.forEach(g => { if (bb.has(g)) overlap++; });
-  const dice = (2 * overlap) / (ba.size + bb.size);
-
-  return dice > threshold;
+  return calculateDiceSimilarity(original, suggestion) > threshold;
 }
 
-import { CV_WRITER_SYSTEM_PROMPT_VI, CV_WRITER_SYSTEM_PROMPT_EN } from "./ai-config";
+function resolvePositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return fallback;
+}
+
+function resolveNonNegativeInteger(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return fallback;
+}
+
+const OLLAMA_REQUEST_TIMEOUT_MS = resolvePositiveInteger(process.env.OLLAMA_REQUEST_TIMEOUT_MS, 60000);
+const OLLAMA_RETRY_MAX_RETRIES = resolveNonNegativeInteger(process.env.OLLAMA_RETRY_MAX_RETRIES, 1);
+const OLLAMA_RETRY_BASE_DELAY_MS = resolvePositiveInteger(process.env.OLLAMA_RETRY_BASE_DELAY_MS, 900);
+const OLLAMA_RETRY_MAX_DELAY_MS = resolvePositiveInteger(process.env.OLLAMA_RETRY_MAX_DELAY_MS, 1500);
+const IS_CONTAINER_RUNTIME = existsSync("/.dockerenv");
 
 // ── Build the system prompt ─────────────────────────────────
 function buildSystemPrompt(lang: "vi" | "en", format: ContentFormat): string {
@@ -147,10 +193,24 @@ function buildSystemPrompt(lang: "vi" | "en", format: ContentFormat): string {
       ? `- Write as a single flowing paragraph of 5-7 professional sentences demonstrating maximum capability.\n- No bullet points.`
       : `- Keep it concise and impactful.\n- Do NOT write a long paragraph.`;
 
+  const additionalRulesVi = `
+RANG BUOC BO SUNG (BAT BUOC):
+- Giữ nguyên ý nghĩa nghiệp vụ cốt lõi của nội dung gốc.
+- KHÔNG bịa thêm số liệu, thành tích, công nghệ hoặc vai trò không có trong dữ liệu gốc.
+- Phải diễn đạt lại khác rõ rệt, không sao chép nguyên văn dài dòng từ nội dung gốc.
+- Không thêm phần mở đầu/kết luận kiểu hội thoại.`;
+
+  const additionalRulesEn = `
+ADDITIONAL MANDATORY RULES:
+- Preserve the original business meaning.
+- DO NOT invent metrics, achievements, technologies, or responsibilities.
+- Rewrite with meaningfully different wording; avoid near-verbatim copying.
+- No conversational preface or trailing explanations.`;
+
   if (lang === "vi") {
-    return CV_WRITER_SYSTEM_PROMPT_VI.replace("{FORMAT_RULE}", formatRuleVi);
+    return `${CV_WRITER_SYSTEM_PROMPT_VI.replace("{FORMAT_RULE}", formatRuleVi)}\n${additionalRulesVi}`;
   }
-  return CV_WRITER_SYSTEM_PROMPT_EN.replace("{FORMAT_RULE}", formatRuleEn);
+  return `${CV_WRITER_SYSTEM_PROMPT_EN.replace("{FORMAT_RULE}", formatRuleEn)}\n${additionalRulesEn}`;
 }
 
 // ── Section-specific rewriting hints ────────────────────────
@@ -191,10 +251,202 @@ function buildUserPrompt(
     ? (SECTION_HINTS_VI[sectionType] || "Viết lại nội dung này chuyên nghiệp hơn.")
     : (SECTION_HINTS_EN[sectionType] || "Rewrite this content more professionally.");
 
+  const normalizedFieldName = fieldName.trim() || "content";
+
   if (lang === "vi") {
-    return `${hint}\n\nNội dung gốc (KHÔNG được sao chép):\n${currentContent.trim()}${context ? `\n\nBối cảnh: ${context}` : ""}\n\n${anchorVi}`;
+    return `${hint}
+
+Trường cần tối ưu: ${normalizedFieldName}
+Ràng buộc:
+- Không sao chép nguyên văn quá giống bản gốc.
+- Không bịa dữ kiện mới.
+- Nếu thiếu số liệu trong bản gốc, dùng diễn đạt định tính thay vì tự thêm số.
+
+Nội dung gốc (KHÔNG được sao chép):
+${currentContent.trim()}${context ? `\n\nBối cảnh: ${context}` : ""}
+
+${anchorVi}`;
   }
-  return `${hint}\n\nOriginal content (DO NOT copy):\n${currentContent.trim()}${context ? `\n\nContext: ${context}` : ""}\n\n${anchorEn}`;
+  return `${hint}
+
+Target field: ${normalizedFieldName}
+Constraints:
+- Do not copy near-verbatim from the original.
+- Do not invent new facts.
+- If there are no metrics in the input, keep impact qualitative instead of inventing numbers.
+
+Original content (DO NOT copy):
+${currentContent.trim()}${context ? `\n\nContext: ${context}` : ""}
+
+${anchorEn}`;
+}
+
+const DEBUG_PREVIEW_MAX_CHARS = 1200;
+const MODEL_OUTPUT_MIN_CHARS = 10;
+
+function truncateForDebug(value: string, maxChars = DEBUG_PREVIEW_MAX_CHARS) {
+  const text = value.trim();
+  if (text.length <= maxChars) {
+    return text;
+  }
+
+  return `${text.slice(0, maxChars)}...`;
+}
+
+interface OllamaCallResult {
+  output: string;
+  rawOutput: string;
+  model: string;
+  error: string | null;
+  failure: OllamaCallFailure | null;
+  endpoint: string;
+  attempts: number;
+  requestPreview: {
+    baseUrl: string;
+    model: string;
+    temperature: number;
+    prefill: string;
+    systemPromptPreview: string;
+    userPromptPreview: string;
+  };
+}
+
+type OllamaFailureType = "timeout" | "unreachable" | "network" | "http" | "empty_output" | "unknown";
+
+interface OllamaCallFailure {
+  type: OllamaFailureType;
+  recoverable: boolean;
+  userMessage: string;
+  technicalMessage: string;
+  endpoint: string;
+  statusCode?: number;
+}
+
+function normalizeBaseUrl(url: string) {
+  return url.replace(/\/+$/, "");
+}
+
+function isLocalhostOllamaUrl(url: string) {
+  return /^https?:\/\/(localhost|127(?:\.\d{1,3}){3})(:\d+)?\b/i.test(url);
+}
+
+function resolveLocalDockerHintMessage(endpoint: string) {
+  if (IS_CONTAINER_RUNTIME && isLocalhostOllamaUrl(endpoint)) {
+    return "Phát hiện app đang chạy trong container nhưng OLLAMA_BASE_URL đang trỏ localhost. Hãy đổi sang http://host.docker.internal:11434.";
+  }
+
+  return "Kiểm tra cấu hình URL giữa local và Docker (local: http://localhost:11434, Docker: http://host.docker.internal:11434).";
+}
+
+function summarizeUpstreamDetail(value: string, maxChars = 320) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxChars)}...`;
+}
+
+function waitFor(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function resolveRetryDelayMs(attempt: number) {
+  const stepped = OLLAMA_RETRY_BASE_DELAY_MS + (attempt - 1) * 250;
+  return Math.min(Math.max(stepped, 300), OLLAMA_RETRY_MAX_DELAY_MS);
+}
+
+function isRecoverableHttpStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function classifyOllamaHttpFailure(status: number, detail: string, endpoint: string): OllamaCallFailure {
+  const snippet = summarizeUpstreamDetail(detail);
+  const technicalMessage = snippet ? `HTTP ${status}: ${snippet}` : `HTTP ${status}`;
+  const recoverable = isRecoverableHttpStatus(status);
+
+  if (recoverable) {
+    return {
+      type: "http",
+      recoverable: true,
+      userMessage: `Ollama tạm thời không sẵn sàng (HTTP ${status}). Vui lòng thử lại.`,
+      technicalMessage,
+      statusCode: status,
+      endpoint,
+    };
+  }
+
+  return {
+    type: "http",
+    recoverable: false,
+    userMessage: `Ollama trả về lỗi HTTP ${status}. Vui lòng kiểm tra cấu hình hoặc nội dung yêu cầu.`,
+    technicalMessage,
+    statusCode: status,
+    endpoint,
+  };
+}
+
+function classifyOllamaThrownFailure(err: unknown, endpoint: string): OllamaCallFailure {
+  if (err instanceof UpstreamTimeoutError) {
+    return {
+      type: "timeout",
+      recoverable: true,
+      userMessage: "Ollama phản hồi quá chậm. Vui lòng thử lại.",
+      technicalMessage: err.message,
+      endpoint,
+    };
+  }
+
+  const technicalMessage = err instanceof Error ? err.message : String(err);
+  const normalized = technicalMessage.toLowerCase();
+
+  if (/(econnrefused|enotfound|eai_again|getaddrinfo|connection refused|dns|invalid url|failed to parse url|no route to host)/i.test(normalized)) {
+    return {
+      type: "unreachable",
+      recoverable: true,
+      userMessage: `Không kết nối được tới Ollama. ${resolveLocalDockerHintMessage(endpoint)}`,
+      technicalMessage,
+      endpoint,
+    };
+  }
+
+  if (/(fetch failed|network|socket hang up|connection reset|etimedout|timed out|temporarily unavailable|upstream unavailable)/i.test(normalized)) {
+    return {
+      type: "network",
+      recoverable: true,
+      userMessage: "Kết nối tới Ollama bị gián đoạn. Vui lòng thử lại.",
+      technicalMessage,
+      endpoint,
+    };
+  }
+
+  return {
+    type: "unknown",
+    recoverable: false,
+    userMessage: "Không thể nhận phản hồi từ Ollama. Vui lòng thử lại sau.",
+    technicalMessage,
+    endpoint,
+  };
+}
+
+function createEmptyOutputFailure(endpoint: string): OllamaCallFailure {
+  return {
+    type: "empty_output",
+    recoverable: false,
+    userMessage: "AI không trả về nội dung hợp lệ.",
+    technicalMessage: "Ollama returned empty message.content.",
+    endpoint,
+  };
+}
+
+function shouldRetryFailure(failure: OllamaCallFailure, attempt: number, maxAttempts: number) {
+  return failure.recoverable && attempt < maxAttempts;
 }
 
 // ── Ollama caller ────────────────────────────────────────────
@@ -203,9 +455,20 @@ async function callOllama(
   userPrompt: string,
   prefill = "",
   temperature = 0.2
-): Promise<string> {
-  const baseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+): Promise<OllamaCallResult> {
+  const baseUrl = normalizeBaseUrl(process.env.OLLAMA_BASE_URL ?? "http://localhost:11434");
   const model   = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+  const endpoint = `${baseUrl}/api/chat`;
+  const maxAttempts = OLLAMA_RETRY_MAX_RETRIES + 1;
+
+  const requestPreview = {
+    baseUrl,
+    model,
+    temperature,
+    prefill,
+    systemPromptPreview: truncateForDebug(systemPrompt, 500),
+    userPromptPreview: truncateForDebug(userPrompt, 700),
+  };
 
   const messages: { role: string; content: string }[] = [
     { role: "system", content: systemPrompt },
@@ -215,42 +478,212 @@ async function callOllama(
   // Ollama returns only the continuation — we must prepend the seed back ourselves.
   if (prefill) messages.push({ role: "assistant", content: prefill });
 
-  try {
-    const res = await fetch(`${baseUrl}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        stream: false,
-        options: { 
-          temperature: 0.2, // Quan trọng: Giảm sáng tạo thừa
-          num_predict: 500,  // Giới hạn độ dài để không viết quá dài
-          top_p: 0.5,
-          // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
-          stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"] 
-        },
-        messages,
-      }),
+  if (IS_CONTAINER_RUNTIME && isLocalhostOllamaUrl(baseUrl)) {
+    console.warn("[Ollama] OLLAMA_BASE_URL is localhost inside container runtime", {
+      baseUrl,
+      hint: "Use http://host.docker.internal:11434 for Docker setup.",
     });
-
-    if (!res.ok) {
-      console.error(`[Ollama] HTTP ${res.status}:`, await res.text());
-      return "";
-    }
-
-    const body = await res.json();
-    const content = (body?.message?.content ?? "").trim();
-    // Prepend the prefill seed back (Ollama strips it from the response)
-    return prefill ? prefill + content : content;
-  } catch (err) {
-    console.error("[Ollama] call failed:", err);
-    return "";
   }
+
+  let lastFailure: OllamaCallFailure | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const { response } = await fetchWithTimeout(
+        endpoint,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Connection: "keep-alive",
+          },
+          body: JSON.stringify({
+            model,
+            stream: false,
+            options: {
+              temperature,
+              num_predict: 500, // Giới hạn độ dài để không viết quá dài
+              top_p: 0.8,
+              // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
+              stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"],
+            },
+            messages,
+          }),
+        },
+        {
+          timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
+          timeoutMessage: `Ollama request timed out after ${OLLAMA_REQUEST_TIMEOUT_MS}ms.`,
+        },
+      );
+
+      if (!response.ok) {
+        const detail = await response.text();
+        const failure = classifyOllamaHttpFailure(response.status, detail, endpoint);
+        lastFailure = failure;
+
+        if (shouldRetryFailure(failure, attempt, maxAttempts)) {
+          const delayMs = resolveRetryDelayMs(attempt);
+          console.warn("[Ollama] recoverable HTTP failure, scheduling retry", {
+            endpoint,
+            model,
+            attempt,
+            maxAttempts,
+            statusCode: response.status,
+            delayMs,
+          });
+          await waitFor(delayMs);
+          continue;
+        }
+
+        const logger = failure.recoverable ? console.warn : console.error;
+        logger("[Ollama] HTTP failure", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+          statusCode: response.status,
+          error: failure.technicalMessage,
+        });
+
+        return {
+          output: "",
+          rawOutput: "",
+          model,
+          error: failure.technicalMessage,
+          failure,
+          endpoint,
+          attempts: attempt,
+          requestPreview,
+        };
+      }
+
+      const body = await response.json();
+      const content = (body?.message?.content ?? "").trim();
+      const fullOutput = prefill ? prefill + content : content;
+
+      if (!fullOutput.trim()) {
+        const failure = createEmptyOutputFailure(endpoint);
+        console.warn("[Ollama] empty output", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+        });
+
+        return {
+          output: "",
+          rawOutput: "",
+          model,
+          error: failure.technicalMessage,
+          failure,
+          endpoint,
+          attempts: attempt,
+          requestPreview,
+        };
+      }
+
+      if (attempt > 1) {
+        console.info("[Ollama] recovered after retry", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+        });
+      }
+
+      return {
+        output: fullOutput,
+        rawOutput: fullOutput,
+        model,
+        error: null,
+        failure: null,
+        endpoint,
+        attempts: attempt,
+        requestPreview,
+      };
+    } catch (err) {
+      const failure = classifyOllamaThrownFailure(err, endpoint);
+      lastFailure = failure;
+
+      if (shouldRetryFailure(failure, attempt, maxAttempts)) {
+        const delayMs = resolveRetryDelayMs(attempt);
+        console.warn("[Ollama] recoverable call failure, scheduling retry", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+          type: failure.type,
+          error: failure.technicalMessage,
+          delayMs,
+        });
+        await waitFor(delayMs);
+        continue;
+      }
+
+      const logger = failure.recoverable ? console.warn : console.error;
+      logger("[Ollama] call failed", {
+        endpoint,
+        model,
+        attempt,
+        maxAttempts,
+        type: failure.type,
+        error: failure.technicalMessage,
+      });
+
+      return {
+        output: "",
+        rawOutput: "",
+        model,
+        error: failure.technicalMessage,
+        failure,
+        endpoint,
+        attempts: attempt,
+        requestPreview,
+      };
+    }
+  }
+
+  const fallbackFailure: OllamaCallFailure = lastFailure ?? {
+    type: "unknown",
+    recoverable: false,
+    userMessage: "Không thể nhận phản hồi từ Ollama. Vui lòng thử lại sau.",
+    technicalMessage: "Unknown Ollama failure.",
+    endpoint,
+  };
+
+  return {
+    output: "",
+    rawOutput: "",
+    model,
+    error: fallbackFailure.technicalMessage,
+    failure: fallbackFailure,
+    endpoint,
+    attempts: maxAttempts,
+    requestPreview,
+  };
 }
 
 // ════════════════════════════════════════════════════════════
 // Public Server Action – CV content optimization
 // ════════════════════════════════════════════════════════════
+
+export interface OptimizeDebugInfo {
+  traceId: string;
+  model: string;
+  language: "vi" | "en";
+  format: ContentFormat;
+  similarityScore: number;
+  retriedBecauseSimilar: boolean;
+  usedRetryResult: boolean;
+  firstAttemptRawPreview: string;
+  finalAttemptRawPreview: string;
+  systemPromptPreview: string;
+  userPromptPreview: string;
+  failureReason?: string;
+  ollamaErrorType?: OllamaFailureType;
+  ollamaEndpoint?: string;
+  ollamaAttempts?: number;
+}
 
 export interface OptimizeResult {
   success: boolean;
@@ -259,6 +692,7 @@ export interface OptimizeResult {
   suggestions?: string;   // additional info that could strengthen the content
   error?: string;
   provider?: string;
+  debug?: OptimizeDebugInfo;
 }
 
 export async function optimizeCVContent(
@@ -271,51 +705,179 @@ export async function optimizeCVContent(
     return { success: false, error: "Nội dung trống. Hãy nhập nội dung trước khi tối ưu." };
   }
 
-  const lang   = detectLanguage(currentContent);
-  const format  = detectFormat(currentContent);
+  const traceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const includeDebug = process.env.NODE_ENV !== "production" || process.env.AI_INCLUDE_DEBUG === "1";
+
+  const lang = detectLanguage(currentContent);
+  const format = detectFormat(currentContent);
   const systemPrompt = buildSystemPrompt(lang, format);
-  const userPrompt   = buildUserPrompt(sectionType, fieldName, currentContent, lang, format, context);
+  const userPrompt = buildUserPrompt(sectionType, fieldName, currentContent, lang, format, context);
   // Prefill forces the model past reasoning and into output immediately
   const prefill = format === "list" ? "- " : "";
 
   // First attempt with normal temperature
-  let raw = await callOllama(systemPrompt, userPrompt, prefill, 0.7);
-  if (!raw) {
+  const firstAttempt = await callOllama(systemPrompt, userPrompt, prefill, 0.7);
+
+  if (includeDebug) {
+    console.info(`[AI optimize][${traceId}] first attempt`, {
+      model: firstAttempt.model,
+      request: firstAttempt.requestPreview,
+      attempts: firstAttempt.attempts,
+      failureType: firstAttempt.failure?.type,
+      error: firstAttempt.error,
+      rawOutputPreview: truncateForDebug(firstAttempt.rawOutput),
+    });
+  }
+
+  if (!firstAttempt.output) {
+    const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+    const failure = firstAttempt.failure;
+    const baseError = firstAttempt.error || "Ollama không phản hồi.";
+    const userMessage = failure?.userMessage || "Ollama không phản hồi. Vui lòng thử lại.";
+
     return {
       success: false,
-      error: "Ollama không phản hồi. Đảm bảo Ollama đang chạy và model '" +
-        (process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b") +
-        "' đã được pull.",
+      error: userMessage,
+      provider: `ollama/${model}`,
+      debug: includeDebug
+        ? {
+            traceId,
+            model,
+            language: lang,
+            format,
+            similarityScore: 0,
+            retriedBecauseSimilar: false,
+            usedRetryResult: false,
+            firstAttemptRawPreview: "",
+            finalAttemptRawPreview: "",
+            systemPromptPreview: truncateForDebug(systemPrompt, 500),
+            userPromptPreview: truncateForDebug(userPrompt, 700),
+            failureReason: failure?.technicalMessage || baseError,
+            ollamaErrorType: failure?.type,
+            ollamaEndpoint: firstAttempt.endpoint,
+            ollamaAttempts: firstAttempt.attempts,
+          }
+        : undefined,
     };
   }
 
   // Extract the actual output, stripping any model reasoning preamble
-  let output = extractOutput(raw, lang);
+  let finalRaw = firstAttempt.rawOutput;
+  let output = extractOutput(finalRaw, lang);
+  let similarityScore = calculateDiceSimilarity(currentContent, output);
 
-  // If output is too similar to input, retry once with higher temperature
-  if (output.length > 10 && isTooSimilar(currentContent, output)) {
-    console.log("[AI] Suggestion too similar to original, retrying with higher temperature...");
-    raw = await callOllama(systemPrompt, userPrompt, prefill, 0.9);
-    if (raw) {
-      const retryOutput = extractOutput(raw, lang);
-      if (retryOutput.length > 10) {
+  let retriedBecauseSimilar = false;
+  let usedRetryResult = false;
+
+  // If output is too similar to input, retry once with stronger anti-copy constraints
+  if (output.length > MODEL_OUTPUT_MIN_CHARS && isTooSimilar(currentContent, output, 0.74)) {
+    retriedBecauseSimilar = true;
+
+    const antiCopyAddon = lang === "vi"
+      ? "Yêu cầu bổ sung: Phải viết lại khác rõ rệt bản gốc. Không sao chép cụm từ dài từ nội dung gốc."
+      : "Additional requirement: Rewrite with clearly different wording. Avoid long phrase overlap from the source.";
+
+    const retryPrompt = `${userPrompt}\n\n${antiCopyAddon}`;
+    const retryAttempt = await callOllama(systemPrompt, retryPrompt, prefill, 0.95);
+
+    if (includeDebug) {
+      console.info(`[AI optimize][${traceId}] retry attempt`, {
+        model: retryAttempt.model,
+        request: retryAttempt.requestPreview,
+        error: retryAttempt.error,
+        rawOutputPreview: truncateForDebug(retryAttempt.rawOutput),
+      });
+    }
+
+    if (retryAttempt.output) {
+      const retryOutput = extractOutput(retryAttempt.output, lang);
+      const retrySimilarity = calculateDiceSimilarity(currentContent, retryOutput);
+
+      if (retryOutput.length > MODEL_OUTPUT_MIN_CHARS && retrySimilarity < similarityScore) {
         output = retryOutput;
+        similarityScore = retrySimilarity;
+        finalRaw = retryAttempt.rawOutput;
+        usedRetryResult = true;
       }
     }
   }
 
-  if (output.length > 10) {
-    const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+  const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? firstAttempt.model ?? "qwen3:4b";
+  const provider = `ollama/${model}`;
+  const looksCopied = isTooSimilar(currentContent, output, 0.90);
+
+  if (output.length > MODEL_OUTPUT_MIN_CHARS && !looksCopied) {
+    if (includeDebug) {
+      console.info(`[AI optimize][${traceId}] success`, {
+        provider,
+        similarityScore,
+        retriedBecauseSimilar,
+        usedRetryResult,
+        outputPreview: truncateForDebug(output),
+      });
+    }
+
     return {
       success: true,
       suggestion: output,
-      provider: `ollama/${model}`,
+      provider,
+      debug: includeDebug
+        ? {
+            traceId,
+            model,
+            language: lang,
+            format,
+            similarityScore,
+            retriedBecauseSimilar,
+            usedRetryResult,
+            firstAttemptRawPreview: truncateForDebug(firstAttempt.rawOutput),
+            finalAttemptRawPreview: truncateForDebug(finalRaw),
+            systemPromptPreview: truncateForDebug(systemPrompt, 500),
+            userPromptPreview: truncateForDebug(userPrompt, 700),
+            ollamaEndpoint: firstAttempt.endpoint,
+            ollamaAttempts: firstAttempt.attempts,
+          }
+        : undefined,
     };
+  }
+
+  const failureReason = looksCopied
+    ? "Kết quả AI quá giống nội dung gốc nên bị từ chối."
+    : "Không thể trích xuất nội dung hợp lệ từ phản hồi AI.";
+
+  if (includeDebug) {
+    console.warn(`[AI optimize][${traceId}] failure`, {
+      provider,
+      similarityScore,
+      retriedBecauseSimilar,
+      usedRetryResult,
+      outputPreview: truncateForDebug(output),
+      failureReason,
+    });
   }
 
   return {
     success: false,
-    error: "Không thể tối ưu nội dung. Vui lòng thử lại.",
+    error: `AI suggestion không khả dụng: ${failureReason}`,
+    provider,
+    debug: includeDebug
+      ? {
+          traceId,
+          model,
+          language: lang,
+          format,
+          similarityScore,
+          retriedBecauseSimilar,
+          usedRetryResult,
+          firstAttemptRawPreview: truncateForDebug(firstAttempt.rawOutput),
+          finalAttemptRawPreview: truncateForDebug(finalRaw),
+          systemPromptPreview: truncateForDebug(systemPrompt, 500),
+          userPromptPreview: truncateForDebug(userPrompt, 700),
+          failureReason,
+          ollamaEndpoint: firstAttempt.endpoint,
+          ollamaAttempts: firstAttempt.attempts,
+        }
+      : undefined,
   };
 }
 
@@ -358,11 +920,16 @@ Return pure JSON (no markdown), format:
     ? `CV:\n"""\n${cvText.slice(0, 2000)}\n"""${locationLine}\nGợi ý 5 công ty phù hợp nhất, trả về JSON:`
     : `CV:\n"""\n${cvText.slice(0, 2000)}\n"""${locationLine}\nSuggest 5 best-matching companies, return JSON:`;
 
-  const raw = await callOllama(systemPrompt, userPrompt);
+  const ollamaResult = await callOllama(systemPrompt, userPrompt);
+  const raw = ollamaResult.output.trim();
+
   if (!raw) {
     return {
       success: false,
-      error: "Ollama không phản hồi. Kiểm tra 'ollama serve' và 'ollama pull qwen3:4b'.",
+      error:
+        ollamaResult.failure?.userMessage
+        || ollamaResult.error
+        || "Ollama không phản hồi. Kiểm tra 'ollama serve' và 'ollama pull qwen3:4b'.",
     };
   }
 

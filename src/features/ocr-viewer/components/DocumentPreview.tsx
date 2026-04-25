@@ -87,6 +87,12 @@ export function DocumentPreview({
     boxRefs.current.delete(blockId);
   };
 
+  const pdfFileUrl =
+    previewSource?.kind === "pdf" && typeof previewSource.url === "string"
+      ? previewSource.url.trim()
+      : "";
+  const hasPdfFile = pdfFileUrl.length > 0;
+
   if (!previewSource || previewSource.kind === "none") {
     return (
       <div
@@ -98,9 +104,20 @@ export function DocumentPreview({
     );
   }
 
+  if (previewSource.kind === "pdf" && !hasPdfFile) {
+    return (
+      <div
+        ref={targetRef}
+        className="flex h-full min-h-0 items-center justify-center rounded-[24px] border border-dashed border-slate-300 bg-white/80 px-6 text-center text-[13px] text-slate-500"
+      >
+        PDF preview is unavailable because the file is missing.
+      </div>
+    );
+  }
+
   return (
     <div ref={targetRef} className="flex h-full min-h-0 flex-col">
-      {previewSource.kind === "pdf" && previewSource.url ? (
+      {previewSource.kind === "pdf" && hasPdfFile ? (
         <PdfDocumentPreview
           pages={pages}
           previewSource={previewSource}

@@ -1,5 +1,8 @@
 "use client";
 import React from "react";
+import Image from "next/image";
+import type { ReactNode } from "react";
+import { Building2, ChevronDown, Mail, MapPin, Phone, Send } from "lucide-react";
 
 export default function ContactPage() {
   return (
@@ -7,14 +10,14 @@ export default function ContactPage() {
       
       {/* 1. HERO SECTION - Giống hệt hình mẫu */}
       <section className="w-full py-10 lg:py-14 px-6">
-        <div className="max-w-[1360px] mx-auto">
-          <div 
-            className="flex min-h-[450px] flex-col gap-6 bg-cover bg-center bg-no-repeat rounded-[32px] items-center justify-center p-8 lg:p-16 relative overflow-hidden shadow-2xl"
-            style={{
-              backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0.7) 100%), url("https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2069")`
-            }}
-          >
-            <div className="relative z-10 flex flex-col gap-5 text-center max-w-[800px]">
+        <div className="max-w-340 mx-auto">
+          <div className="relative flex min-h-112.5 flex-col items-center justify-center gap-6 overflow-hidden rounded-4xl p-8 shadow-2xl lg:p-16">
+            <div
+              aria-hidden="true"
+              className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=2069')] bg-cover bg-center bg-no-repeat"
+            />
+            <div aria-hidden="true" className="absolute inset-0 bg-linear-to-b from-black/50 to-black/70" />
+            <div className="relative z-10 flex max-w-200 flex-col gap-5 text-center">
               <h1 className="text-white text-4xl md:text-6xl font-black leading-tight tracking-tight">
                 Liên hệ & Hỗ trợ
               </h1>
@@ -32,7 +35,7 @@ export default function ContactPage() {
       </section>
 
       {/* 2. THÔNG TIN LIÊN HỆ - 3 Cột giống hệt hình */}
-      <section className="max-w-[1360px] mx-auto px-6 py-10">
+      <section className="max-w-340 mx-auto px-6 py-10">
         <div className="flex flex-col gap-3 mb-12">
           <h2 className="text-slate-900 text-4xl font-black tracking-tight">Thông tin liên hệ</h2>
           <p className="text-slate-500 text-lg font-bold">Kết nối trực tiếp qua các kênh chính thức của TalentFlow.</p>
@@ -41,21 +44,21 @@ export default function ContactPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Card Email */}
           <ContactInfoCard 
-            icon="mail" 
+            icon={<Mail className="size-8" aria-hidden="true" />} 
             title="Email Hỗ trợ" 
             detail="support@talentflow.vn" 
             sub="Phản hồi trong vòng 24h" 
           />
           {/* Card Hotline */}
           <ContactInfoCard 
-            icon="call" 
+            icon={<Phone className="size-8" aria-hidden="true" />} 
             title="Hotline" 
             detail="1900 1234" 
             sub="Thứ 2 - Thứ 6 (8:00 - 17:30)" 
           />
           {/* Card Địa chỉ */}
           <ContactInfoCard 
-            icon="location_on" 
+            icon={<MapPin className="size-8" aria-hidden="true" />} 
             title="Văn phòng" 
             detail="Tầng 12, Tòa nhà Innovation" 
             sub="Quận 1, TP. Hồ Chí Minh" 
@@ -64,7 +67,7 @@ export default function ContactPage() {
       </section>
 
       {/* 3. FORM & MAP SECTION - Giống hệt bố cục hình mẫu */}
-      <section className="max-w-[1360px] mx-auto px-6 py-16 pb-28">
+      <section className="max-w-340 mx-auto px-6 py-16 pb-28">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
           
           {/* Cột trái: Form gửi tin nhắn */}
@@ -74,7 +77,7 @@ export default function ContactPage() {
               <p className="text-slate-500 text-lg font-bold">Vui lòng điền thông tin bên dưới, chúng tôi sẽ liên hệ lại sớm nhất.</p>
             </div>
             
-            <form className="bg-white p-8 lg:p-12 rounded-[32px] border border-slate-100 shadow-xl space-y-6">
+            <form className="bg-white p-8 lg:p-12 rounded-4xl border border-slate-100 shadow-xl space-y-6">
               <div className="space-y-2">
                 <label htmlFor="name" className="text-base font-black text-slate-900">Họ và tên</label>
                 <input 
@@ -104,7 +107,7 @@ export default function ContactPage() {
                     <option value="hr">Tôi là Nhà tuyển dụng</option>
                     <option value="tech">Hỗ trợ kỹ thuật</option>
                   </select>
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                  <ChevronDown className="pointer-events-none absolute right-4 top-1/2 size-5 -translate-y-1/2 text-slate-400" aria-hidden="true" />
                 </div>
               </div>
 
@@ -120,7 +123,7 @@ export default function ContactPage() {
 
               <button className="w-full h-16 bg-primary hover:bg-primary-hover text-white font-black text-xl rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-3 active:scale-95">
                 <span>Gửi tin nhắn</span>
-                <span className="material-symbols-outlined font-bold text-2xl">send</span>
+                <Send className="size-6" aria-hidden="true" />
               </button>
             </form>
           </div>
@@ -132,17 +135,19 @@ export default function ContactPage() {
               <p className="text-slate-500 text-lg font-bold">Ghé thăm chúng tôi tại trung tâm Quận 1.</p>
             </div>
             
-            <div className="flex-1 min-h-[500px] rounded-[32px] overflow-hidden relative border border-slate-200 shadow-lg group">
-              <img 
-                src="https://placehold.co/600x800?text=MAP+VIEW" 
-                alt="Office Map" 
-                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+            <div className="relative flex-1 min-h-125 overflow-hidden rounded-4xl border border-slate-200 shadow-lg group">
+              <Image
+                src="https://placehold.co/600x800?text=MAP+VIEW"
+                alt="Office Map"
+                fill
+                sizes="(max-width: 1024px) 100vw, 50vw"
+                className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
               />
               {/* HQ Overlay giống hệt hình */}
-              <div className="absolute bottom-8 left-8 bg-white p-6 rounded-2xl shadow-2xl max-w-[280px] border border-slate-50">
+              <div className="absolute bottom-8 left-8 max-w-70 rounded-2xl border border-slate-50 bg-white p-6 shadow-2xl">
                 <div className="flex items-start gap-4">
                   <div className="text-primary mt-1">
-                    <span className="material-symbols-outlined text-3xl font-bold">business</span>
+                    <Building2 className="size-8" aria-hidden="true" />
                   </div>
                   <div>
                     <p className="font-black text-slate-900 text-base">TalentFlow HQ</p>
@@ -164,11 +169,21 @@ export default function ContactPage() {
 
 // --- SUB-COMPONENT ---
 
-function ContactInfoCard({ icon, title, detail, sub }: any) {
+function ContactInfoCard({
+  icon,
+  title,
+  detail,
+  sub,
+}: {
+  icon: ReactNode;
+  title: string;
+  detail: string;
+  sub: string;
+}) {
   return (
     <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm hover:shadow-xl transition-all duration-300 group">
       <div className="size-14 rounded-2xl bg-primary/5 flex items-center justify-center text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-all">
-        <span className="material-symbols-outlined text-3xl font-bold">{icon}</span>
+        {icon}
       </div>
       <h3 className="text-slate-900 text-xl font-black mb-1">{title}</h3>
       <p className="text-primary font-bold text-lg mb-2 truncate">{detail}</p>

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import type {
   AnyApplicationStatus,
@@ -14,6 +14,7 @@ import type {
   RecruitmentCompanyProfile,
   RecruitmentDashboardStats,
   RecruitmentJob,
+  RecruitmentJobPortfolioSummary,
   RecruitmentPipelineMetric,
   RecruitmentPipelineStatus,
   RecruitmentTrendPoint,
@@ -66,6 +67,13 @@ const JOB_OPTIONAL_COLUMN_MARKERS = [
   'column "description" does not exist',
   "column jobs.is_public_visible does not exist",
   'column "is_public_visible" does not exist',
+  "column jobs.target_applications does not exist",
+  'column "target_applications" does not exist',
+];
+
+const JOB_TARGET_APPLICATIONS_COLUMN_MARKERS = [
+  "column jobs.target_applications does not exist",
+  'column "target_applications" does not exist',
 ];
 
 const JOB_BRANDING_COLUMN_MARKERS = [
@@ -177,6 +185,25 @@ function normalizeStringList(value: unknown): string[] {
   }
 
   return [];
+}
+
+function normalizePositiveInteger(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const normalized = Math.trunc(value);
+    return normalized > 0 ? normalized : null;
+  }
+
+  if (typeof value === "string") {
+    const numeric = Number(value.trim());
+    if (!Number.isFinite(numeric)) {
+      return null;
+    }
+
+    const normalized = Math.trunc(numeric);
+    return normalized > 0 ? normalized : null;
+  }
+
+  return null;
 }
 
 function serializeDescriptionForCurrentSchema(value: string) {
@@ -348,18 +375,41 @@ async function getEmployerJobRecords(
   return scopedQuery.data ?? [];
 }
 
-async function getEmployerJobIds(supabase: SupabaseClient, employerId: string) {
-  const rows = await getEmployerJobRecords(supabase, employerId);
-  return rows.map((row) => row.id);
-}
-
 const getCurrentEmployerJobRecords = cache(async function getCurrentEmployerJobRecords() {
   const { supabase, employer } = await getRecruitmentContext();
   return getEmployerJobRecords(supabase, employer.id);
 });
 
+async function getEmployerJobStatusRows(
+  supabase: SupabaseClient,
+  employerId: string
+) {
+  let { data, error } = await supabase
+    .from("jobs")
+    .select("id, status")
+    .eq("employer_id", employerId);
+
+  if (
+    error &&
+    isSchemaError(error, [...JOB_EMPLOYER_COLUMN_MARKERS, ...JOB_OPTIONAL_COLUMN_MARKERS])
+  ) {
+    const fallback = await supabase.from("jobs").select("id");
+    data = (fallback.data ?? []).map((row) => ({ ...row, status: "open" }));
+    error = fallback.error;
+  }
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    status: String((row as { status?: string | null }).status ?? "open"),
+  }));
+}
+
 export async function getDashboardStats(): Promise<RecruitmentDashboardStats> {
-  const { supabase, employer } = await getRecruitmentContext();
+  const { supabase } = await getRecruitmentContext();
   const jobRows = await getCurrentEmployerJobRecords();
   const jobIds = jobRows.map((row) => row.id);
   const totalJobs = jobRows.length;
@@ -405,8 +455,54 @@ export async function getDashboardStats(): Promise<RecruitmentDashboardStats> {
   };
 }
 
-export async function getApplicationsTrend(): Promise<RecruitmentTrendPoint[]> {
+export async function getJobPortfolioSummary(): Promise<RecruitmentJobPortfolioSummary> {
   const { supabase, employer } = await getRecruitmentContext();
+  const jobs = await getEmployerJobStatusRows(supabase, employer.id);
+  const summary: RecruitmentJobPortfolioSummary = {
+    totalJobs: jobs.length,
+    openJobs: 0,
+    draftJobs: 0,
+    closedJobs: 0,
+    totalApplicants: 0,
+  };
+
+  for (const job of jobs) {
+    if (job.status === "draft") {
+      summary.draftJobs += 1;
+      continue;
+    }
+
+    if (job.status === "closed") {
+      summary.closedJobs += 1;
+      continue;
+    }
+
+    summary.openJobs += 1;
+  }
+
+  if (jobs.length === 0) {
+    return summary;
+  }
+
+  const { data: applications, error: applicationsError } = await supabase
+    .from("applications")
+    .select("job_id")
+    .in(
+      "job_id",
+      jobs.map((job) => job.id)
+    );
+
+  if (applicationsError) {
+    throw new Error(applicationsError.message);
+  }
+
+  summary.totalApplicants = (applications ?? []).length;
+
+  return summary;
+}
+
+export async function getApplicationsTrend(): Promise<RecruitmentTrendPoint[]> {
+  const { supabase } = await getRecruitmentContext();
   const jobIds = (await getCurrentEmployerJobRecords()).map((row) => row.id);
   const today = startOfDay(new Date());
   const points: RecruitmentTrendPoint[] = [];
@@ -455,7 +551,7 @@ export async function getApplicationsTrend(): Promise<RecruitmentTrendPoint[]> {
 }
 
 export async function getPipelineMetrics(): Promise<RecruitmentPipelineMetric[]> {
-  const { supabase, employer } = await getRecruitmentContext();
+  const { supabase } = await getRecruitmentContext();
   const jobIds = (await getCurrentEmployerJobRecords()).map((row) => row.id);
 
   const base: RecruitmentPipelineMetric[] = (
@@ -616,7 +712,7 @@ export async function getJobs(
   let query = supabase
     .from("jobs")
     .select(
-      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, created_at, is_public_visible",
+      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, created_at, is_public_visible, target_applications",
       { count: "exact" }
     );
 
@@ -714,6 +810,7 @@ export async function getJobs(
       postedAt: row.posted_date,
       createdAt: row.created_at,
       candidateCount: candidateCountMap.get(String(row.id)) ?? 0,
+      targetApplications: normalizePositiveInteger((row as { target_applications?: unknown }).target_applications),
       isPublicVisible: row.is_public_visible ?? true,
     })),
     total: count ?? 0,
@@ -728,7 +825,7 @@ export async function getJobById(id: string) {
   let { data, error } = await supabase
     .from("jobs")
     .select(
-      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, employer_id, is_public_visible"
+      "id, title, company_name, logo_url, cover_url, location, status, description, benefits, industry, experience_level, level, employment_type, deadline, education_level, age_range, full_address, source_url, salary, requirements, posted_date, employer_id, is_public_visible, target_applications"
     )
     .eq("id", id)
     .eq("employer_id", employer.id)
@@ -784,6 +881,7 @@ export async function getJobById(id: string) {
     postedAt: data.posted_date ?? null,
     createdAt: null,
     candidateCount: 0,
+    targetApplications: normalizePositiveInteger((data as { target_applications?: unknown }).target_applications),
     isPublicVisible: (data as { is_public_visible?: boolean | null }).is_public_visible ?? true,
   };
 }
@@ -1041,10 +1139,18 @@ export async function createJob(input: JobUpsertInput) {
     full_address: input.fullAddress || companyProfile.location || input.location,
     source_url: input.sourceUrl ?? null,
     salary: input.salary ?? null,
+    target_applications: normalizePositiveInteger(input.targetApplications),
     posted_date: new Date().toISOString().slice(0, 10),
   };
 
-  const { data, error } = await supabase.from("jobs").insert(payload).select("id").single();
+  let { data, error } = await supabase.from("jobs").insert(payload).select("id").single();
+
+  if (error && isSchemaError(error, JOB_TARGET_APPLICATIONS_COLUMN_MARKERS)) {
+    const { target_applications: _removed, ...legacyPayload } = payload;
+    const fallbackResult = await supabase.from("jobs").insert(legacyPayload).select("id").single();
+    data = fallbackResult.data;
+    error = fallbackResult.error;
+  }
 
   if (error) {
     throw new Error(error.message);
@@ -1062,34 +1168,47 @@ export async function createJob(input: JobUpsertInput) {
 export async function updateJob(id: string, input: JobUpsertInput) {
   const { supabase, employer } = await getRecruitmentContext();
   const companyProfile = await getCompanyProfile();
-  const { error } = await supabase
+  const updatePayload = {
+    title: input.title,
+    location: input.location,
+    status: input.status,
+    is_public_visible: true,
+    description: serializeDescriptionForCurrentSchema(input.description),
+    company_name: companyProfile.companyName.trim() || COMPANY_NAME_PLACEHOLDER,
+    logo_url: input.logoUrl || companyProfile.logoUrl,
+    cover_url: input.coverUrl || companyProfile.coverUrl,
+    requirements: normalizeStringList(input.requirements ?? []),
+    benefits: normalizeStringList(input.benefits ?? []),
+    industry: normalizeStringList(
+      input.industry && input.industry.length > 0 ? input.industry : companyProfile.industry
+    ),
+    experience_level: input.experienceLevel ?? null,
+    level: input.level ?? null,
+    employment_type: input.employmentType ?? null,
+    deadline: input.deadline ?? null,
+    education_level: input.educationLevel ?? null,
+    age_range: input.ageRange ?? null,
+    full_address: input.fullAddress || companyProfile.location || input.location,
+    source_url: input.sourceUrl ?? null,
+    salary: input.salary ?? null,
+    target_applications: normalizePositiveInteger(input.targetApplications),
+  };
+
+  let { error } = await supabase
     .from("jobs")
-    .update({
-      title: input.title,
-      location: input.location,
-      status: input.status,
-      is_public_visible: true,
-      description: serializeDescriptionForCurrentSchema(input.description),
-      company_name: companyProfile.companyName.trim() || COMPANY_NAME_PLACEHOLDER,
-      logo_url: input.logoUrl || companyProfile.logoUrl,
-      cover_url: input.coverUrl || companyProfile.coverUrl,
-      requirements: normalizeStringList(input.requirements ?? []),
-      benefits: normalizeStringList(input.benefits ?? []),
-      industry: normalizeStringList(
-        input.industry && input.industry.length > 0 ? input.industry : companyProfile.industry
-      ),
-      experience_level: input.experienceLevel ?? null,
-      level: input.level ?? null,
-      employment_type: input.employmentType ?? null,
-      deadline: input.deadline ?? null,
-      education_level: input.educationLevel ?? null,
-      age_range: input.ageRange ?? null,
-      full_address: input.fullAddress || companyProfile.location || input.location,
-      source_url: input.sourceUrl ?? null,
-      salary: input.salary ?? null,
-    })
+    .update(updatePayload)
     .eq("id", id)
     .eq("employer_id", employer.id);
+
+  if (error && isSchemaError(error, JOB_TARGET_APPLICATIONS_COLUMN_MARKERS)) {
+    const { target_applications: _removed, ...legacyPayload } = updatePayload;
+    const fallbackResult = await supabase
+      .from("jobs")
+      .update(legacyPayload)
+      .eq("id", id)
+      .eq("employer_id", employer.id);
+    error = fallbackResult.error;
+  }
 
   if (error) {
     throw new Error(error.message);

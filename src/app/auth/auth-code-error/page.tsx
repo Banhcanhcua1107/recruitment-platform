@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
+import { CircleAlert } from 'lucide-react'
 
 function AuthErrorContent() {
   const searchParams = useSearchParams()
@@ -14,14 +15,14 @@ function AuthErrorContent() {
     <div className="flex min-h-screen items-center justify-center bg-white p-4 font-['Manrope']">
       <div className="max-w-md w-full text-center space-y-6">
          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="material-symbols-outlined text-4xl text-red-500">error</span>
+          <CircleAlert className="size-10 text-red-500" aria-hidden="true" />
          </div>
          
          <h1 className="text-3xl font-black text-slate-900">Đăng nhập thất bại</h1>
          
          <div className="bg-slate-50 p-6 rounded-2xl border-2 border-slate-100 text-left">
             <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2">Chi tiết lỗi:</p>
-            <p className="font-mono text-red-600 break-words text-sm">
+            <p className="font-mono text-red-600 wrap-break-word text-sm">
               {errorDescription || error || "Đã xảy ra lỗi không xác định."}
             </p>
             {errorCode && <p className="text-xs text-slate-400 mt-2 font-mono">Code: {errorCode}</p>}

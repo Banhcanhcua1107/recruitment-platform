@@ -2,6 +2,7 @@
 import { memo } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { ArrowRight, MapPin, Users } from "lucide-react";
 
 interface CompanyCardProps {
   slug: string;
@@ -61,11 +62,11 @@ function CompanyCard({
 
         <div className="flex flex-wrap justify-center gap-4 mb-6 text-slate-400 font-bold text-xs uppercase tracking-wider">
           <span className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-primary text-base">location_on</span>
+            <MapPin className="size-4 text-primary" aria-hidden="true" />
             {location}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-primary text-base">group</span>
+            <Users className="size-4 text-primary" aria-hidden="true" />
             {size}
           </span>
         </div>
@@ -75,7 +76,7 @@ function CompanyCard({
       <div className="w-full pt-5 border-t border-slate-100 mt-auto relative z-10">
         <span className="flex items-center justify-center gap-2 w-full py-3.5 bg-slate-50 group-hover:bg-primary text-primary group-hover:text-white font-black rounded-2xl text-sm transition-all">
           {jobCount} việc làm đang tuyển
-          <span className="material-symbols-outlined text-lg">arrow_forward</span>
+          <ArrowRight className="size-4.5" aria-hidden="true" />
         </span>
       </div>
     </Link>

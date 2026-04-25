@@ -1,12 +1,13 @@
 "use client";
 
+import type { ComponentType } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Page } from "react-pdf";
 import { cn } from "@/lib/utils";
 import type { NormalizedOcrPage, PreviewScaleMode } from "@/features/ocr-viewer/types";
 import { OcrOverlay } from "@/features/ocr-viewer/components/OcrOverlay";
 
 interface PdfPagePreviewProps {
+  PageComponent: ComponentType<Record<string, unknown>>;
   page: NormalizedOcrPage;
   overlayVisible: boolean;
   scaleMode: PreviewScaleMode;
@@ -20,6 +21,8 @@ interface PdfPagePreviewProps {
   onBoxClick: (blockId: string) => void;
   registerBoxRef?: (blockId: string, element: HTMLButtonElement | null) => void;
 }
+
+const PAGE_RENDER_WARNING_MS = 12_000;
 
 function resolveScale({
   mode,
@@ -48,6 +51,7 @@ function resolveScale({
 }
 
 export function PdfPagePreview({
+  PageComponent,
   page,
   overlayVisible,
   scaleMode,
@@ -63,8 +67,10 @@ export function PdfPagePreview({
 }: PdfPagePreviewProps) {
   const [pdfOriginalWidth, setPdfOriginalWidth] = useState(page.originalWidth);
   const [pdfOriginalHeight, setPdfOriginalHeight] = useState(page.originalHeight);
+  const [isRenderSlow, setIsRenderSlow] = useState(false);
   const [canvasDisplaySize, setCanvasDisplaySize] = useState({ width: 0, height: 0 });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const renderWatchdogRef = useRef<number | null>(null);
   const effectiveOriginalWidth = Math.max(1, pdfOriginalWidth || page.originalWidth || 1);
   const effectiveOriginalHeight = Math.max(1, pdfOriginalHeight || page.originalHeight || 1);
   const contentWidth = Math.max(340, frameWidth - 8);
@@ -83,6 +89,23 @@ export function PdfPagePreview({
 
       return { width: nextWidth, height: nextHeight };
     });
+  }, []);
+
+  const resetRenderWatchdog = useCallback(() => {
+    if (renderWatchdogRef.current != null) {
+      window.clearTimeout(renderWatchdogRef.current);
+      renderWatchdogRef.current = null;
+    }
+    renderWatchdogRef.current = window.setTimeout(() => {
+      setIsRenderSlow(true);
+    }, PAGE_RENDER_WARNING_MS);
+  }, []);
+
+  const clearRenderWatchdog = useCallback(() => {
+    if (renderWatchdogRef.current != null) {
+      window.clearTimeout(renderWatchdogRef.current);
+      renderWatchdogRef.current = null;
+    }
   }, []);
 
   const scale = useMemo(
@@ -115,6 +138,14 @@ export function PdfPagePreview({
     };
   }, [page.pageIndex, renderedWidth, updateCanvasDisplaySize]);
 
+  useEffect(() => {
+    resetRenderWatchdog();
+
+    return () => {
+      clearRenderWatchdog();
+    };
+  }, [clearRenderWatchdog, page.pageIndex, resetRenderWatchdog]);
+
   return (
     <section
       className={cn(
@@ -136,23 +167,37 @@ export function PdfPagePreview({
       <div className={cn("min-h-0 flex-1 bg-slate-100/70 p-1", singlePage ? "overflow-auto" : "overflow-x-auto")}>
         <div className={cn("flex min-h-full justify-center", singlePage ? "items-start pt-1" : "items-center")}>
           <div className="relative shrink-0">
-            <Page
+            <PageComponent
               pageNumber={page.pageIndex + 1}
               width={renderedWidth}
-              canvasRef={(element) => {
+              canvasRef={(element: HTMLCanvasElement | null) => {
                 canvasRef.current = element;
               }}
               renderAnnotationLayer={false}
               renderTextLayer={false}
               loading={
-                <div className="flex min-h-[260px] w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
-                  Rendering page {page.pageIndex + 1}...
+                <div className="flex min-h-65 w-[320px] items-center justify-center rounded-[18px] bg-white text-sm text-slate-500">
+                  {isRenderSlow
+                    ? `Rendering is taking longer than expected for page ${page.pageIndex + 1}...`
+                    : `Rendering page ${page.pageIndex + 1}...`}
                 </div>
               }
-              onRenderSuccess={(pdfPage) => {
-                setPdfOriginalWidth(pdfPage.originalWidth || page.originalWidth);
-                setPdfOriginalHeight(pdfPage.originalHeight || page.originalHeight);
+              onRenderSuccess={(pdfPage: { originalHeight?: number; originalWidth?: number }) => {
+                setIsRenderSlow(false);
+                clearRenderWatchdog();
+                setPdfOriginalWidth((current) => {
+                  const nextWidth = pdfPage.originalWidth || page.originalWidth;
+                  return Math.abs(current - nextWidth) < 0.5 ? current : nextWidth;
+                });
+                setPdfOriginalHeight((current) => {
+                  const nextHeight = pdfPage.originalHeight || page.originalHeight;
+                  return Math.abs(current - nextHeight) < 0.5 ? current : nextHeight;
+                });
                 updateCanvasDisplaySize();
+              }}
+              onRenderError={() => {
+                clearRenderWatchdog();
+                setIsRenderSlow(true);
               }}
             />
 

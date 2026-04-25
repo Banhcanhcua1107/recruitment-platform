@@ -33,6 +33,15 @@ interface EditableCVEditorState {
       lockState?: EditableCVDetailResponse["pages"][number]["blocks"][number]["lock_state"];
     }
   ) => void;
+  mergeServerBlockAssetUpdate: (
+    blockId: string,
+    assetArtifactId: string | null,
+    assetImageUrl: string | null,
+    options?: {
+      version?: number;
+      lockState?: EditableCVDetailResponse["pages"][number]["blocks"][number]["lock_state"];
+    }
+  ) => void;
   applyUpdatedJSON: (updatedJson: EditableCVDetailResponse["updated_json"]) => void;
   pushHistory: () => void;
   undo: () => void;
@@ -147,6 +156,20 @@ export const useEditableCVEditorStore = create<EditableCVEditorState>((set) => (
           ...block,
           edited_text: text,
           locked,
+          version: options?.version ?? block.version,
+          lock_state: options?.lockState ?? block.lock_state,
+        })),
+      };
+    }),
+
+  mergeServerBlockAssetUpdate: (blockId, assetArtifactId, assetImageUrl, options) =>
+    set((state) => {
+      if (!state.detail) return state;
+      return {
+        detail: updateDetailBlock(state.detail, blockId, (block) => ({
+          ...block,
+          asset_artifact_id: assetArtifactId,
+          asset_image_url: assetImageUrl,
           version: options?.version ?? block.version,
           lock_state: options?.lockState ?? block.lock_state,
         })),

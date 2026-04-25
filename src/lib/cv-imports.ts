@@ -15,7 +15,9 @@ import type {
   CVDocumentPageView,
   NormalizedParsedCV,
 } from "@/types/cv-import";
+import { normalizeParsedJsonRecord } from "@/features/cv-import/normalize-parsed-json";
 import { logger, measureAsync } from "@/lib/observability";
+import { fetchWithTimeout } from "@/lib/upstream-http";
 
 const AI_SERVICE_URL =
   process.env.AI_SERVICE_URL ||
@@ -83,57 +85,31 @@ function isActiveHeartbeat(lastHeartbeatAt: string | null) {
 }
 
 export function normalizeParsedJSON(input: unknown): NormalizedParsedCV {
-  const source = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
-  const profile = (source.profile && typeof source.profile === "object"
-    ? source.profile
-    : {
-        full_name: source.full_name ?? null,
-        job_title: source.job_title ?? null,
-      }) as Record<string, unknown>;
+  return normalizeParsedJsonRecord(input);
+}
 
-  const contacts = (source.contacts && typeof source.contacts === "object"
-    ? source.contacts
-    : source.contact && typeof source.contact === "object"
-      ? source.contact
-      : {}) as Record<string, unknown>;
-
-  return {
-    profile,
-    contacts,
-    summary: typeof source.summary === "string" ? source.summary : "",
-    experience: Array.isArray(source.experience) ? (source.experience as Array<Record<string, unknown>>) : [],
-    education: Array.isArray(source.education) ? (source.education as Array<Record<string, unknown>>) : [],
-    skills: Array.isArray(source.skills) ? (source.skills as Array<Record<string, unknown> | string>) : [],
-    projects: Array.isArray(source.projects) ? (source.projects as Array<Record<string, unknown>>) : [],
-    certifications: Array.isArray(source.certifications)
-      ? (source.certifications as Array<Record<string, unknown>>)
-      : [],
-    languages: Array.isArray(source.languages) ? (source.languages as Array<Record<string, unknown> | string>) : [],
-    avatar:
-      source.avatar && typeof source.avatar === "object"
-        ? (source.avatar as Record<string, unknown>)
-        : {},
-    raw_ocr_blocks: Array.isArray(source.raw_ocr_blocks)
-      ? (source.raw_ocr_blocks as Array<Record<string, unknown>>)
-      : Array.isArray(source.blocks)
-        ? (source.blocks as Array<Record<string, unknown>>)
-        : [],
-    layout_blocks: Array.isArray(source.layout_blocks)
-      ? (source.layout_blocks as Array<Record<string, unknown>>)
-      : [],
-  };
+interface CreateCVImportOptions {
+  startProcessing?: boolean;
 }
 
 async function enqueueProcessing(documentId: string, jobId: string) {
-  const response = await fetch(`${AI_SERVICE_URL}/internal/jobs/cv-documents`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(AI_SERVICE_INTERNAL_TOKEN ? { Authorization: `Bearer ${AI_SERVICE_INTERNAL_TOKEN}` } : {}),
+  const timeoutMs = Number.parseInt(process.env.CV_IMPORT_ENQUEUE_TIMEOUT_MS || "10000", 10);
+  const { response } = await fetchWithTimeout(
+    `${AI_SERVICE_URL}/internal/jobs/cv-documents`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(AI_SERVICE_INTERNAL_TOKEN ? { Authorization: `Bearer ${AI_SERVICE_INTERNAL_TOKEN}` } : {}),
+      },
+      body: JSON.stringify({ document_id: documentId, job_id: jobId }),
+      cache: "no-store",
     },
-    body: JSON.stringify({ document_id: documentId, job_id: jobId }),
-    cache: "no-store",
-  });
+    {
+      timeoutMs,
+      timeoutMessage: `CV processing enqueue timed out after ${timeoutMs}ms.`,
+    },
+  );
 
   if (!response.ok) {
     const message = await response.text();
@@ -158,6 +134,76 @@ async function createSignedUrl(bucket: string, path: string | null) {
   return data.signedUrl;
 }
 
+function buildSignedUrlLookupKey(bucket: string, path: string) {
+  return `${bucket}::${path}`;
+}
+
+async function createSignedUrlLookup(
+  requests: Array<{ bucket: string; path: string }>,
+) {
+  const deduped = new Map<string, { bucket: string; path: string }>();
+
+  for (const request of requests) {
+    if (!request.bucket || !request.path) continue;
+    deduped.set(buildSignedUrlLookupKey(request.bucket, request.path), request);
+  }
+
+  if (!deduped.size) {
+    return new Map<string, string>();
+  }
+
+  const groupedPaths = new Map<string, string[]>();
+  for (const request of deduped.values()) {
+    const list = groupedPaths.get(request.bucket);
+    if (list) {
+      list.push(request.path);
+      continue;
+    }
+    groupedPaths.set(request.bucket, [request.path]);
+  }
+
+  const admin = createAdminClient();
+  const lookup = new Map<string, string>();
+
+  await Promise.all(
+    Array.from(groupedPaths.entries()).map(async ([bucket, paths]) => {
+      const { data, error } = await admin.storage
+        .from(bucket)
+        .createSignedUrls(paths, DEFAULT_SIGNED_URL_SECONDS);
+
+      if (error) {
+        logger.warn("cv-imports.signed-urls.batch-failed", {
+          bucket,
+          error: error.message,
+          count: paths.length,
+        });
+        return;
+      }
+
+      for (const entry of data ?? []) {
+        if (!entry.path || !entry.signedUrl || entry.error) continue;
+        lookup.set(buildSignedUrlLookupKey(bucket, entry.path), entry.signedUrl);
+      }
+    }),
+  );
+
+  return lookup;
+}
+
+async function resolveSignedUrlFromLookup(
+  lookup: Map<string, string>,
+  bucket: string,
+  path: string | null,
+) {
+  if (!bucket || !path) return null;
+
+  const lookupKey = buildSignedUrlLookupKey(bucket, path);
+  const existing = lookup.get(lookupKey);
+  if (existing) return existing;
+
+  return createSignedUrl(bucket, path);
+}
+
 async function getArtifactMapByIds(artifactIds: string[]) {
   if (artifactIds.length === 0) return new Map<string, CVArtifactRecord>();
   const admin = createAdminClient();
@@ -170,12 +216,17 @@ async function getArtifactMapByIds(artifactIds: string[]) {
   return new Map((data ?? []).map((artifact) => [artifact.id, artifact as CVArtifactRecord]));
 }
 
-export async function createCVImportFromUpload(userId: string, file: File): Promise<CVImportSummaryResponse> {
+export async function createCVImportFromUpload(
+  userId: string,
+  file: File,
+  options: CreateCVImportOptions = {},
+): Promise<CVImportSummaryResponse> {
   const admin = createAdminClient();
   const fileBuffer = Buffer.from(await file.arrayBuffer());
   const fileSha256 = computeSha256(fileBuffer);
   const documentId = randomUUID();
   const jobId = `cvdoc_${Date.now()}_${documentId.slice(0, 8)}`;
+  const startProcessing = options.startProcessing === true;
   const storagePath = buildOriginalStoragePath(userId, documentId, file.name);
   const sourceKind = detectSourceKind(file.type, file.name);
   const uploadedAt = nowIso();
@@ -231,12 +282,98 @@ export async function createCVImportFromUpload(userId: string, file: File): Prom
     throw new Error(insertArtifactError.message);
   }
 
+  if (startProcessing) {
+    const { error: queueUpdateError } = await admin
+      .from("cv_documents")
+      .update({
+        status: "queued",
+        queued_at: nowIso(),
+        job_id: jobId,
+        failure_stage: null,
+        failure_code: null,
+        review_required: false,
+        review_reason_code: null,
+      })
+      .eq("id", documentId)
+      .eq("user_id", userId);
+
+    if (queueUpdateError) {
+      throw new Error(queueUpdateError.message);
+    }
+
+    try {
+      await measureAsync("cv-imports.enqueue", { document_id: documentId, job_id: jobId }, () =>
+        enqueueProcessing(documentId, jobId)
+      );
+    } catch (error) {
+      await admin
+        .from("cv_documents")
+        .update({
+          status: "failed",
+          failure_stage: "queue" satisfies CVFailureStage,
+          failure_code: "enqueue_failed",
+        })
+        .eq("id", documentId)
+        .eq("user_id", userId);
+      throw error;
+    }
+  }
+
+  logger.info("cv-imports.created", {
+    document_id: documentId,
+    user_id: userId,
+    job_id: startProcessing ? jobId : null,
+    file_name: file.name,
+    file_size: file.size,
+    source_kind: sourceKind,
+    start_processing: startProcessing,
+  });
+
+  return {
+    document: {
+      id: documentId,
+      status: startProcessing ? "queued" : "uploaded",
+      document_type: "unknown",
+      file_name: file.name,
+      mime_type: file.type || "application/octet-stream",
+      file_size: file.size,
+      retry_count: 0,
+      job_id: startProcessing ? jobId : null,
+      review_required: false,
+    },
+    links: {
+      self: `/api/cv-imports/${documentId}`,
+      review: `/candidate/cv-builder/imports/${documentId}`,
+    },
+  };
+}
+
+export async function startCVDocumentProcessingForUser(
+  userId: string,
+  documentId: string,
+): Promise<CVImportSummaryResponse> {
+  const admin = createAdminClient();
+  const document = await getCVDocumentRecordForUser(userId, documentId);
+  if (!document) {
+    throw new Error("Document not found.");
+  }
+
+  if (ACTIVE_PROCESSING_STATUSES.has(document.status) && isActiveHeartbeat(document.last_heartbeat_at)) {
+    throw new Error("A processing job is still active for this document.");
+  }
+
+  const jobId = `cvdoc_${Date.now()}_${documentId.slice(0, 8)}`;
+  const retryCount = document.status === "uploaded" ? document.retry_count ?? 0 : (document.retry_count ?? 0) + 1;
+
   const { error: queueUpdateError } = await admin
     .from("cv_documents")
     .update({
       status: "queued",
       queued_at: nowIso(),
+      retry_count: retryCount,
       job_id: jobId,
+      processing_lock_token: null,
+      last_heartbeat_at: null,
       failure_stage: null,
       failure_code: null,
       review_required: false,
@@ -250,8 +387,8 @@ export async function createCVImportFromUpload(userId: string, file: File): Prom
   }
 
   try {
-    await measureAsync("cv-imports.enqueue", { document_id: documentId, job_id: jobId }, () =>
-      enqueueProcessing(documentId, jobId)
+    await measureAsync("cv-imports.start-analysis", { document_id: documentId, job_id: jobId }, () =>
+      enqueueProcessing(documentId, jobId),
     );
   } catch (error) {
     await admin
@@ -266,30 +403,29 @@ export async function createCVImportFromUpload(userId: string, file: File): Prom
     throw error;
   }
 
-  logger.info("cv-imports.created", {
+  logger.info("cv-imports.analysis-started", {
     document_id: documentId,
     user_id: userId,
     job_id: jobId,
-    file_name: file.name,
-    file_size: file.size,
-    source_kind: sourceKind,
+    retry_count: retryCount,
+    previous_status: document.status,
   });
 
   return {
     document: {
-      id: documentId,
+      id: document.id,
       status: "queued",
-      document_type: "unknown",
-      file_name: file.name,
-      mime_type: file.type || "application/octet-stream",
-      file_size: file.size,
-      retry_count: 0,
+      document_type: document.document_type,
+      file_name: document.file_name,
+      mime_type: document.mime_type,
+      file_size: document.file_size,
+      retry_count: retryCount,
       job_id: jobId,
       review_required: false,
     },
     links: {
-      self: `/api/cv-imports/${documentId}`,
-      review: `/candidate/cv-builder/imports/${documentId}`,
+      self: `/api/cv-imports/${document.id}`,
+      review: `/candidate/cv-builder/imports/${document.id}`,
     },
   };
 }
@@ -356,6 +492,40 @@ export async function getCVDocumentDetailForUser(
     pages.flatMap((page) => [page.background_artifact_id, page.thumbnail_artifact_id]).filter(Boolean) as string[]
   );
 
+  const signedUrlRequests: Array<{ bucket: string; path: string }> = [];
+  for (const page of pages) {
+    const backgroundArtifact = page.background_artifact_id
+      ? artifactById.get(page.background_artifact_id)
+      : null;
+    const thumbnailArtifact = page.thumbnail_artifact_id
+      ? artifactById.get(page.thumbnail_artifact_id)
+      : null;
+
+    if (backgroundArtifact?.storage_bucket && backgroundArtifact.storage_path) {
+      signedUrlRequests.push({
+        bucket: backgroundArtifact.storage_bucket,
+        path: backgroundArtifact.storage_path,
+      });
+    }
+
+    if (thumbnailArtifact?.storage_bucket && thumbnailArtifact.storage_path) {
+      signedUrlRequests.push({
+        bucket: thumbnailArtifact.storage_bucket,
+        path: thumbnailArtifact.storage_path,
+      });
+    }
+  }
+
+  for (const artifact of artifacts) {
+    if (!artifact.storage_bucket || !artifact.storage_path) continue;
+    signedUrlRequests.push({
+      bucket: artifact.storage_bucket,
+      path: artifact.storage_path,
+    });
+  }
+
+  const signedUrlLookup = await createSignedUrlLookup(signedUrlRequests);
+
   const pageViews: CVDocumentPageView[] = await Promise.all(
     pages.map(async (page) => {
       const backgroundArtifact = page.background_artifact_id
@@ -368,11 +538,13 @@ export async function getCVDocumentDetailForUser(
         page_number: page.page_number,
         canonical_width_px: page.canonical_width_px,
         canonical_height_px: page.canonical_height_px,
-        background_url: await createSignedUrl(
+        background_url: await resolveSignedUrlFromLookup(
+          signedUrlLookup,
           backgroundArtifact?.storage_bucket ?? "",
           backgroundArtifact?.storage_path ?? null
         ),
-        thumbnail_url: await createSignedUrl(
+        thumbnail_url: await resolveSignedUrlFromLookup(
+          signedUrlLookup,
           thumbnailArtifact?.storage_bucket ?? "",
           thumbnailArtifact?.storage_path ?? null
         ),
@@ -386,7 +558,11 @@ export async function getCVDocumentDetailForUser(
       kind: artifact.kind,
       page_number: artifact.page_number,
       status: artifact.status,
-      download_url: await createSignedUrl(artifact.storage_bucket, artifact.storage_path),
+      download_url: await resolveSignedUrlFromLookup(
+        signedUrlLookup,
+        artifact.storage_bucket,
+        artifact.storage_path,
+      ),
     }))
   );
 

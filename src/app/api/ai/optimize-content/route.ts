@@ -1,83 +1,169 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  buildServerTimingHeader,
+  fetchWithTimeout,
+  type ServerTimingMetric,
+  UpstreamTimeoutError,
+} from "@/lib/upstream-http";
 
 export const dynamic = "force-dynamic";
 
-/**
- * POST /api/ai/optimize-content
- * Body: { sectionType: string, fieldName: string, currentContent: string, context?: string }
- * Returns: { suggestion: string }
- *
- * Strategy: Try Gemini first → fallback to Groq (Llama) if quota exceeded.
- */
+const GEMINI_TIMEOUT_MS = Number.parseInt(process.env.GEMINI_TIMEOUT_MS || "12000", 10);
+const GROQ_TIMEOUT_MS = Number.parseInt(process.env.GROQ_TIMEOUT_MS || "15000", 10);
+const GEMINI_RETRY_DELAY_MS = Number.parseInt(process.env.GEMINI_RETRY_DELAY_MS || "1500", 10);
+const MAX_GEMINI_RETRIES = 1;
 
-// ── Groq fallback ───────────────────────────────────────────
-async function callGroq(prompt: string): Promise<string> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return "";
+type ProviderResult = {
+  text: string;
+  metrics: ServerTimingMetric[];
+};
 
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.4,
-      max_tokens: 2048,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    console.error("Groq API error:", res.status, err);
-    return "";
+function jsonWithTimings(
+  body: Record<string, unknown>,
+  init: { status?: number } = {},
+  metrics: ServerTimingMetric[] = [],
+) {
+  const headers = new Headers();
+  const serverTiming = buildServerTimingHeader(metrics);
+  if (serverTiming) {
+    headers.set("Server-Timing", serverTiming);
   }
 
-  const body = await res.json();
-  return body?.choices?.[0]?.message?.content?.trim() ?? "";
+  return NextResponse.json(body, {
+    ...init,
+    headers,
+  });
 }
 
-// ── Gemini call ─────────────────────────────────────────────
-async function callGemini(prompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return "";
+async function callGroq(prompt: string): Promise<ProviderResult> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return { text: "", metrics: [] };
+  }
 
-  const models = (process.env.GEMINI_MODEL || "gemini-2.0-flash,gemini-2.0-flash-lite").split(",");
-  const MAX_RETRIES = 1;
+  try {
+    const { response, durationMs } = await fetchWithTimeout(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          Connection: "keep-alive",
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.4,
+          max_tokens: 2048,
+        }),
+      },
+      {
+        timeoutMs: GROQ_TIMEOUT_MS,
+        timeoutMessage: `Groq request timed out after ${GROQ_TIMEOUT_MS}ms.`,
+      },
+    );
+
+    const metrics = [{ name: "groq", dur: durationMs, desc: "Groq completion" }];
+    if (!response.ok) {
+      console.error("Groq API error:", response.status, await response.text());
+      return { text: "", metrics };
+    }
+
+    const body = await response.json();
+    return {
+      text: body?.choices?.[0]?.message?.content?.trim() ?? "",
+      metrics,
+    };
+  } catch (error) {
+    if (error instanceof UpstreamTimeoutError) {
+      return {
+        text: "",
+        metrics: [{ name: "groq", dur: GROQ_TIMEOUT_MS, desc: "Groq timeout" }],
+      };
+    }
+
+    console.error("Groq API error:", error);
+    return { text: "", metrics: [] };
+  }
+}
+
+async function callGemini(prompt: string): Promise<ProviderResult> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { text: "", metrics: [] };
+  }
+
+  const metrics: ServerTimingMetric[] = [];
+  const models = (process.env.GEMINI_MODEL || "gemini-2.0-flash,gemini-2.0-flash-lite")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 
   for (const model of models) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model.trim()}:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
-        }),
-      });
+    for (let attempt = 0; attempt <= MAX_GEMINI_RETRIES; attempt += 1) {
+      try {
+        const { response, durationMs } = await fetchWithTimeout(
+          url,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Connection: "keep-alive",
+            },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+            }),
+          },
+          {
+            timeoutMs: GEMINI_TIMEOUT_MS,
+            timeoutMessage: `Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms.`,
+          },
+        );
 
-      if (res.status === 429) {
-        console.warn(`Gemini 429 on ${model.trim()} (attempt ${attempt + 1})`);
-        if (attempt < MAX_RETRIES) {
-          await new Promise((r) => setTimeout(r, 3000));
-          continue;
+        metrics.push({
+          name: "gemini",
+          dur: durationMs,
+          desc: `${model} attempt ${attempt + 1}`,
+        });
+
+        if (response.status === 429) {
+          if (attempt < MAX_GEMINI_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, GEMINI_RETRY_DELAY_MS));
+            continue;
+          }
+          break;
         }
+
+        if (!response.ok) {
+          break;
+        }
+
+        const body = await response.json();
+        const text = body?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+        if (text) {
+          return { text, metrics };
+        }
+      } catch (error) {
+        if (error instanceof UpstreamTimeoutError) {
+          metrics.push({
+            name: "gemini",
+            dur: GEMINI_TIMEOUT_MS,
+            desc: `${model} timeout`,
+          });
+          break;
+        }
+
+        console.error("Gemini API error:", error);
         break;
       }
-
-      if (!res.ok) break;
-
-      const body = await res.json();
-      const text = body?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
-      if (text) return text;
     }
   }
 
-  return ""; // All Gemini models failed
+  return { text: "", metrics };
 }
 
 export async function POST(req: NextRequest) {
@@ -85,81 +171,82 @@ export async function POST(req: NextRequest) {
     const { sectionType, fieldName, currentContent, context } = await req.json();
 
     if (!currentContent || !currentContent.trim()) {
-      return NextResponse.json(
-        { error: "Nội dung trống. Hãy nhập nội dung trước khi tối ưu." },
-        { status: 400 }
+      return jsonWithTimings(
+        { error: "Noi dung trong. Hay nhap noi dung truoc khi toi uu." },
+        { status: 400 },
       );
     }
 
     const geminiKey = process.env.GEMINI_API_KEY;
     const groqKey = process.env.GROQ_API_KEY;
     if (!geminiKey && !groqKey) {
-      return NextResponse.json(
-        { error: "AI service is not configured." },
-        { status: 500 }
-      );
+      return jsonWithTimings({ error: "AI service is not configured." }, { status: 500 });
     }
 
     const SECTION_VN: Record<string, string> = {
-      header: "Thông tin cá nhân",
-      personal_info: "Liên hệ",
-      summary: "Giới thiệu bản thân / Tổng quan",
-      experience_list: "Kinh nghiệm làm việc",
-      education_list: "Học vấn",
-      skill_list: "Kỹ năng",
-      project_list: "Dự án",
-      award_list: "Giải thưởng",
-      certificate_list: "Chứng chỉ",
+      header: "Thong tin ca nhan",
+      personal_info: "Lien he",
+      summary: "Gioi thieu ban than / Tong quan",
+      experience_list: "Kinh nghiem lam viec",
+      education_list: "Hoc van",
+      skill_list: "Ky nang",
+      project_list: "Du an",
+      award_list: "Giai thuong",
+      certificate_list: "Chung chi",
     };
 
     const sectionLabel = SECTION_VN[sectionType] || sectionType;
 
-    const prompt = `Bạn là một chuyên gia viết CV với 10+ năm kinh nghiệm tuyển dụng.
+    const prompt = `Ban la mot chuyen gia viet CV voi 10+ nam kinh nghiem tuyen dung.
 
-Nhiệm vụ: Tối ưu nội dung CV cho phần "${sectionLabel}" (trường: ${fieldName}).
+Nhiem vu: Toi uu noi dung CV cho phan "${sectionLabel}" (truong: ${fieldName}).
 
-NỘI DUNG HIỆN TẠI:
+NOI DUNG HIEN TAI:
 """
 ${currentContent}
 """
 
-${context ? `THÔNG TIN BỔ SUNG:\n${context}\n` : ""}
+${context ? `THONG TIN BO SUNG:\n${context}\n` : ""}
 
-Yêu cầu:
-1. Giữ nguyên ý nghĩa gốc nhưng viết lại cho chuyên nghiệp, mạnh mẽ hơn
-2. Dùng động từ hành động mạnh (Xây dựng, Triển khai, Tối ưu, Dẫn dắt...)
-3. Thêm số liệu cụ thể nếu có thể (ví dụ: "tăng 30%", "phục vụ 10k users")
-4. Viết bằng tiếng Việt, trừ thuật ngữ kỹ thuật
-5. Giữ format phù hợp (dùng gạch đầu dòng "- " nếu nội dung gốc dùng bullet points)
-6. Không thêm thông tin sai, chỉ cải thiện cách diễn đạt
-7. Output CHỈ là nội dung đã tối ưu, KHÔNG giải thích hay thêm gì khác
+Yeu cau:
+1. Giu nguyen y nghia goc nhung viet lai cho chuyen nghiep, manh me hon
+2. Dung dong tu hanh dong manh
+3. Them so lieu cu the neu co the
+4. Viet bang tieng Viet, tru thuat ngu ky thuat
+5. Giu format phu hop
+6. Khong them thong tin sai, chi cai thien cach dien dat
+7. Output CHI la noi dung da toi uu, KHONG giai thich hay them gi khac
 
-NỘI DUNG TỐI ƯU:`;
+NOI DUNG TOI UU:`;
 
-    // Strategy: Gemini first → Groq fallback
-    let suggestion = await callGemini(prompt);
+    const timings: ServerTimingMetric[] = [];
+    const geminiResult = await callGemini(prompt);
+    timings.push(...geminiResult.metrics);
+
+    let suggestion = geminiResult.text;
     let provider = "gemini";
 
     if (!suggestion) {
-      console.log("Gemini failed, falling back to Groq...");
-      suggestion = await callGroq(prompt);
+      const groqResult = await callGroq(prompt);
+      timings.push(...groqResult.metrics);
+      suggestion = groqResult.text;
       provider = "groq";
     }
 
     if (!suggestion) {
-      return NextResponse.json(
-        { error: "AI đang quá tải. Vui lòng thử lại sau." },
-        { status: 429 }
+      return jsonWithTimings(
+        { error: "AI dang qua tai. Vui long thu lai sau." },
+        { status: 429 },
+        timings,
       );
     }
 
-    console.log(`AI optimize success via ${provider}`);
-    return NextResponse.json({ suggestion });
-  } catch (err) {
-    console.error("Optimize content error:", err);
-    return NextResponse.json(
-      { error: "Đã xảy ra lỗi. Vui lòng thử lại sau." },
-      { status: 500 }
+    return jsonWithTimings({ suggestion, provider }, {}, timings);
+  } catch (error) {
+    console.error("Optimize content error:", error);
+    return jsonWithTimings(
+      { error: "Da xay ra loi. Vui long thu lai sau." },
+      { status: 500 },
     );
   }
 }

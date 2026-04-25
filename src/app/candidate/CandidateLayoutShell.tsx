@@ -1,20 +1,27 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Footer from "@/components/shared/Footer";
+import CandidateLayout from "@/components/candidate/CandidateLayout";
+import { getCandidateWorkspaceModel } from "@/components/candidate/candidateWorkspaceModel";
 
 export default function CandidateLayoutShell({
   children,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const pathname = usePathname();
-  const isEditingCV = pathname?.includes("/cv-builder/") && pathname?.endsWith("/edit");
+  const model = getCandidateWorkspaceModel(pathname);
 
   return (
     <>
-      <main className="w-full flex-1">{children}</main>
-      {!isEditingCV ? <Footer /> : null}
+      {model.useWorkspaceShell ? (
+        <CandidateLayout model={model}>{children}</CandidateLayout>
+      ) : (
+        <main className="w-full flex-1">{children}</main>
+      )}
+      {model.showFooter ? <Footer /> : null}
     </>
   );
 }

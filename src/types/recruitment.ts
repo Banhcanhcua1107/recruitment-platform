@@ -26,6 +26,14 @@ export interface RecruitmentDashboardStats {
   candidatesToday: number;
 }
 
+export interface RecruitmentJobPortfolioSummary {
+  totalJobs: number;
+  openJobs: number;
+  draftJobs: number;
+  closedJobs: number;
+  totalApplicants: number;
+}
+
 export interface RecruitmentTrendPoint {
   date: string;
   label: string;
@@ -63,6 +71,7 @@ export interface RecruitmentJob {
   postedAt: string | null;
   createdAt: string | null;
   candidateCount: number;
+  targetApplications: number | null;
   isPublicVisible: boolean;
 }
 
@@ -113,8 +122,11 @@ export interface EmployerCandidateApplicationDetail {
   fullName: string;
   email: string | null;
   phone: string | null;
+  coverLetter: string | null;
+  candidateExperience: string | null;
   introduction: string | null;
   resumeUrl: string | null;
+  resumeFileName: string | null;
   appliedAt: string;
   updatedAt: string;
   status: RecruitmentPipelineStatus;
@@ -124,6 +136,8 @@ export interface EmployerCandidateApplicationDetail {
     title: string;
     url: string;
     companyName: string | null;
+    description: string | null;
+    location: string | null;
   };
   relatedApplications: EmployerCandidateRelatedApplication[];
 }
@@ -177,4 +191,5 @@ export interface JobUpsertInput {
   ageRange?: string | null;
   fullAddress?: string | null;
   sourceUrl?: string | null;
+  targetApplications?: number | null;
 }

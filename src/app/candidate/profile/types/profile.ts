@@ -242,7 +242,7 @@ export function getDefaultContent(type: SectionType): SectionContent {
       return { content: '' } as CareerGoalContent;
     
     default:
-      return {} as any;
+      return { content: '' } as CareerGoalContent;
   }
 }
 
@@ -267,7 +267,7 @@ export function isSectionEmpty(section: Section): boolean {
   switch (type) {
     case 'personal_info': {
       const c = content as PersonalInfoContent;
-      return !c.fullName && !c.email && !c.phone;
+      return !c.fullName && !c.email && !c.phone && !c.address && !c.dateOfBirth && !c.gender && !c.avatarUrl;
     }
     case 'summary':
     case 'career_goal': {

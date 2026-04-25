@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 860" role="img" aria-labelledby="titleA descA">
+  <title id="titleA">ATS Clean CV Preview</title>
+  <desc id="descA">A clean ATS-friendly CV template preview.</desc>
+  <rect width="620" height="860" fill="#e8f7f3"/>
+  <rect x="32" y="28" width="556" height="804" rx="18" fill="#ffffff" stroke="#dbe7ee"/>
+  <rect x="58" y="56" width="280" height="30" rx="6" fill="#0f766e"/>
+  <rect x="58" y="96" width="220" height="16" rx="5" fill="#d1fae5"/>
+  <rect x="58" y="132" width="504" height="1" fill="#e2e8f0"/>
+  <rect x="58" y="154" width="130" height="16" rx="5" fill="#0f766e"/>
+  <rect x="58" y="180" width="504" height="12" rx="4" fill="#e2e8f0"/>
+  <rect x="58" y="198" width="490" height="12" rx="4" fill="#e2e8f0"/>
+  <rect x="58" y="216" width="472" height="12" rx="4" fill="#e2e8f0"/>
+  <rect x="58" y="252" width="170" height="16" rx="5" fill="#0f766e"/>
+  <rect x="58" y="278" width="504" height="12" rx="4" fill="#dbeafe"/>
+  <rect x="58" y="296" width="504" height="12" rx="4" fill="#dbeafe"/>
+  <rect x="58" y="314" width="504" height="12" rx="4" fill="#dbeafe"/>
+  <rect x="58" y="350" width="120" height="16" rx="5" fill="#0f766e"/>
+  <rect x="58" y="378" width="238" height="140" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="324" y="378" width="238" height="140" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="58" y="544" width="504" height="230" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+</svg>

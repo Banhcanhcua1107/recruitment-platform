@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200" fill="none">
+  <rect width="900" height="1200" fill="#E7ECEB"/>
+  <rect x="118" y="54" width="664" height="1092" rx="22" fill="#FFFFFF"/>
+  <rect x="118" y="54" width="218" height="1092" rx="22" fill="#1F5A3B"/>
+  <rect x="118" y="54" width="664" height="1092" rx="22" stroke="#D2DBD8" stroke-width="10"/>
+
+  <circle cx="227" cy="206" r="84" fill="#E7F4ED"/>
+  <circle cx="227" cy="186" r="34" fill="#8CC4A7"/>
+  <path d="M166 268C172 236 194 218 227 218C260 218 282 236 288 268" fill="#8CC4A7"/>
+
+  <rect x="162" y="322" width="132" height="16" rx="8" fill="#B7D6C5"/>
+  <rect x="162" y="352" width="88" height="10" rx="5" fill="#7FB89D"/>
+  <rect x="162" y="374" width="118" height="10" rx="5" fill="#7FB89D"/>
+
+  <rect x="162" y="432" width="108" height="12" rx="6" fill="#B7D6C5"/>
+  <rect x="162" y="456" width="122" height="8" rx="4" fill="#7FB89D"/>
+  <rect x="162" y="474" width="102" height="8" rx="4" fill="#7FB89D"/>
+
+  <rect x="162" y="526" width="96" height="12" rx="6" fill="#B7D6C5"/>
+  <rect x="162" y="550" width="126" height="10" rx="5" fill="#A8CDBA"/>
+  <rect x="162" y="568" width="144" height="10" rx="5" fill="#A8CDBA"/>
+  <rect x="162" y="586" width="92" height="10" rx="5" fill="#A8CDBA"/>
+
+  <rect x="162" y="642" width="102" height="12" rx="6" fill="#B7D6C5"/>
+  <rect x="162" y="666" width="140" height="8" rx="4" fill="#7FB89D"/>
+  <rect x="162" y="684" width="110" height="8" rx="4" fill="#7FB89D"/>
+
+  <rect x="378" y="136" width="248" height="26" rx="8" fill="#1F5A3B"/>
+  <rect x="650" y="138" width="94" height="18" rx="9" fill="#9FC8B3"/>
+  <rect x="378" y="176" width="156" height="12" rx="6" fill="#8EA2B4"/>
+  <rect x="548" y="176" width="196" height="12" rx="6" fill="#D3DCE5"/>
+  <rect x="378" y="198" width="366" height="10" rx="5" fill="#E6ECF3"/>
+  <rect x="378" y="216" width="332" height="10" rx="5" fill="#E6ECF3"/>
+
+  <line x1="378" y1="262" x2="744" y2="262" stroke="#DCE4EA" stroke-width="3" stroke-dasharray="8 8"/>
+
+  <rect x="378" y="302" width="210" height="20" rx="7" fill="#243746"/>
+  <rect x="650" y="304" width="94" height="14" rx="7" fill="#1F5A3B"/>
+  <rect x="378" y="334" width="186" height="12" rx="6" fill="#7D8FA2"/>
+  <rect x="378" y="356" width="366" height="10" rx="5" fill="#E6ECF3"/>
+  <rect x="378" y="374" width="344" height="10" rx="5" fill="#E6ECF3"/>
+  <rect x="378" y="392" width="284" height="10" rx="5" fill="#E6ECF3"/>
+
+  <line x1="378" y1="446" x2="744" y2="446" stroke="#E1E8EE" stroke-width="2"/>
+
+  <rect x="378" y="484" width="198" height="20" rx="7" fill="#243746"/>
+  <rect x="664" y="486" width="80" height="14" rx="7" fill="#1F5A3B"/>
+  <rect x="378" y="516" width="166" height="12" rx="6" fill="#7D8FA2"/>
+  <rect x="378" y="538" width="352" height="10" rx="5" fill="#E6ECF3"/>
+  <rect x="378" y="556" width="296" height="10" rx="5" fill="#E6ECF3"/>
+
+  <line x1="378" y1="614" x2="744" y2="614" stroke="#E1E8EE" stroke-width="2"/>
+
+  <rect x="378" y="656" width="164" height="20" rx="7" fill="#243746"/>
+  <rect x="676" y="658" width="68" height="14" rx="7" fill="#1F5A3B"/>
+  <rect x="378" y="688" width="226" height="10" rx="5" fill="#E6ECF3"/>
+
+  <rect x="378" y="752" width="130" height="20" rx="7" fill="#1F5A3B"/>
+  <rect x="378" y="786" width="120" height="10" rx="5" fill="#6B8093"/>
+  <rect x="520" y="786" width="224" height="10" rx="5" fill="#E6ECF3"/>
+
+  <rect x="378" y="826" width="96" height="10" rx="5" fill="#6B8093"/>
+  <rect x="520" y="826" width="224" height="10" rx="5" fill="#E6ECF3"/>
+
+  <rect x="378" y="868" width="130" height="20" rx="7" fill="#1F5A3B"/>
+  <rect x="378" y="902" width="138" height="10" rx="5" fill="#6B8093"/>
+  <rect x="520" y="902" width="168" height="10" rx="5" fill="#E6ECF3"/>
+
+  <rect x="378" y="942" width="124" height="10" rx="5" fill="#6B8093"/>
+  <rect x="520" y="942" width="194" height="10" rx="5" fill="#E6ECF3"/>
+
+  <rect x="126" y="62" width="648" height="1076" rx="18" stroke="#F7FAF9" stroke-width="4"/>
+</svg>

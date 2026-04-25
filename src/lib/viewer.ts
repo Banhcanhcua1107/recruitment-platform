@@ -8,6 +8,7 @@ export interface CurrentViewer {
   email: string | null;
   fullName: string | null;
   avatarUrl: string | null;
+  // TODO(multi-role): replace this scalar role with workspace memberships plus an active workspace selection.
   role: string;
   companyName: string | null;
 }

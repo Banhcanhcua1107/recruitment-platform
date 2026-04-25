@@ -1,20 +1,57 @@
+'use client';
+
 import { create } from 'zustand';
 import { createClient } from '@/utils/supabase/client';
-import { 
-  ProfileDocument, 
-  Section, 
-  SectionType, 
-  SectionContent,
+import {
+  buildLegacyProfilePatchFromDocument,
+  buildProfileDocumentFromLegacyProfile,
+  resolveCandidateProfileDocument,
+} from '@/lib/candidate-profile-document';
+import type {
+  CandidateProfileVisibility,
+  CandidateWorkExperience,
+} from '@/types/candidate-profile';
+import {
+  createEmptyDocument,
   getDefaultContent,
-  createEmptyDocument 
+  type ProfileDocument,
+  type Section,
+  type SectionContent,
+  type SectionType,
 } from '../types/profile';
 
-// Debounce utility
+interface ProfilePreviewSource {
+  fullName: string;
+  avatarUrl: string | null;
+  headline: string;
+  email: string;
+  phone: string;
+  location: string;
+  cvUrl: string | null;
+  updatedAt: string | null;
+  workExperiences: CandidateWorkExperience[];
+}
+
+function createEmptyPreviewSource(document?: ProfileDocument | null): ProfilePreviewSource {
+  return {
+    fullName: '',
+    avatarUrl: null,
+    headline: '',
+    email: '',
+    phone: '',
+    location: '',
+    cvUrl: null,
+    updatedAt: document?.meta.updatedAt || null,
+    workExperiences: [],
+  };
+}
+
 function debounce<T extends (...args: Parameters<T>) => void>(
   fn: T,
   delay: number
 ): (...args: Parameters<T>) => void {
   let timeoutId: ReturnType<typeof setTimeout>;
+
   return (...args: Parameters<T>) => {
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => fn(...args), delay);
@@ -22,128 +59,178 @@ function debounce<T extends (...args: Parameters<T>) => void>(
 }
 
 interface ProfileBuilderState {
-  // Document state
   document: ProfileDocument | null;
   isLoading: boolean;
   isSaving: boolean;
   lastSaved: Date | null;
   error: string | null;
   hasUnsavedChanges: boolean;
-  
-  // UI state
+  previewSource: ProfilePreviewSource | null;
+  profileVisibility: CandidateProfileVisibility;
   isAddPanelOpen: boolean;
   editingSectionId: string | null;
-  
-  // Internal
   _debouncedSave: (() => void) | null;
-  
-  // Actions
   loadProfile: () => Promise<void>;
   saveProfile: () => Promise<void>;
-  
   addSection: (type: SectionType) => void;
   updateSection: (sectionId: string, content: SectionContent) => void;
   removeSection: (sectionId: string) => void;
   reorderSections: (oldIndex: number, newIndex: number) => void;
   toggleSectionVisibility: (sectionId: string) => void;
-  
+  setProfileVisibility: (visibility: CandidateProfileVisibility) => void;
   setAddPanelOpen: (open: boolean) => void;
   setEditingSection: (sectionId: string | null) => void;
-  
-  // Helpers
   _triggerAutosave: () => void;
 }
 
 export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
-  // Create debounced save function
   const debouncedSave = debounce(() => {
-    get().saveProfile();
+    void get().saveProfile();
   }, 1500);
 
   return {
-    // Initial state
     document: null,
     isLoading: true,
     isSaving: false,
     lastSaved: null,
     error: null,
     hasUnsavedChanges: false,
+    previewSource: null,
+    profileVisibility: 'public',
     isAddPanelOpen: false,
     editingSectionId: null,
     _debouncedSave: debouncedSave,
 
-    // Load profile from Supabase
     loadProfile: async () => {
       set({ isLoading: true, error: null });
-      
+
       try {
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
         if (!user) {
-          // Not logged in - use empty document for demo
           const emptyDoc = createEmptyDocument();
-          set({ document: emptyDoc, isLoading: false });
+          set({
+            document: emptyDoc,
+            previewSource: createEmptyPreviewSource(emptyDoc),
+            profileVisibility: 'public',
+            isLoading: false,
+          });
           return;
         }
 
         const { data, error } = await supabase
           .from('candidate_profiles')
-          .select('document')
+          .select(
+            'document, full_name, avatar_url, headline, email, phone, location, introduction, skills, work_experiences, educations, cv_url, updated_at, profile_visibility'
+          )
           .eq('user_id', user.id)
           .single();
 
         if (error && error.code === 'PGRST116') {
-          // No profile exists, create empty one
-          const emptyDoc = createEmptyDocument();
-          
-          const { error: insertError } = await supabase
-            .from('candidate_profiles')
-            .insert({ user_id: user.id, document: emptyDoc });
-          
+          const emptyDoc = buildProfileDocumentFromLegacyProfile({});
+
+          const { error: insertError } = await supabase.from('candidate_profiles').insert({
+            user_id: user.id,
+            document: emptyDoc,
+            profile_visibility: 'public',
+          });
+
           if (insertError) {
-            // Table might not exist - fallback to local state
             console.warn('Could not create profile, using local state:', insertError);
-            set({ document: emptyDoc, isLoading: false });
+            set({
+              document: emptyDoc,
+              previewSource: createEmptyPreviewSource(emptyDoc),
+              profileVisibility: 'public',
+              isLoading: false,
+            });
             return;
           }
-          
-          set({ document: emptyDoc, isLoading: false });
-        } else if (error) {
-          // Any other error (including table not existing) - fallback to demo mode
+
+          set({
+            document: emptyDoc,
+            previewSource: createEmptyPreviewSource(emptyDoc),
+            profileVisibility: 'public',
+            isLoading: false,
+          });
+          return;
+        }
+
+        if (error) {
           console.warn('Database error, using demo mode:', error);
           const emptyDoc = createEmptyDocument();
-          set({ document: emptyDoc, isLoading: false });
-        } else {
-          set({ document: data.document as ProfileDocument, isLoading: false });
+          set({
+            document: emptyDoc,
+            previewSource: createEmptyPreviewSource(emptyDoc),
+            profileVisibility: 'public',
+            isLoading: false,
+          });
+          return;
         }
+
+        const workExperiences = data.work_experiences ?? [];
+        const resolvedDocument = resolveCandidateProfileDocument({
+          document: data.document,
+          fullName: data.full_name,
+          avatarUrl: data.avatar_url,
+          headline: data.headline,
+          email: data.email,
+          phone: data.phone,
+          location: data.location,
+          introduction: data.introduction,
+          skills: data.skills,
+          workExperiences,
+          educations: data.educations,
+        });
+
+        set({
+          document: resolvedDocument,
+          previewSource: {
+            fullName: data.full_name || '',
+            avatarUrl: data.avatar_url || null,
+            headline: data.headline || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            location: data.location || '',
+            cvUrl: data.cv_url || null,
+            updatedAt: data.updated_at || resolvedDocument.meta.updatedAt || null,
+            workExperiences,
+          },
+          profileVisibility: data.profile_visibility === 'private' ? 'private' : 'public',
+          isLoading: false,
+        });
       } catch (err) {
         console.error('Load profile error:', err);
-        // Fallback to demo mode
         const emptyDoc = createEmptyDocument();
-        set({ 
+        set({
           document: emptyDoc,
+          previewSource: createEmptyPreviewSource(emptyDoc),
+          profileVisibility: 'public',
           isLoading: false,
         });
       }
     },
 
-    // Save profile to Supabase
     saveProfile: async () => {
-      const { document, hasUnsavedChanges } = get();
-      if (!document || !hasUnsavedChanges) return;
-      
+      const { document, hasUnsavedChanges, profileVisibility } = get();
+      if (!document || !hasUnsavedChanges) {
+        return;
+      }
+
       set({ isSaving: true, error: null });
-      
+
       try {
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
         if (!user) {
           throw new Error('Not authenticated');
         }
 
-        // Update meta timestamp
         const updatedDocument: ProfileDocument = {
           ...document,
           meta: {
@@ -151,49 +238,77 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
             updatedAt: new Date().toISOString(),
           },
         };
+        const legacyPatch = buildLegacyProfilePatchFromDocument(updatedDocument);
 
         const { error } = await supabase
           .from('candidate_profiles')
-          .update({ document: updatedDocument })
+          .update({
+            document: updatedDocument,
+            full_name: legacyPatch.full_name,
+            email: legacyPatch.email,
+            phone: legacyPatch.phone,
+            location: legacyPatch.location,
+            introduction: legacyPatch.introduction,
+            skills: legacyPatch.skills,
+            work_experiences: legacyPatch.work_experiences,
+            educations: legacyPatch.educations,
+            work_experience: legacyPatch.work_experience,
+            education: legacyPatch.education,
+            profile_visibility: profileVisibility,
+          })
           .eq('user_id', user.id);
 
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
 
-        set({ 
+        set((state) => ({
           document: updatedDocument,
-          isSaving: false, 
+          isSaving: false,
           lastSaved: new Date(),
           hasUnsavedChanges: false,
-        });
+          previewSource: state.previewSource
+            ? {
+                ...state.previewSource,
+                updatedAt: updatedDocument.meta.updatedAt || state.previewSource.updatedAt,
+              }
+            : createEmptyPreviewSource(updatedDocument),
+        }));
       } catch (err) {
         console.error('Save profile error:', err);
-        set({ 
-          isSaving: false, 
-          error: 'Lưu thất bại. Đang thử lại...' 
+        set({
+          isSaving: false,
+          error: 'Lưu thất bại. Đang thử lại...',
         });
-        
-        // Retry after 3 seconds
-        setTimeout(() => get().saveProfile(), 3000);
+
+        setTimeout(() => {
+          void get().saveProfile();
+        }, 3000);
       }
     },
 
-    // Add new section
     addSection: (type: SectionType) => {
       set((state) => {
-        if (!state.document) return state;
-        
-        // Check if section already exists (for single-instance sections)
+        if (!state.document) {
+          return state;
+        }
+
         const singleInstanceTypes: SectionType[] = [
-          'personal_info', 'summary', 'skills', 'languages', 'career_goal', 'links'
+          'personal_info',
+          'summary',
+          'skills',
+          'languages',
+          'career_goal',
+          'links',
         ];
-        
+
         if (singleInstanceTypes.includes(type)) {
-          const exists = state.document.sections.some(s => s.type === type);
+          const exists = state.document.sections.some((section) => section.type === type);
           if (exists) {
-            return state; // Don't add duplicate
+            return state;
           }
         }
-        
+
         const newSection: Section = {
           id: crypto.randomUUID(),
           type,
@@ -201,110 +316,121 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
           isHidden: false,
           content: getDefaultContent(type),
         };
-        
+
         return {
           document: {
             ...state.document,
             sections: [...state.document.sections, newSection],
           },
           hasUnsavedChanges: true,
-          isAddPanelOpen: false, // Close panel after adding
-          editingSectionId: newSection.id, // Start editing immediately
+          isAddPanelOpen: false,
+          editingSectionId: newSection.id,
         };
       });
-      
+
       get()._triggerAutosave();
     },
 
-    // Update section content
     updateSection: (sectionId: string, content: SectionContent) => {
       set((state) => {
-        if (!state.document) return state;
-        
+        if (!state.document) {
+          return state;
+        }
+
         return {
           document: {
             ...state.document,
-            sections: state.document.sections.map(s =>
-              s.id === sectionId ? { ...s, content } : s
+            sections: state.document.sections.map((section) =>
+              section.id === sectionId ? { ...section, content } : section
             ),
           },
           hasUnsavedChanges: true,
         };
       });
-      
+
       get()._triggerAutosave();
     },
 
-    // Remove section
     removeSection: (sectionId: string) => {
       set((state) => {
-        if (!state.document) return state;
-        
+        if (!state.document) {
+          return state;
+        }
+
         const filteredSections = state.document.sections
-          .filter(s => s.id !== sectionId)
-          .map((s, i) => ({ ...s, order: i })); // Re-order
-        
+          .filter((section) => section.id !== sectionId)
+          .map((section, index) => ({ ...section, order: index }));
+
         return {
           document: {
             ...state.document,
             sections: filteredSections,
           },
           hasUnsavedChanges: true,
-          editingSectionId: state.editingSectionId === sectionId ? null : state.editingSectionId,
+          editingSectionId:
+            state.editingSectionId === sectionId ? null : state.editingSectionId,
         };
       });
-      
+
       get()._triggerAutosave();
     },
 
-    // Reorder sections (for drag-drop)
     reorderSections: (oldIndex: number, newIndex: number) => {
       set((state) => {
-        if (!state.document) return state;
-        
+        if (!state.document) {
+          return state;
+        }
+
         const sections = [...state.document.sections];
         const [moved] = sections.splice(oldIndex, 1);
         sections.splice(newIndex, 0, moved);
-        
-        // Update order property
-        const reorderedSections = sections.map((s, i) => ({ ...s, order: i }));
-        
+
         return {
           document: {
             ...state.document,
-            sections: reorderedSections,
+            sections: sections.map((section, index) => ({ ...section, order: index })),
           },
           hasUnsavedChanges: true,
         };
       });
-      
+
       get()._triggerAutosave();
     },
 
-    // Toggle section visibility
     toggleSectionVisibility: (sectionId: string) => {
       set((state) => {
-        if (!state.document) return state;
-        
+        if (!state.document) {
+          return state;
+        }
+
         return {
           document: {
             ...state.document,
-            sections: state.document.sections.map(s =>
-              s.id === sectionId ? { ...s, isHidden: !s.isHidden } : s
+            sections: state.document.sections.map((section) =>
+              section.id === sectionId
+                ? { ...section, isHidden: !section.isHidden }
+                : section
             ),
           },
           hasUnsavedChanges: true,
         };
       });
-      
+
       get()._triggerAutosave();
     },
 
-    // UI actions
+    setProfileVisibility: (visibility: CandidateProfileVisibility) => {
+      set((state) => ({
+        profileVisibility: visibility,
+        hasUnsavedChanges: state.hasUnsavedChanges || state.profileVisibility !== visibility,
+      }));
+
+      get()._triggerAutosave();
+    },
+
     setAddPanelOpen: (open: boolean) => set({ isAddPanelOpen: open }),
     setEditingSection: (sectionId: string | null) => set({ editingSectionId: sectionId }),
 
-    // Internal: Trigger debounced autosave
     _triggerAutosave: () => {
       const { _debouncedSave } = get();
       if (_debouncedSave) {
@@ -314,16 +440,19 @@ export const useProfileBuilder = create<ProfileBuilderState>((set, get) => {
   };
 });
 
-// Stable empty array to avoid infinite re-renders
 const EMPTY_SECTIONS: Section[] = [];
 
-// Selector hooks for performance
-export const useProfileDocument = () => useProfileBuilder((s) => s.document);
-export const useProfileSections = () => useProfileBuilder((s) => s.document?.sections || EMPTY_SECTIONS);
-export const useProfileLoading = () => useProfileBuilder((s) => s.isLoading);
+export const useProfileDocument = () => useProfileBuilder((state) => state.document);
+export const useProfileSections = () =>
+  useProfileBuilder((state) => state.document?.sections || EMPTY_SECTIONS);
+export const useProfilePreviewSource = () =>
+  useProfileBuilder((state) => state.previewSource);
+export const useProfileVisibility = () =>
+  useProfileBuilder((state) => state.profileVisibility);
+export const useProfileLoading = () => useProfileBuilder((state) => state.isLoading);
 export const useProfileSaving = () => {
-  const isSaving = useProfileBuilder((s) => s.isSaving);
-  const lastSaved = useProfileBuilder((s) => s.lastSaved);
+  const isSaving = useProfileBuilder((state) => state.isSaving);
+  const lastSaved = useProfileBuilder((state) => state.lastSaved);
   return { isSaving, lastSaved };
 };
-export const useProfileError = () => useProfileBuilder((s) => s.error);
+export const useProfileError = () => useProfileBuilder((state) => state.error);

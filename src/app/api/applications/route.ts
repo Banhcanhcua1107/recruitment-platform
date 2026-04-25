@@ -105,14 +105,25 @@ export async function POST(request: Request) {
       builderResumeId: builderResumeId || null,
     });
 
+    const includeDebug =
+      process.env.NODE_ENV !== "production" || process.env.EMAIL_DEBUG === "true";
+
     return NextResponse.json({
       success: true,
       applicationId: result.applicationId,
       status: result.status,
       cvUrl: result.cvUrl,
       candidateEmailSent: result.candidateEmailSent,
+      recruiterEmailSent: result.recruiterEmailSent,
       emailSent: result.emailSent,
       emailError: result.emailError,
+      mailDelivery: {
+        dbSaved: true,
+        candidateEmailSent: result.candidateEmailSent,
+        recruiterEmailSent: result.recruiterEmailSent,
+        allRecipientsSent: !result.emailError,
+      },
+      emailDebug: includeDebug ? result.emailDebug : undefined,
     });
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : "Unable to submit application.";

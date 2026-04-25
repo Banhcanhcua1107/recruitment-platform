@@ -1,15 +1,18 @@
-import React from "react";
-import Navbar from "@/components/shared/Navbar";
-import Footer from "@/components/shared/Footer";
+"use client";
 
-export default function HRLayout({ children }: { children: React.ReactNode }) {
+import type { ReactNode } from "react";
+import Navbar from "@/components/shared/Navbar";
+import HRLayoutShell from "./HRLayoutShell";
+
+export default function RecruiterRouteLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
-    <div className="flex min-h-screen flex-col bg-[#f6f7f8] font-['Manrope']">
+    <div className="flex min-h-screen flex-col bg-transparent">
       <Navbar />
-      <main className="flex-1 w-full">
-        {children}
-      </main>
-      <Footer />
+      <HRLayoutShell>{children}</HRLayoutShell>
     </div>
   );
 }

@@ -16,6 +16,7 @@ import type { RecruitmentTrendPoint } from "@/types/recruitment";
 export function RecruitmentChart({ data }: { data: RecruitmentTrendPoint[] }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const hasData = data.some((point) => point.applications > 0);
 
   useEffect(() => {
     const element = containerRef.current;
@@ -37,47 +38,56 @@ export function RecruitmentChart({ data }: { data: RecruitmentTrendPoint[] }) {
   }, []);
 
   return (
-    <Card className="rounded-[32px] border-slate-200/80">
+    <Card className="rounded-4xl border-slate-200/80">
       <CardHeader>
         <CardTitle>Xu hướng ứng tuyển</CardTitle>
         <p className="text-sm text-slate-500">
           Số hồ sơ nhận được trong 7 ngày gần nhất.
         </p>
       </CardHeader>
-      <CardContent className="min-w-0">
-        <div ref={containerRef} className="h-[320px] min-h-[320px] w-full min-w-[280px]">
+      <CardContent className="min-w-0 pt-0">
+        <div
+          ref={containerRef}
+          className={`w-full ${hasData ? "h-65 min-h-65" : "h-45 min-h-45"}`}
+        >
           {isReady ? (
-            <ResponsiveContainer width="100%" height={320} minWidth={280}>
-              <BarChart data={data}>
-                <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="label"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
-                  allowDecimals={false}
-                />
-                <Tooltip
-                  cursor={{ fill: "rgba(37, 99, 235, 0.08)" }}
-                  contentStyle={{
-                    borderRadius: 16,
-                    borderColor: "#dbeafe",
-                    boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
-                  }}
-                />
-                <Bar
-                  dataKey="applications"
-                  fill="#2563eb"
-                  radius={[10, 10, 0, 0]}
-                  maxBarSize={48}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            hasData ? (
+              <ResponsiveContainer width="100%" height="100%" minWidth={280}>
+                <BarChart data={data}>
+                  <CartesianGrid vertical={false} stroke="#e2e8f0" strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="label"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#64748b", fontSize: 12 }}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: "#64748b", fontSize: 12 }}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(37, 99, 235, 0.08)" }}
+                    contentStyle={{
+                      borderRadius: 16,
+                      borderColor: "#dbeafe",
+                      boxShadow: "0 20px 50px rgba(15, 23, 42, 0.08)",
+                    }}
+                  />
+                  <Bar
+                    dataKey="applications"
+                    fill="#2563eb"
+                    radius={[10, 10, 0, 0]}
+                    maxBarSize={48}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full w-full items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 text-center text-sm text-slate-500">
+                Chưa có dữ liệu ứng tuyển trong 7 ngày gần nhất.
+              </div>
+            )
           ) : (
             <div className="h-full w-full animate-pulse rounded-3xl bg-slate-100" />
           )}

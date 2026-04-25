@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Bell, CheckCircle2, ExternalLink } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 
 interface NotificationItem {
@@ -138,7 +137,7 @@ const NotificationBell: React.FC = () => {
 
             return prev;
           });
-        }
+        },
       )
       .subscribe();
 
@@ -170,8 +169,9 @@ const NotificationBell: React.FC = () => {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <motion.button
+      <button
         ref={bellButtonRef}
+        type="button"
         onClick={() => setIsOpen((value) => !value)}
         className="relative flex items-center justify-center rounded-lg p-2.5 transition-all duration-200 hover:bg-slate-900/5 active:scale-95"
         aria-label="Thông báo"
@@ -183,81 +183,75 @@ const NotificationBell: React.FC = () => {
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         ) : null}
-      </motion.button>
+      </button>
 
-      <AnimatePresence mode="wait">
-        {isOpen ? (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -8 }}
-            className="absolute right-0 z-50 mt-4 w-96 overflow-hidden rounded-2xl border border-white/20 bg-white/95 shadow-2xl backdrop-blur-md"
-          >
-            <div className="bg-gradient-to-br from-slate-50/60 to-transparent px-6 py-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900">Thông báo</h3>
-                {unreadCount > 0 ? (
-                  <button
-                    onClick={() => void handleMarkAllAsRead()}
-                    className="text-xs font-semibold text-blue-600 transition-colors hover:text-blue-700"
+      {isOpen ? (
+        <div className="absolute right-0 z-50 mt-4 w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-white/20 bg-white/95 shadow-2xl backdrop-blur-md">
+          <div className="bg-linear-to-br from-slate-50/60 to-transparent px-6 py-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900">Thông báo</h3>
+              {unreadCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => void handleMarkAllAsRead()}
+                  className="text-xs font-semibold text-blue-600 transition-colors hover:text-blue-700"
+                >
+                  Đánh dấu đã đọc
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="max-h-96 overflow-y-auto bg-linear-to-b from-slate-50/30 to-transparent">
+            {notifications.length > 0 ? (
+              notifications.map((notification) => {
+                const content = (
+                  <div
+                    className={`group flex items-start gap-3.5 px-6 py-4 transition-colors ${
+                      notification.is_read ? "hover:bg-slate-50/40" : "bg-blue-50/40"
+                    }`}
                   >
-                    Đánh dấu đã đọc
-                  </button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="max-h-96 overflow-y-auto bg-gradient-to-b from-slate-50/30 to-transparent">
-              {notifications.length > 0 ? (
-                notifications.map((notification) => {
-                  const content = (
-                    <div
-                      className={`group flex items-start gap-3.5 px-6 py-4 transition-colors ${
-                        notification.is_read ? "hover:bg-slate-50/40" : "bg-blue-50/40"
-                      }`}
-                    >
-                      <div className="mt-0.5 text-xl">{iconForType(notification.type)}</div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
-                            {notification.title}
-                          </h4>
-                          {!notification.is_read ? (
-                            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
-                          ) : null}
-                        </div>
-                        <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-slate-600/80">
-                          {notification.description}
-                        </p>
-                        <p className="mt-2.5 text-xs font-medium text-slate-500/70">
-                          {formatRelativeTime(notification.created_at)}
-                        </p>
+                    <div className="mt-0.5 text-xl">{iconForType(notification.type)}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">
+                          {notification.title}
+                        </h4>
+                        {!notification.is_read ? (
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-blue-600" />
+                        ) : null}
                       </div>
-                      {notification.href ? (
-                        <ExternalLink className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
-                      ) : null}
+                      <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-slate-600/80">
+                        {notification.description}
+                      </p>
+                      <p className="mt-2.5 text-xs font-medium text-slate-500/70">
+                        {formatRelativeTime(notification.created_at)}
+                      </p>
                     </div>
-                  );
+                    {notification.href ? (
+                      <ExternalLink className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
+                    ) : null}
+                  </div>
+                );
 
-                  return notification.href ? (
-                    <Link key={notification.id} href={notification.href} onClick={() => setIsOpen(false)}>
-                      {content}
-                    </Link>
-                  ) : (
-                    <div key={notification.id}>{content}</div>
-                  );
-                })
-              ) : (
-                <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                  <CheckCircle2 className="mb-4 h-12 w-12 text-slate-300" strokeWidth={1.5} />
-                  <p className="text-sm font-medium text-slate-500">Hiện chưa có thông báo mới</p>
-                  <p className="mt-1 text-xs text-slate-400/70">Thông báo ATS của HR và ứng viên sẽ hiển thị ở đây.</p>
-                </div>
-              )}
-            </div>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+                return notification.href ? (
+                  <Link key={notification.id} href={notification.href} onClick={() => setIsOpen(false)}>
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={notification.id}>{content}</div>
+                );
+              })
+            ) : (
+              <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                <CheckCircle2 className="mb-4 h-12 w-12 text-slate-300" strokeWidth={1.5} />
+                <p className="text-sm font-medium text-slate-500">Hiện chưa có thông báo mới</p>
+                <p className="mt-1 text-xs text-slate-400/70">Thông báo ATS của HR và ứng viên sẽ hiển thị ở đây.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -208,10 +208,6 @@ export function validateCandidateProfileInput(input: CandidateProfileInput) {
     return "Họ tên không được để trống";
   }
 
-  if (!profile.introduction) {
-    return "Giới thiệu bản thân không được để trống";
-  }
-
   if (!profile.email) {
     return "Email không được để trống";
   }

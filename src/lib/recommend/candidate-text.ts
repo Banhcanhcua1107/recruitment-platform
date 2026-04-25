@@ -1,7 +1,20 @@
 import "server-only";
 
-import { getCurrentCandidateProfile } from "@/lib/candidate-profiles";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
+
+const DEFAULT_CANDIDATE_TEXT =
+  "Ứng viên đang tìm việc tại Việt Nam, quan tâm công nghệ, marketing và kinh doanh.";
+
+type CandidateProfileRecommendationRow = {
+  full_name?: string | null;
+  headline?: string | null;
+  location?: string | null;
+  introduction?: string | null;
+  skills?: string[] | null;
+  work_experience?: string | null;
+  education?: string | null;
+};
 
 function stringifyResumeData(value: unknown) {
   if (typeof value === "string") {
@@ -32,38 +45,45 @@ function stringifyResumeData(value: unknown) {
   return "";
 }
 
-export async function buildCandidateRecommendationText(manualText?: string) {
+export async function buildCandidateRecommendationTextForUser(
+  supabase: SupabaseClient,
+  userId: string,
+  manualText?: string,
+) {
   const rawManualText = String(manualText ?? "").trim();
   if (rawManualText) {
     return rawManualText;
   }
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return "Ứng viên đang tìm việc tại Việt Nam, quan tâm công nghệ, marketing và kinh doanh.";
+  if (!userId) {
+    return DEFAULT_CANDIDATE_TEXT;
   }
 
-  const profile = await getCurrentCandidateProfile().catch(() => null);
+  const { data: profile, error: profileError } = await supabase
+    .from("candidate_profiles")
+    .select("full_name, headline, location, introduction, skills, work_experience, education")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const profileRow = profileError ? null : (profile as CandidateProfileRecommendationRow | null);
   const parts: string[] = [];
 
-  if (profile) {
-    if (profile.fullName) parts.push(`Họ và tên: ${profile.fullName}`);
-    if (profile.headline) parts.push(`Tiêu đề: ${profile.headline}`);
-    if (profile.location) parts.push(`Địa điểm: ${profile.location}`);
-    if (profile.introduction) parts.push(`Giới thiệu: ${profile.introduction}`);
-    if (profile.skills.length > 0) parts.push(`Kỹ năng: ${profile.skills.join(", ")}`);
-    if (profile.workExperience) parts.push(`Kinh nghiệm: ${profile.workExperience}`);
-    if (profile.education) parts.push(`Học vấn: ${profile.education}`);
+  if (profileRow) {
+    if (profileRow.full_name) parts.push(`Họ và tên: ${profileRow.full_name}`);
+    if (profileRow.headline) parts.push(`Tiêu đề: ${profileRow.headline}`);
+    if (profileRow.location) parts.push(`Địa điểm: ${profileRow.location}`);
+    if (profileRow.introduction) parts.push(`Giới thiệu: ${profileRow.introduction}`);
+    if (Array.isArray(profileRow.skills) && profileRow.skills.length > 0) {
+      parts.push(`Kỹ năng: ${profileRow.skills.join(", ")}`);
+    }
+    if (profileRow.work_experience) parts.push(`Kinh nghiệm: ${profileRow.work_experience}`);
+    if (profileRow.education) parts.push(`Học vấn: ${profileRow.education}`);
   }
 
   const { data: latestResume } = await supabase
     .from("resumes")
     .select("title, resume_data, updated_at")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -76,5 +96,23 @@ export async function buildCandidateRecommendationText(manualText?: string) {
     }
   }
 
-  return parts.join("\n").trim() || "Ứng viên đang tìm việc tại Việt Nam, quan tâm công nghệ, marketing và kinh doanh.";
+  return parts.join("\n").trim() || DEFAULT_CANDIDATE_TEXT;
+}
+
+export async function buildCandidateRecommendationText(manualText?: string) {
+  const rawManualText = String(manualText ?? "").trim();
+  if (rawManualText) {
+    return rawManualText;
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return DEFAULT_CANDIDATE_TEXT;
+  }
+
+  return buildCandidateRecommendationTextForUser(supabase, user.id);
 }

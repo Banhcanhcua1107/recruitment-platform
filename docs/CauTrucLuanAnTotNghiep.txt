@@ -1,0 +1,450 @@
+CHƯƠNG 1. TỔNG QUAN ĐỀ TÀI
+•	1.1. Bối cảnh và tính cấp thiết của đề tài
+•	1.1.1. Xu hướng học trực tuyến trong lĩnh vực công nghệ thông tin
+•	1.1.2. Nhu cầu học lập trình có thực hành, tương tác và cá nhân hóa
+•	1.1.3. Hạn chế của các hệ thống E-Learning truyền thống
+•	1.1.4. Nhu cầu tích hợp AI vào quá trình học lập trình
+•	1.2. Phát biểu bài toán
+•	1.2.1. Bài toán quản lý khóa học và nội dung học tập đa cấp
+•	1.2.2. Bài toán hỗ trợ người học bằng AI trong quá trình học lập trình
+•	1.2.3. Bài toán duy trì động lực học tập thông qua gamification
+•	1.2.4. Bài toán tổ chức và vận hành hệ thống trên kiến trúc web hiện đại
+•	1.3. Mục tiêu nghiên cứu
+•	1.3.1. Mục tiêu tổng quát
+•	1.3.2. Mục tiêu cụ thể
+•	1.4. Phạm vi và đối tượng nghiên cứu
+•	1.4.1. Phạm vi chức năng cốt lõi
+•	1.4.1.1. Xác thực, hồ sơ người dùng, phân quyền
+•	1.4.1.2. Quản lý khóa học theo mô hình Course → Chapter → Lesson
+•	1.4.1.3. Học bài, theo dõi tiến độ, làm bài tập
+•	1.4.1.4. AI Assistant, AI Tutor, AI Roadmap, Code Playground/IDE
+•	1.4.1.5. Gamification và quản trị hệ thống
+•	1.4.2. Phạm vi chức năng mở rộng
+•	1.4.2.1. Blog/Articles
+•	1.4.2.2. Q&A/Forum
+•	1.4.2.3. Professional Profile
+•	1.4.2.4. Developer tools
+•	1.5. Đối tượng sử dụng hệ thống
+•	1.5.1. Học viên
+•	1.5.2. Giảng viên
+•	1.5.3. Đối tác
+•	1.5.4. Quản trị viên
+•	1.6. Phương pháp nghiên cứu và hướng tiếp cận
+•	1.6.1. Phân tích yêu cầu từ hệ thống thực tế
+•	1.6.2. Thiết kế hệ thống theo hướng kiến trúc phân tán
+•	1.6.3. Xây dựng hệ thống web full-stack với Next.js và Supabase
+•	1.6.4. Tích hợp AI bằng microservice FastAPI
+•	1.6.5. Kiểm thử theo kịch bản nghiệp vụ và đánh giá kỹ thuật
+•	1.7. Đóng góp chính của đề tài
+•	1.7.1. Mô hình nền tảng học lập trình tích hợp AI theo kiến trúc hiện đại
+•	1.7.2. Tổ chức nội dung học theo cấu trúc đa cấp
+•	1.7.3. Môi trường thực hành code trực tuyến kết hợp AI
+•	1.7.4. Cơ chế phân quyền, bảo mật và triển khai thực tế
+•	1.7.5. Khả năng mở rộng theo hướng học tập thông minh
+•	1.8. Cấu trúc của luận văn
+•	1.8.1. Mô tả tóm tắt nội dung từng chương
+CHƯƠNG 2. CƠ SỞ LÝ THUYẾT VÀ NỀN TẢNG CÔNG NGHỆ
+•	2.1. Cơ sở lý thuyết về nền tảng học lập trình trực tuyến
+•	2.1.1. Khái niệm hệ thống E-Learning
+•	2.1.2. Mô hình tổ chức nội dung Course → Chapter → Lesson
+•	2.1.3. Cơ chế theo dõi tiến độ học tập
+•	2.1.4. Môi trường thực hành lập trình trên trình duyệt
+•	2.1.5. Tính cá nhân hóa trong học tập
+•	2.2. Cơ sở lý thuyết về AI trong hỗ trợ học lập trình
+•	2.2.1. AI Tutor và AI Chat theo ngữ cảnh
+•	2.2.2. AI Code Completion kiểu Fill-in-Middle
+•	2.2.3. AI Code Review và AI Explain Error
+•	2.2.4. AI Roadmap Generation cho lộ trình học tập
+•	2.2.5. Vai trò của LLM trong hệ hỗ trợ học lập trình
+•	2.3. Cơ sở lý thuyết về trò chơi hóa trong học tập
+•	2.3.1. Khái niệm gamification
+•	2.3.2. XP, Streak, Quiz, Level badge
+•	2.3.3. Tác động của gamification đến hành vi học tập
+•	2.4. Cơ sở lý thuyết về kiến trúc hệ thống web hiện đại
+•	2.4.1. Kiến trúc client–server và kiến trúc phân tán
+•	2.4.2. Server-side rendering và client-side rendering
+•	2.4.3. App Router trong Next.js
+•	2.4.4. API Routes và middleware
+•	2.4.5. Microservice trong tích hợp AI
+•	2.5. Cơ sở lý thuyết về dữ liệu và bảo mật
+•	2.5.1. PostgreSQL và mô hình quan hệ
+•	2.5.2. Row Level Security
+•	2.5.3. JWT và xác thực không trạng thái
+•	2.5.4. HTTP-only cookie
+•	2.5.5. RBAC – Role-Based Access Control
+•	2.5.6. Rate limiting, account lockout, recovery keys
+•	2.5.7. Kiểm tra dữ liệu đầu vào bằng schema validation
+•	2.6. Công nghệ sử dụng trong hệ thống
+•	2.6.1. Nhóm công nghệ frontend
+•	2.6.1.1. Next.js 15, React 19, TypeScript
+•	2.6.1.2. Tailwind CSS, shadcn/ui, Radix UI
+•	2.6.1.3. Framer Motion, Lucide React
+•	2.6.2. Nhóm state management và data fetching
+•	2.6.2.1. React Context API
+•	2.6.2.2. TanStack React Query
+•	2.6.2.3. Redux Toolkit ở mức sẵn sàng mở rộng
+•	2.6.3. Nhóm editor và hiển thị nội dung
+•	2.6.3.1. TipTap
+•	2.6.3.2. Monaco Editor
+•	2.6.3.3. React Markdown, Prism.js, Mermaid
+•	2.6.3.4. ReactFlow và dagre
+•	2.6.4. Nhóm backend và dữ liệu
+•	2.6.4.1. Supabase (PostgreSQL, Storage, RLS)
+•	2.6.4.2. Next.js API Routes
+•	2.6.4.3. Zod, bcryptjs, jose/jsonwebtoken
+•	2.6.5. Nhóm AI
+•	2.6.5.1. FastAPI
+•	2.6.5.2. Groq SDK
+•	2.6.5.3. Ollama
+•	2.6.6. Nhóm media, email, SMS
+•	2.6.6.1. Cloudinary
+•	2.6.6.2. Nodemailer
+•	2.6.6.3. Resend
+•	2.6.6.4. Twilio
+•	2.7. Lý do lựa chọn công nghệ
+•	2.7.1. Lý do chọn Next.js cho web platform
+•	2.7.2. Lý do chọn Supabase làm backend-as-a-service
+•	2.7.3. Lý do tách AI thành microservice FastAPI
+•	2.7.4. Lý do dùng Cloudinary cho media
+•	2.7.5. Lý do dùng Monaco, TipTap, ReactFlow cho trải nghiệm học tập
+CHƯƠNG 3. PHÂN TÍCH YÊU CẦU VÀ ĐẶC TẢ HỆ THỐNG
+•	3.1. Phân tích tác nhân của hệ thống
+•	3.1.1. Học viên (student)
+•	3.1.2. Giảng viên (instructor)
+•	3.1.3. Đối tác (partner)
+•	3.1.4. Quản trị viên (admin)
+•	3.1.5. Phân loại membership tier: FREE và PRO
+•	3.2. Phân tích nghiệp vụ tổng thể
+•	3.2.1. Nghiệp vụ xác thực và quản lý tài khoản
+•	3.2.2. Nghiệp vụ quản lý khóa học
+•	3.2.3. Nghiệp vụ học bài và cập nhật tiến độ
+•	3.2.4. Nghiệp vụ thực hành lập trình trên trình duyệt
+•	3.2.5. Nghiệp vụ hỗ trợ học tập bằng AI
+•	3.2.6. Nghiệp vụ gamification
+•	3.2.7. Nghiệp vụ quản trị hệ thống
+•	3.2.8. Nghiệp vụ mở rộng: blog, Q&A, profile, tools
+•	3.3. Đặc tả yêu cầu chức năng
+•	3.3.1. Nhóm chức năng dành cho học viên
+•	3.3.1.1. Đăng ký, đăng nhập, quản lý profile
+•	3.3.1.2. Tìm kiếm, lọc, xem chi tiết khóa học
+•	3.3.1.3. Ghi danh và học theo lộ trình
+•	3.3.1.4. Làm bài tập, xem tiến độ, nhận gamification
+•	3.3.1.5. Tương tác với AI Tutor, AI Chat, AI Roadmap
+•	3.3.2. Nhóm chức năng dành cho giảng viên
+•	3.3.2.1. Tạo và quản lý khóa học
+•	3.3.2.2. Tổ chức chapter, lesson, bài tập
+•	3.3.2.3. Upload video và biên soạn nội dung
+•	3.3.2.4. Theo dõi dữ liệu khóa học
+•	3.3.3. Nhóm chức năng dành cho quản trị viên
+•	3.3.3.1. Dashboard và thống kê
+•	3.3.3.2. Quản lý người dùng và gán vai trò
+•	3.3.3.3. Quản lý khóa học toàn hệ thống
+•	3.3.3.4. Duyệt professional profile
+•	3.3.3.5. Cấu hình nền tảng
+•	3.3.4. Nhóm chức năng mở rộng
+•	3.3.4.1. Blog/Articles
+•	3.3.4.2. Q&A/Forum
+•	3.3.4.3. Public Profile và Professional Profile
+•	3.3.4.4. Bộ công cụ hỗ trợ developer
+•	3.4. Đặc tả yêu cầu phi chức năng
+•	3.4.1. Hiệu năng
+•	3.4.2. Khả năng mở rộng
+•	3.4.3. Tính sẵn sàng và khả năng triển khai
+•	3.4.4. Tính bảo mật
+•	3.4.5. Tính dễ sử dụng
+•	3.4.6. Tính dễ bảo trì và mở rộng
+•	3.5. Use case tổng thể của hệ thống
+•	3.5.1. Use case của học viên
+•	3.5.2. Use case của giảng viên
+•	3.5.3. Use case của quản trị viên
+•	3.5.4. Use case của đối tác
+•	3.6. Phân tích các luồng nghiệp vụ chính
+•	3.6.1. Luồng đăng ký – đăng nhập – xác thực phiên
+•	3.6.1.1. Đăng ký tài khoản và sinh recovery keys
+•	3.6.1.2. Đăng nhập bằng email/password
+•	3.6.1.3. Kiểm tra phiên hiện tại qua /api/auth/me
+•	3.6.2. Luồng CRUD khóa học
+•	3.6.2.1. Tạo khóa học
+•	3.6.2.2. Tạo chapter và lesson
+•	3.6.2.3. Upload thumbnail và video
+•	3.6.3. Luồng ghi danh và theo dõi tiến độ
+•	3.6.3.1. Enroll khóa học
+•	3.6.3.2. Hoàn thành bài học
+•	3.6.3.3. Cập nhật progress percentage
+•	3.6.4. Luồng tìm kiếm – lọc – phân trang khóa học
+•	3.6.5. Luồng AI Assistant và AI Tutor
+•	3.6.5.1. Code completion
+•	3.6.5.2. AI chat
+•	3.6.5.3. Error explanation
+•	3.6.5.4. Code review
+•	3.6.6. Luồng AI Roadmap
+•	3.6.7. Luồng quản trị người dùng và phân quyền
+•	3.7. Kết luận chương
+CHƯƠNG 4. PHÂN TÍCH VÀ THIẾT KẾ HỆ THỐNG
+•	4.1. Thiết kế kiến trúc tổng thể
+•	4.1.1. Mô hình kiến trúc phân tán của hệ thống
+•	4.1.2. Lớp client: Web App, Admin Panel, Code Playground/IDE
+•	4.1.3. Lớp ứng dụng: Next.js App Router, API Routes, Middleware
+•	4.1.4. Lớp dữ liệu: Supabase PostgreSQL
+•	4.1.5. Lớp AI: Python FastAPI microservice
+•	4.1.6. Lớp media: Cloudinary CDN
+•	4.1.7. Quan hệ và luồng giao tiếp giữa các thành phần
+•	4.2. Thiết kế xử lý request và response
+•	4.2.1. Chu trình xử lý request trong Next.js
+•	4.2.2. Middleware cho auth, CORS, profile routing
+•	4.2.3. API Route Handler cho validation và business logic
+•	4.2.4. Supabase admin client cho thao tác dữ liệu
+•	4.2.5. Chuẩn hóa response JSON, pagination metadata và cache header
+•	4.3. Thiết kế các nhóm API
+•	4.3.1. Nhóm API xác thực
+•	4.3.1.1. /api/auth/login
+•	4.3.1.2. /api/auth/register
+•	4.3.1.3. /api/auth/logout
+•	4.3.1.4. /api/auth/me
+•	4.3.1.5. /api/auth/change-password
+•	4.3.1.6. /api/auth/forgot-password
+•	4.3.1.7. /api/auth/recovery-key
+•	4.3.2. Nhóm API học tập và nội dung
+•	4.3.2.1. /api/courses/*
+•	4.3.2.2. /api/chapters/*
+•	4.3.2.3. /api/lessons/*
+•	4.3.2.4. /api/exercises/*
+•	4.3.3. Nhóm API AI
+•	4.3.3.1. /api/ai/chat
+•	4.3.3.2. /api/ai/complete
+•	4.3.3.3. /api/ai/generate-code
+•	4.3.3.4. /api/ai/explain-error
+•	4.3.3.5. /api/ai/review
+•	4.3.3.6. /api/ai/agent
+•	4.3.3.7. /api/ai/tutor
+•	4.3.3.8. /api/ai-roadmap
+•	4.3.4. Nhóm API quản trị và mở rộng
+•	4.3.4.1. /api/admin/*
+•	4.3.4.2. /api/profiles/*
+•	4.3.4.3. /api/users/*
+•	4.3.4.4. /api/blog/*
+•	4.3.4.5. /api/qa/*, /api/questions/*
+•	4.3.4.6. /api/gamification/*
+•	4.3.4.7. /api/cloudinary/*, /api/upload/*
+•	4.4. Thiết kế cơ sở dữ liệu
+•	4.4.1. Nguyên tắc thiết kế dữ liệu
+•	4.4.2. Nhóm bảng người dùng và xác thực
+•	4.4.2.1. users
+•	4.4.2.2. user_roles
+•	4.4.2.3. user_verifications
+•	4.4.2.4. public_profiles
+•	4.4.2.5. professional_profiles
+•	4.4.3. Nhóm bảng khóa học và học tập
+•	4.4.3.1. courses
+•	4.4.3.2. categories
+•	4.4.3.3. chapters
+•	4.4.3.4. lessons
+•	4.4.3.5. enrollments
+•	4.4.4. Nhóm bảng nội dung và tương tác
+•	4.4.4.1. blog_posts
+•	4.4.4.2. forum_topics
+•	4.4.4.3. forum_replies
+•	4.4.5. Quan hệ giữa các bảng
+•	4.4.6. Thủ tục lưu trữ và truy vấn RPC
+•	4.4.6.1. get_courses_with_details(...)
+•	4.4.6.2. count_courses_with_filters(...)
+•	4.5. Thiết kế xác thực, phân quyền và bảo mật
+•	4.5.1. Thiết kế xác thực bằng custom JWT
+•	4.5.1.1. Luồng đăng ký
+•	4.5.1.2. Luồng đăng nhập
+•	4.5.1.3. Luồng kiểm tra phiên
+•	4.5.2. Thiết kế phân quyền RBAC
+•	4.5.2.1. Vai trò student
+•	4.5.2.2. Vai trò instructor
+•	4.5.2.3. Vai trò partner
+•	4.5.2.4. Vai trò admin
+•	4.5.3. Cơ chế bảo mật bổ sung
+•	4.5.3.1. bcrypt salt rounds = 12
+•	4.5.3.2. Rate limiting theo IP
+•	4.5.3.3. Account lockout
+•	4.5.3.4. Recovery keys
+•	4.5.3.5. HTTP-only secure cookie
+•	4.5.3.6. CORS
+•	4.5.3.7. Zod validation
+•	4.5.3.8. Supabase RLS và admin client
+•	4.5.4. Chính sách truy cập profile
+•	4.5.4.1. canViewProfessionalProfile()
+•	4.5.4.2. canEditProfessionalProfile()
+•	4.5.4.3. canPublishProfessionalProfile()
+•	4.6. Thiết kế các luồng xử lý nghiệp vụ trọng tâm
+•	4.6.1. Luồng đăng ký – đăng nhập – phân quyền
+•	4.6.2. Luồng CRUD khóa học
+•	4.6.3. Luồng ghi danh và học tập
+•	4.6.4. Luồng tìm kiếm, lọc và phân trang khóa học
+•	4.6.5. Luồng upload hình ảnh/video qua Cloudinary
+•	4.6.6. Luồng AI Chat, AI Tutor, AI Completion
+•	4.6.7. Luồng AI Roadmap qua FastAPI và Groq
+•	4.7. Thiết kế giao diện và tổ chức điều hướng
+•	4.7.1. Thiết kế layout tổng thể của web app
+•	4.7.2. Thiết kế trang học bài
+•	4.7.3. Thiết kế IDE/Code Playground
+•	4.7.4. Thiết kế dashboard quản trị
+•	4.7.5. Thiết kế public profile và professional profile
+•	4.8. Thiết kế triển khai hệ thống
+•	4.8.1. Frontend trên Vercel
+•	4.8.2. Supabase Cloud cho cơ sở dữ liệu
+•	4.8.3. AI Service trên VPS/Docker
+•	4.8.4. Cloudinary cho media CDN
+•	4.8.5. Phân tách biến môi trường và cấu hình
+•	4.9. Kết luận chương
+CHƯƠNG 5. XÂY DỰNG, CÀI ĐẶT VÀ TRIỂN KHAI HỆ THỐNG
+•	5.1. Môi trường phát triển và công cụ sử dụng
+•	5.1.1. Môi trường phát triển frontend
+•	5.1.2. Môi trường phát triển AI Service
+•	5.1.3. Công cụ quản lý mã nguồn và build
+•	5.1.4. Quy trình chạy hệ thống ở chế độ development
+•	5.2. Cấu trúc source code của dự án
+•	5.2.1. Thư mục src/app/
+•	5.2.2. Thư mục components/
+•	5.2.3. Thư mục contexts/
+•	5.2.4. Thư mục lib/
+•	5.2.5. Thư mục types/
+•	5.2.6. File middleware.ts
+•	5.2.7. Thư mục ai-service/
+•	5.3. Cài đặt frontend với Next.js
+•	5.3.1. Root layout và providers
+•	5.3.1.1. ThemeProvider
+•	5.3.1.2. AuthProvider
+•	5.3.1.3. ToastProvider
+•	5.3.2. Tổ chức route và trang chức năng
+•	5.3.2.1. (main)/
+•	5.3.2.2. admin/
+•	5.3.2.3. courses/, learn/, roadmap/, playground/
+•	5.3.2.4. articles/, qa/, profile/, settings/
+•	5.3.3. Xây dựng giao diện học tập
+•	5.3.3.1. VideoPlayer
+•	5.3.3.2. Lesson content bằng TipTap/Markdown
+•	5.3.3.3. Sidebar và tiến độ học tập
+•	5.3.4. Xây dựng Code Playground/IDE
+•	5.3.4.1. ActivityBar, TabBar, EditorPanel, BottomPanel
+•	5.3.4.2. Monaco Editor
+•	5.3.4.3. Auto-save bằng lz-string và localStorage
+•	5.3.5. Xây dựng Roadmap Visualization
+•	5.3.5.1. ReactFlow
+•	5.3.5.2. dagre layout
+•	5.3.5.3. Node detail sidebar
+•	5.3.6. Xây dựng gamification UI
+•	5.3.6.1. Quiz
+•	5.3.6.2. XP toast
+•	5.3.6.3. Streak indicator
+•	5.3.6.4. Level badge
+•	5.4. Cài đặt backend trên Next.js API Routes
+•	5.4.1. Cài đặt nhóm API xác thực
+•	5.4.2. Cài đặt nhóm API khóa học, chapter, lesson
+•	5.4.3. Cài đặt nhóm API người dùng, profile và admin
+•	5.4.4. Cài đặt nhóm API blog, Q&A và gamification
+•	5.4.5. Cài đặt nhóm API AI trên nền Next.js
+•	5.4.6. Tích hợp validation, auth checking và error handling
+•	5.5. Tích hợp Supabase và tổ chức thao tác dữ liệu
+•	5.5.1. supabase.ts: anon client và admin client
+•	5.5.2. auth.ts: ký, xác minh JWT và xử lý mật khẩu
+•	5.5.3. db-helpers.ts: truy vấn dữ liệu thuần Supabase
+•	5.5.4. profile-service.ts: unified profile service
+•	5.5.5. profile-policies.ts: chính sách truy cập profile
+•	5.5.6. rateLimit.ts: giới hạn tần suất truy cập
+•	5.6. Cài đặt AI microservice bằng FastAPI
+•	5.6.1. Cấu trúc tổng thể của ai-service/
+•	5.6.2. main.py và cấu hình ứng dụng
+•	5.6.3. Nhóm router roadmap
+•	5.6.4. Nhóm router ollama
+•	5.6.5. Mô hình prompt và service xử lý
+•	5.6.6. Dockerfile và đóng gói triển khai
+•	5.7. Tích hợp dịch vụ ngoài
+•	5.7.1. Cloudinary cho upload ảnh/video
+•	5.7.2. Nodemailer/Resend cho email
+•	5.7.3. Twilio cho SMS
+•	5.7.4. YouTube proxy và video utilities
+•	5.8. Triển khai hệ thống
+•	5.8.1. Các biến môi trường cần cấu hình
+•	5.8.2. Triển khai frontend lên Vercel
+•	5.8.3. Triển khai cơ sở dữ liệu trên Supabase Cloud
+•	5.8.4. Triển khai AI Service trên VPS/Docker
+•	5.8.5. Sử dụng Cloudinary làm media CDN
+•	5.8.6. Domain và cấu hình production
+•	5.9. Kết luận chương
+CHƯƠNG 6. KIỂM THỬ VÀ ĐÁNH GIÁ HỆ THỐNG
+•	6.1. Mục tiêu và phương pháp kiểm thử
+•	6.1.1. Kiểm thử chức năng theo kịch bản nghiệp vụ
+•	6.1.2. Kiểm thử tích hợp giữa frontend, API, database, AI service và media
+•	6.1.3. Kiểm thử phân quyền và bảo mật
+•	6.1.4. Kiểm thử triển khai production
+•	6.1.5. Giới hạn của hoạt động kiểm thử hiện tại
+•	6.2. Xây dựng bộ test case
+•	6.2.1. Nhóm test case xác thực và quản lý tài khoản
+•	6.2.2. Nhóm test case quản lý khóa học và bài học
+•	6.2.3. Nhóm test case ghi danh và theo dõi tiến độ
+•	6.2.4. Nhóm test case AI Assistant và AI Roadmap
+•	6.2.5. Nhóm test case upload media
+•	6.2.6. Nhóm test case quản trị hệ thống
+•	6.2.7. Nhóm test case phân quyền vai trò
+•	6.3. Kiểm thử chức năng
+•	6.3.1. Kết quả kiểm thử đăng ký, đăng nhập, đổi mật khẩu
+•	6.3.2. Kết quả kiểm thử CRUD khóa học, chapter, lesson
+•	6.3.3. Kết quả kiểm thử xem khóa học, ghi danh và học bài
+•	6.3.4. Kết quả kiểm thử AI Chat, AI Tutor, AI Completion
+•	6.3.5. Kết quả kiểm thử roadmap, gamification, blog, Q&A
+•	6.3.6. Kết quả kiểm thử upload ảnh/video
+•	6.4. Kiểm thử bảo mật và phân quyền
+•	6.4.1. Kiểm thử JWT và cookie-based authentication
+•	6.4.2. Kiểm thử middleware cho protected routes
+•	6.4.3. Kiểm thử RBAC theo vai trò người dùng
+•	6.4.4. Kiểm thử rate limiting
+•	6.4.5. Kiểm thử account lockout
+•	6.4.6. Kiểm thử validation đầu vào và xử lý lỗi
+•	6.5. Kiểm thử tích hợp và triển khai
+•	6.5.1. Tích hợp Next.js với Supabase
+•	6.5.2. Tích hợp Next.js với AI Service FastAPI
+•	6.5.3. Tích hợp Cloudinary cho media
+•	6.5.4. Smoke test sau triển khai production
+•	6.6. Đánh giá mức độ đáp ứng mục tiêu đề tài
+•	6.6.1. Đánh giá theo mục tiêu chức năng
+•	6.6.2. Đánh giá theo tiêu chí kỹ thuật
+•	6.6.3. Đánh giá theo trải nghiệm người dùng
+•	6.6.4. Đánh giá khả năng mở rộng của kiến trúc
+•	6.7. Phân tích ưu điểm của hệ thống
+•	6.7.1. Kiến trúc hiện đại, phân tách rõ frontend – data – AI
+•	6.7.2. Tích hợp AI sâu vào trải nghiệm học lập trình
+•	6.7.3. Tổ chức dữ liệu và phân quyền tương đối hoàn chỉnh
+•	6.7.4. Code Playground/IDE là điểm khác biệt của hệ thống
+•	6.7.5. Khả năng triển khai thực tế trên hạ tầng cloud
+•	6.8. Phân tích hạn chế của hệ thống
+•	6.8.1. Custom auth làm tăng chi phí bảo trì
+•	6.8.2. Rate limiter in-memory khó scale nhiều instance
+•	6.8.3. Tồn tại lớp tương thích MySQL gây khó bảo trì
+•	6.8.4. TypeScript/ESLint warnings đang bị nới lỏng
+•	6.8.5. Chưa có automated testing
+•	6.8.6. Một số thành phần admin còn mang tính monolithic
+•	6.8.7. Một số middleware/chính sách chưa tái sử dụng triệt để
+•	6.9. Kết luận chương
+CHƯƠNG 7. KẾT LUẬN VÀ HƯỚNG PHÁT TRIỂN
+•	7.1. Kết luận chung
+•	7.1.1. Tóm tắt bài toán đã giải quyết
+•	7.1.2. Tóm tắt kiến trúc và giải pháp đã xây dựng
+•	7.1.3. Ý nghĩa thực tiễn của hệ thống
+•	7.2. Kết quả đạt được
+•	7.2.1. Kết quả về mặt chức năng
+•	7.2.2. Kết quả về mặt công nghệ
+•	7.2.3. Kết quả về mặt triển khai
+•	7.2.4. Kết quả về mặt tích hợp AI vào học lập trình
+•	7.3. Hạn chế còn tồn tại
+•	7.3.1. Hạn chế về xác thực và bảo trì hệ thống
+•	7.3.2. Hạn chế về kiểm thử tự động
+•	7.3.3. Hạn chế về khả năng scale một số thành phần
+•	7.3.4. Hạn chế về tối ưu hóa mã nguồn và cấu trúc admin
+•	7.4. Hướng phát triển
+•	7.4.1. Chuyển sang Supabase Auth hoặc bổ sung OAuth/MFA
+•	7.4.2. Chuyển rate limiting sang Redis/Upstash
+•	7.4.3. Loại bỏ lớp tương thích MySQL, chuẩn hóa truy vấn Supabase/RPC
+•	7.4.4. Bật TypeScript strict checks và hoàn thiện linting
+•	7.4.5. Bổ sung automated testing với Vitest/Playwright
+•	7.4.6. Chuẩn hóa middleware dùng chung cho API routes
+•	7.4.7. Mở rộng real-time features bằng Supabase Realtime
+•	7.4.8. Hoàn thiện mobile app
+•	7.4.9. Tích hợp thanh toán cho khóa học trả phí
+•	7.4.10. Bổ sung monitoring và analytics
+•	7.5. Kết luận chương

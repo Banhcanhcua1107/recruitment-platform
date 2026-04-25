@@ -1,5 +1,5 @@
-import { CandidateProfileEditor } from "@/components/candidate/CandidateProfileEditor";
+import CandidateProfileBuilderPage from "./CandidateProfileBuilderPage";
 
 export default function CandidateProfilePage() {
-  return <CandidateProfileEditor />;
+  return <CandidateProfileBuilderPage />;
 }

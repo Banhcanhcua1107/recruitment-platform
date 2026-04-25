@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { headers } from 'next/headers'
+import { getCanonicalAppOrigin } from '@/lib/url/canonical-origin'
 
 // 1. LOGIN
 export async function login(formData: FormData) {
@@ -29,7 +30,7 @@ export async function login(formData: FormData) {
 // 2. SIGNUP
 export async function signup(formData: FormData) {
   const supabase = await createClient()
-  const origin = (await headers()).get('origin')
+  const origin = getCanonicalAppOrigin((await headers()).get('origin'))
 
   const email = formData.get('email') as string
   const password = formData.get('password') as string

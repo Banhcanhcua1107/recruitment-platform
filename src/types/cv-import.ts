@@ -42,6 +42,7 @@ export const CV_ARTIFACT_KINDS = [
   "vl_raw",
   "parser_raw",
   "normalized_json",
+  "mapped_sections",
   "export_pdf",
 ] as const;
 
@@ -84,6 +85,31 @@ export interface BoundingBox {
   y: number;
   width: number;
   height: number;
+}
+
+export type EditableDocumentRegionType = "text" | "image";
+export type EditableDocumentRegionLevel = "line" | "block" | "image";
+
+export interface EditableDocumentRegionChild {
+  id: string;
+  level: EditableDocumentRegionLevel;
+  type: EditableDocumentRegionType;
+  bbox: BoundingBox;
+  text?: string | null;
+  confidence?: number | null;
+  block_ids?: string[];
+}
+
+export interface EditableDocumentRegion {
+  id: string;
+  level: EditableDocumentRegionLevel;
+  type: EditableDocumentRegionType;
+  bbox: BoundingBox;
+  text: string | null;
+  confidence?: number | null;
+  block_ids: string[];
+  primary_block_id: string | null;
+  children?: EditableDocumentRegionChild[];
 }
 
 export interface CVArtifactRecord {
@@ -323,16 +349,147 @@ export interface EditableCVExportRecord {
   created_at: string;
 }
 
+export interface MappedSectionLink {
+  label: string;
+  url: string;
+}
+
+export interface MappedSectionText {
+  text: string;
+}
+
+export interface MappedSectionCandidate {
+  name: string;
+  job_title: string;
+  avatar_url: string;
+}
+
+export interface MappedSectionPersonalInfo {
+  email: string;
+  phone: string;
+  address: string;
+  current_school: string;
+  academic_year: string;
+  location: string;
+  links: MappedSectionLink[];
+}
+
+export interface MappedSectionEducation {
+  school: string;
+  degree: string;
+  major: string;
+  gpa: string;
+  start_date: string;
+  end_date: string;
+  description: string;
+}
+
+export interface MappedSectionProject {
+  name: string;
+  description: string;
+  technologies: string[];
+  role: string;
+  start_date: string;
+  end_date: string;
+  github: string;
+  url: string;
+}
+
+export interface MappedSectionExperience {
+  company: string;
+  role: string;
+  description: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface MappedSectionCertificate {
+  name: string;
+  issuer: string;
+  year: string;
+  url: string;
+}
+
+export interface MappedSectionLanguage {
+  name: string;
+  proficiency: string;
+}
+
+export interface MappedSectionAward {
+  name: string;
+  issuer: string;
+  year: string;
+  description: string;
+}
+
+export interface MappedSectionSkills {
+  programming_languages: string[];
+  frontend: string[];
+  backend: string[];
+  database: string[];
+  tools: string[];
+  soft_skills: string[];
+  others: string[];
+}
+
+export interface MappedSections {
+  candidate: MappedSectionCandidate;
+  personal_info: MappedSectionPersonalInfo;
+  summary: MappedSectionText;
+  career_objective: MappedSectionText;
+  education: MappedSectionEducation[];
+  skills: MappedSectionSkills;
+  projects: MappedSectionProject[];
+  experience: MappedSectionExperience[];
+  certificates: MappedSectionCertificate[];
+  hobbies: string[];
+  languages: MappedSectionLanguage[];
+  awards: MappedSectionAward[];
+  others: string[];
+}
+
+export interface CorrectionLogEntry {
+  field: string;
+  before: string;
+  after: string;
+  reason: string;
+}
+
+export interface DocumentAnalysis {
+  document_type: "cv" | "resume" | "profile" | "unknown";
+  level: "student" | "intern" | "fresher" | "junior" | "middle" | "senior" | "unknown";
+  role:
+    | "frontend"
+    | "backend"
+    | "fullstack"
+    | "mobile"
+    | "tester"
+    | "devops"
+    | "data"
+    | "uiux"
+    | "software-engineer"
+    | "unknown";
+  render_folder: string;
+}
+
 export interface NormalizedParsedCV {
   profile: Record<string, unknown>;
   contacts: Record<string, unknown>;
   summary: string;
+  career_objective?: string;
   experience: Array<Record<string, unknown>>;
   education: Array<Record<string, unknown>>;
   skills: Array<Record<string, unknown> | string>;
   projects: Array<Record<string, unknown>>;
   certifications: Array<Record<string, unknown>>;
   languages: Array<Record<string, unknown> | string>;
+  awards?: Array<Record<string, unknown>>;
+  hobbies?: string[];
+  others?: string[];
+  mapped_sections?: MappedSections;
+  cleaned_json?: MappedSections;
+  document_analysis?: DocumentAnalysis;
+  correction_log?: CorrectionLogEntry[];
   avatar: Record<string, unknown>;
   raw_ocr_blocks: Array<Record<string, unknown>>;
   layout_blocks: Array<Record<string, unknown>>;
@@ -437,6 +594,7 @@ export interface EditableCVPageView {
   canonical_height_px: number;
   background_image_url: string | null;
   blocks: EditableCVBlockView[];
+  regions?: EditableDocumentRegion[];
 }
 
 export interface EditableCVDetailResponse {
@@ -475,6 +633,18 @@ export interface SaveEditableCVResponse {
   };
 }
 
+export interface SaveOriginalCVResponse {
+  cvUrl: string;
+  filePath: string;
+  fileName?: string;
+  message: string;
+  links?: {
+    profile: string;
+    cvDownload: string;
+    cvBuilder: string;
+  };
+}
+
 export interface UpdateEditableBlockRequest {
   edited_text?: string;
   locked?: boolean;
@@ -493,6 +663,18 @@ export interface UpdateEditableBlockResponse {
     updated_at: string;
   };
   updated_json_delta: Record<string, unknown>;
+  autosave_revision: number;
+}
+
+export interface UpdateEditableBlockAssetResponse {
+  block: {
+    id: string;
+    asset_artifact_id: string | null;
+    asset_image_url: string | null;
+    version?: number;
+    lock_state?: EditableCVLockState;
+    updated_at: string;
+  };
   autosave_revision: number;
 }
 

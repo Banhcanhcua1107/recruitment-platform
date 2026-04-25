@@ -42,3 +42,20 @@ next-env.d.ts
 
 # agent files
 .agent/
+.gitnexus
+.perf/
+
+# Local temporary/cache files
+.tmp/
+supabase/.temp/
+*.whl
+scripts/tmp_*.cjs
+*.err
+*.out
+
+.tmp/
+supabase/.temp/
+*.whl
+scripts/tmp_*.cjs
+*.err
+*.out

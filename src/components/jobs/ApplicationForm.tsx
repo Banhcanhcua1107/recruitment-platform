@@ -3,6 +3,7 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Check, CircleAlert, CircleCheckBig, LoaderCircle, Send } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { CandidateProfileRecord } from "@/types/candidate-profile";
 import {
@@ -11,6 +12,7 @@ import {
   localizeApplicationMessage,
   type ApplicationCvSource,
 } from "@/lib/application-messages";
+import { getCandidateCvOptionsCached } from "@/lib/client/candidate-cv-options";
 import { cn } from "@/lib/utils";
 
 interface ApplicationFormProps {
@@ -96,24 +98,19 @@ async function loadApplicationDefaults() {
   }
 
   cachedDefaultsPromise = (async () => {
-    const [profileResponse, cvResponse] = await Promise.all([
+    const [profileResponse, cvOptions] = await Promise.all([
       fetch("/api/candidate/profile", { cache: "no-store" }),
-      fetch("/api/candidate/cv-options", { cache: "no-store" }),
+      getCandidateCvOptionsCached(),
     ]);
     const profileResult = await profileResponse.json();
-    const cvResult = await cvResponse.json();
 
     if (!profileResponse.ok) {
       throw new Error(profileResult.error || "Không thể tải thông tin hồ sơ ứng viên.");
     }
 
-    if (!cvResponse.ok) {
-      throw new Error(cvResult.error || "Không thể tải danh sách CV đã lưu.");
-    }
-
     const nextDefaults = buildDefaults(
       profileResult.profile as CandidateProfileRecord,
-      Array.isArray(cvResult.items) ? (cvResult.items as CandidateCvOption[]) : []
+      cvOptions as CandidateCvOption[]
     );
 
     cachedDefaults = nextDefaults;
@@ -141,6 +138,7 @@ export function ApplicationForm({
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
   const [candidateEmailSent, setCandidateEmailSent] = useState(false);
   const [cvOptions, setCvOptions] = useState<CandidateCvOption[]>([]);
   const [cvMode, setCvMode] = useState<CvMode>("existing");
@@ -273,6 +271,7 @@ export function ApplicationForm({
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    setEmailWarning(null);
     setCandidateEmailSent(false);
 
     try {
@@ -309,8 +308,21 @@ export function ApplicationForm({
         throw new Error(result.error || "Không thể gửi hồ sơ ứng tuyển lúc này.");
       }
 
-      setSuccess("Hồ sơ của bạn đã được gửi thành công tới nhà tuyển dụng.");
+      const hasEmailFailure = Boolean(result.emailError);
+      setSuccess(
+        hasEmailFailure
+          ? "Hồ sơ của bạn đã được ghi nhận thành công trong hệ thống."
+          : "Hồ sơ của bạn đã được gửi thành công tới nhà tuyển dụng."
+      );
       setCandidateEmailSent(Boolean(result.candidateEmailSent));
+      setEmailWarning(
+        hasEmailFailure
+          ? localizeApplicationMessage(
+              result.emailError ||
+                "Hệ thống chưa gửi được email xác nhận. Vui lòng thử lại sau."
+            )
+          : null
+      );
       setFieldErrors({});
       setFile(null);
     } catch (submitError) {
@@ -340,7 +352,14 @@ export function ApplicationForm({
           ) : null}
         </StatusAlert>
 
-        <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+        {emailWarning ? (
+          <div className="rounded-[22px] border border-amber-200 bg-amber-50 px-4 py-4 text-sm leading-6 text-amber-900">
+            <p className="font-semibold">Email xác nhận chưa gửi được</p>
+            <p className="mt-1">{emailWarning}</p>
+          </div>
+        ) : null}
+
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
           <p className="text-sm leading-6 text-slate-600">
             Bạn có thể theo dõi trạng thái tuyển dụng và xem lại CV đã gửi trong mục đơn ứng tuyển.
           </p>
@@ -366,7 +385,7 @@ export function ApplicationForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
           Tóm tắt vị trí
         </p>
@@ -439,17 +458,30 @@ export function ApplicationForm({
           required
           error={fieldErrors.introduction}
         >
-          <textarea
-            rows={6}
-            value={form.introduction}
-            onChange={(event) => handleFieldChange("introduction", event.target.value)}
-            placeholder="Ví dụ: Tôi có 3 năm kinh nghiệm phát triển ứng dụng web với React và Node.js, ưu tiên hiệu năng và trải nghiệm người dùng."
-            aria-invalid={Boolean(fieldErrors.introduction)}
-            className={cn(
-              "min-h-[160px] w-full rounded-[18px] border bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10",
-              fieldErrors.introduction ? "border-rose-300" : "border-slate-200"
-            )}
-          />
+          {fieldErrors.introduction ? (
+            <textarea
+              rows={6}
+              value={form.introduction}
+              onChange={(event) => handleFieldChange("introduction", event.target.value)}
+              placeholder="Ví dụ: Tôi có 3 năm kinh nghiệm phát triển ứng dụng web với React và Node.js, ưu tiên hiệu năng và trải nghiệm người dùng."
+              aria-invalid="true"
+              className={cn(
+                "min-h-40 w-full rounded-[18px] border bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10",
+                fieldErrors.introduction ? "border-rose-300" : "border-slate-200"
+              )}
+            />
+          ) : (
+            <textarea
+              rows={6}
+              value={form.introduction}
+              onChange={(event) => handleFieldChange("introduction", event.target.value)}
+              placeholder="Ví dụ: Tôi có 3 năm kinh nghiệm phát triển ứng dụng web với React và Node.js, ưu tiên hiệu năng và trải nghiệm người dùng."
+              className={cn(
+                "min-h-40 w-full rounded-[18px] border bg-white px-4 py-3 text-sm leading-6 text-slate-900 outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10",
+                fieldErrors.introduction ? "border-rose-300" : "border-slate-200"
+              )}
+            />
+          )}
         </FieldBlock>
       </FormSection>
 
@@ -550,7 +582,7 @@ export function ApplicationForm({
                           )}
                         >
                           {isSelected ? (
-                            <span className="material-symbols-outlined text-sm">done</span>
+                            <Check className="size-3.5" aria-hidden="true" />
                           ) : null}
                         </span>
                       </div>
@@ -613,9 +645,11 @@ export function ApplicationForm({
         disabled={submitting}
         className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-[18px] bg-primary px-5 text-sm font-black text-white transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:bg-primary-hover active:translate-y-px disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        <span className="material-symbols-outlined text-[20px]">
-          {submitting ? "progress_activity" : "send"}
-        </span>
+        {submitting ? (
+          <LoaderCircle className="size-5 animate-spin" aria-hidden="true" />
+        ) : (
+          <Send className="size-5" aria-hidden="true" />
+        )}
         {submitting ? "Đang gửi hồ sơ..." : "Ứng tuyển ngay"}
       </button>
     </form>
@@ -634,7 +668,7 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-[24px] border border-slate-200 bg-white p-5">
+    <section className="rounded-3xl border border-slate-200 bg-white p-5">
       <div className="mb-5 space-y-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-slate-400">
           {eyebrow}
@@ -702,9 +736,11 @@ function StatusAlert({
             tone === "success" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
           )}
         >
-          <span className="material-symbols-outlined">
-            {tone === "success" ? "check_circle" : "error"}
-          </span>
+          {tone === "success" ? (
+            <CircleCheckBig className="size-5" aria-hidden="true" />
+          ) : (
+            <CircleAlert className="size-5" aria-hidden="true" />
+          )}
         </span>
         <div className="min-w-0">
           <p className="font-semibold">{title}</p>
@@ -718,13 +754,13 @@ function StatusAlert({
 function ApplicationFormLoading() {
   return (
     <div className="space-y-5">
-      <div className="animate-pulse rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+      <div className="animate-pulse rounded-3xl border border-slate-200 bg-slate-50 p-5">
         <div className="h-3 w-24 rounded-full bg-slate-200" />
         <div className="mt-4 h-7 w-3/4 rounded-full bg-slate-200" />
         <div className="mt-3 h-4 w-1/2 rounded-full bg-slate-200" />
       </div>
 
-      <div className="animate-pulse rounded-[24px] border border-slate-200 bg-white p-5">
+      <div className="animate-pulse rounded-3xl border border-slate-200 bg-white p-5">
         <div className="h-3 w-20 rounded-full bg-slate-200" />
         <div className="mt-4 h-6 w-56 rounded-full bg-slate-200" />
         <div className="mt-3 h-4 w-full rounded-full bg-slate-100" />
@@ -735,7 +771,7 @@ function ApplicationFormLoading() {
         </div>
       </div>
 
-      <div className="animate-pulse rounded-[24px] border border-slate-200 bg-white p-5">
+      <div className="animate-pulse rounded-3xl border border-slate-200 bg-white p-5">
         <div className="h-3 w-20 rounded-full bg-slate-200" />
         <div className="mt-4 h-6 w-48 rounded-full bg-slate-200" />
         <div className="mt-4 h-36 rounded-[18px] bg-slate-100" />

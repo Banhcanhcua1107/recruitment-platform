@@ -1,17 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Loader2, RefreshCcw, Sparkles } from "lucide-react";
+import { Download, ExternalLink, FilePenLine, Loader2, RefreshCcw, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CVArtifactKind, CVDocumentArtifactView, CVDocumentDetailResponse, CVDocumentStatus } from "@/types/cv-import";
-import { fetchCVImport, retryCVImport, saveEditableCV } from "@/features/cv-import/api/client";
+import {
+  fetchCVImport,
+  retryCVImport,
+  saveEditableCV,
+  saveOriginalCVFromImport,
+  startCVImportAnalysis,
+} from "@/features/cv-import/api/client";
+import { createResumeFromSections } from "@/app/candidate/cv-builder/route-api";
 import { ImportDocumentPreview } from "@/features/cv-import/components/ImportDocumentPreview";
 import { ImportStatusBadge } from "@/features/cv-import/components/ImportStatusBadge";
+import { buildResumeSectionsFromParsedJson } from "@/features/cv-import/transforms/parsed-json-to-builder-sections";
 import { PersistedOcrReviewPanel } from "@/features/ocr-viewer";
+import type { SaveOriginalCVResponse } from "@/types/cv-import";
 
 const ACTIVE_STATUSES = new Set<CVDocumentStatus>([
-  "uploaded",
   "queued",
   "normalizing",
   "rendering_preview",
@@ -22,6 +30,10 @@ const ACTIVE_STATUSES = new Set<CVDocumentStatus>([
   "persisting",
   "retrying",
 ]);
+
+const AUTO_REFRESH_INTERVAL_MS = 3_000;
+const AUTO_REFRESH_MAX_MS = 4 * 60_000;
+const HEARTBEAT_STALE_MS = 90_000;
 
 interface ImportReviewClientProps {
   documentId: string;
@@ -62,13 +74,19 @@ function localizeFailureCode(code: string | null): string | null {
 
 export function ImportReviewClient({ documentId, initialData }: ImportReviewClientProps) {
   const router = useRouter();
+  const autoRefreshStartedAtRef = useRef<number | null>(null);
   const [detail, setDetail] = useState(initialData);
   const [allowPartial, setAllowPartial] = useState(false);
   const [overrideNonCv, setOverrideNonCv] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSavingOriginal, setIsSavingOriginal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [staleMessage, setStaleMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [savedOriginal, setSavedOriginal] = useState<SaveOriginalCVResponse | null>(null);
 
   const isActive = ACTIVE_STATUSES.has(detail.document.status);
   const originalArtifact = useMemo(
@@ -81,8 +99,16 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
     ["ready", "partial_ready"].includes(detail.document.status) &&
     (!requiresPartial || allowPartial) &&
     (!requiresNonCv || overrideNonCv);
+  const canStartAnalysis = detail.document.status === "uploaded";
+  const canOpenSourceEditor = ["ready", "partial_ready"].includes(detail.document.status);
   const eligibilityNote = localizeEligibilityReason(detail.editor_eligibility.reason);
   const failureNote = localizeFailureCode(detail.document.failure_code);
+  const isLikelyStalled = useMemo(() => {
+    if (!isActive || !detail.document.last_heartbeat_at) return false;
+    const heartbeatAge = Date.now() - new Date(detail.document.last_heartbeat_at).getTime();
+    if (!Number.isFinite(heartbeatAge) || heartbeatAge < 0) return false;
+    return heartbeatAge > HEARTBEAT_STALE_MS;
+  }, [detail.document.last_heartbeat_at, isActive]);
 
   const loadDocument = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -95,6 +121,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
         const next = await fetchCVImport(documentId);
         setDetail(next);
         setErrorMessage(null);
+        setStaleMessage(null);
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Khong the tai lai du lieu review.");
       } finally {
@@ -108,23 +135,47 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
 
   useEffect(() => {
     setDetail(initialData);
+    autoRefreshStartedAtRef.current = null;
+    setStaleMessage(null);
   }, [initialData]);
 
   useEffect(() => {
-    if (!isActive) return undefined;
+    if (!isActive) {
+      autoRefreshStartedAtRef.current = null;
+      return undefined;
+    }
+
+    if (isLikelyStalled) {
+      setStaleMessage("Pipeline dang cham hon binh thuong. Ban co the bam Thu lai hoac Tai lai de kiem tra trang thai moi nhat.");
+      return undefined;
+    }
+
+    setStaleMessage(null);
+    if (autoRefreshStartedAtRef.current == null) {
+      autoRefreshStartedAtRef.current = Date.now();
+    }
 
     const timer = window.setInterval(() => {
+      const startedAt = autoRefreshStartedAtRef.current ?? Date.now();
+      if (Date.now() - startedAt > AUTO_REFRESH_MAX_MS) {
+        window.clearInterval(timer);
+        setStaleMessage("Da dung auto-refresh sau 4 phut de tranh cho vo han. Hay bam Tai lai hoac Thu lai.");
+        return;
+      }
+
       void loadDocument({ silent: true });
-    }, 3000);
+    }, AUTO_REFRESH_INTERVAL_MS);
 
     return () => window.clearInterval(timer);
-  }, [isActive, loadDocument]);
+  }, [isActive, isLikelyStalled, loadDocument]);
 
   const handleRetry = useCallback(async () => {
     setIsRetrying(true);
     setErrorMessage(null);
+    setStaleMessage(null);
     try {
       await retryCVImport(documentId);
+      autoRefreshStartedAtRef.current = Date.now();
       await loadDocument();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Khong the chay lai pipeline import.");
@@ -132,6 +183,58 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
       setIsRetrying(false);
     }
   }, [documentId, loadDocument]);
+
+  const handleStartAnalysis = useCallback(async () => {
+    if (!canStartAnalysis) return;
+
+    setIsAnalyzing(true);
+    setErrorMessage(null);
+    setStaleMessage(null);
+    setSuccessMessage(null);
+
+    try {
+      const payload = await startCVImportAnalysis(documentId);
+      setDetail((current) => ({
+        ...current,
+        document: {
+          ...current.document,
+          status: payload.document.status,
+          job_id: payload.document.job_id,
+          retry_count: payload.document.retry_count,
+          failure_stage: null,
+          failure_code: null,
+        },
+      }));
+      autoRefreshStartedAtRef.current = Date.now();
+      setSuccessMessage("Đã bắt đầu OCR và trích xuất JSON. Dữ liệu review sẽ tự cập nhật.");
+      await loadDocument({ silent: true });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Không thể bắt đầu phân tích CV.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [canStartAnalysis, documentId, loadDocument]);
+
+  const handleSaveOriginal = useCallback(async () => {
+    if (!detail.editor_eligibility.can_save_original) return;
+
+    setIsSavingOriginal(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setSavedOriginal(null);
+
+    try {
+      const response = await saveOriginalCVFromImport(documentId);
+      setSuccessMessage(response.message || "Đã lưu CV để dùng khi ứng tuyển.");
+      setSavedOriginal(response);
+      await loadDocument({ silent: true });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Không thể lưu CV gốc.");
+      setSavedOriginal(null);
+    } finally {
+      setIsSavingOriginal(false);
+    }
+  }, [detail.editor_eligibility.can_save_original, documentId, loadDocument]);
 
   const handleOpenEditor = useCallback(async () => {
     if (!canOpenEditor) return;
@@ -143,16 +246,87 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
         allow_partial: allowPartial,
         override_non_cv: overrideNonCv,
       });
+
+      const { sections, title } = buildResumeSectionsFromParsedJson(detail.parsed_json);
+      if (!sections.length) {
+        router.push(response.links.editor);
+        return;
+      }
+
+      try {
+        const resume = await createResumeFromSections(sections, {
+          title,
+        });
+
+        if (resume?.id) {
+          router.push(`/candidate/cv-builder/${resume.id}/edit`);
+          return;
+        }
+      } catch (createResumeError) {
+        console.warn("TipTap resume creation failed, fallback to editable editor", createResumeError);
+      }
+
       router.push(response.links.editor);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Khong the tao ban CV de chinh sua.");
     } finally {
       setIsSaving(false);
     }
-  }, [allowPartial, canOpenEditor, documentId, overrideNonCv, router]);
+  }, [allowPartial, canOpenEditor, detail.parsed_json, documentId, overrideNonCv, router]);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#eef4fb] p-2.5 md:p-3">
+      {(successMessage || errorMessage || staleMessage) && (
+        <div className="mb-2.5 rounded-2xl border bg-white px-3 py-2.5 shadow-[0_14px_28px_-24px_rgba(15,23,42,0.35)] md:px-4">
+          {successMessage ? (
+            <div className="space-y-2">
+              <p className="text-[13px] font-semibold text-emerald-700">{successMessage}</p>
+              <p className="text-[12px] leading-5 text-slate-600">
+                CV vừa lưu được ghi vào Hồ sơ cá nhân để dùng khi ứng tuyển. Mục này không tự tạo bản mới trong danh sách CV Builder.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={savedOriginal?.links?.cvDownload || savedOriginal?.cvUrl || "/api/candidate/profile/cv"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-8 items-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-[12px] font-medium text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-100"
+                >
+                  Xem CV đã lưu
+                </a>
+                <button
+                  type="button"
+                  onClick={() => router.push(savedOriginal?.links?.profile || "/candidate/profile")}
+                  className="inline-flex h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                >
+                  Mở Hồ sơ cá nhân
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.push(savedOriginal?.links?.cvBuilder || "/candidate/cv-builder")}
+                  className="inline-flex h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                >
+                  Về danh sách CV Builder
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {errorMessage ? (
+            <div className="space-y-1.5">
+              <p className="text-[13px] font-semibold text-rose-700">Không thể lưu CV ứng tuyển</p>
+              <p className="text-[12px] leading-5 text-rose-700">{errorMessage}</p>
+            </div>
+          ) : null}
+
+          {staleMessage && !errorMessage ? (
+            <div className="space-y-1.5">
+              <p className="text-[13px] font-semibold text-amber-700">Tiến trình xử lý đang chậm</p>
+              <p className="text-[12px] leading-5 text-amber-700">{staleMessage}</p>
+            </div>
+          ) : null}
+        </div>
+      )}
+
       <div className="min-h-0 flex-1">
         <PersistedOcrReviewPanel
           key={detail.document.id}
@@ -166,7 +340,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                   type="button"
                   onClick={() => setAllowPartial((current) => !current)}
                   className={cn(
-                    "inline-flex h-8 items-center rounded-[16px] border px-3 text-[12px] font-medium transition-colors",
+                    "inline-flex h-8 items-center rounded-2xl border px-3 text-[12px] font-medium transition-colors",
                     allowPartial
                       ? "border-cyan-200 bg-cyan-50 text-cyan-700"
                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
@@ -182,7 +356,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                   type="button"
                   onClick={() => setOverrideNonCv((current) => !current)}
                   className={cn(
-                    "inline-flex h-8 items-center rounded-[16px] border px-3 text-[12px] font-medium transition-colors",
+                    "inline-flex h-8 items-center rounded-2xl border px-3 text-[12px] font-medium transition-colors",
                     overrideNonCv
                       ? "border-cyan-200 bg-cyan-50 text-cyan-700"
                       : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50",
@@ -199,10 +373,17 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                 </span>
               ) : null}
 
-              {errorMessage ? (
-                <span className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-medium text-rose-700">
-                  {errorMessage}
-                </span>
+              {canStartAnalysis ? (
+                <button
+                  type="button"
+                  onClick={() => void handleStartAnalysis()}
+                  disabled={isAnalyzing}
+                  className="inline-flex h-8 items-center gap-2 rounded-2xl bg-slate-900 px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  title="Bắt đầu OCR và trích xuất JSON"
+                >
+                  {isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  Trích xuất JSON
+                </button>
               ) : null}
 
               <button
@@ -221,7 +402,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                   type="button"
                   onClick={() => void handleRetry()}
                   disabled={isRetrying}
-                  className="inline-flex h-8 items-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex h-8 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {isRetrying ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
                   Thu lai
@@ -233,7 +414,7 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
                   href={originalArtifact.download_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex h-8 items-center gap-2 rounded-[16px] border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                  className="inline-flex h-8 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50"
                 >
                   File goc
                   <ExternalLink size={14} />
@@ -242,13 +423,34 @@ export function ImportReviewClient({ documentId, initialData }: ImportReviewClie
 
               <button
                 type="button"
+                onClick={() => void handleSaveOriginal()}
+                disabled={!detail.editor_eligibility.can_save_original || isSavingOriginal}
+                className="inline-flex h-8 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                title="Lưu CV gốc vào Hồ sơ cá nhân để dùng khi ứng tuyển"
+              >
+                {isSavingOriginal ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                Lưu vào hồ sơ ứng viên
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push(`/documents/${documentId}/edit`)}
+                disabled={!canOpenSourceEditor}
+                className="inline-flex h-8 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FilePenLine size={14} />
+                Edit source file
+              </button>
+
+              <button
+                type="button"
                 onClick={() => void handleOpenEditor()}
                 disabled={!canOpenEditor || isSaving}
                 title={eligibilityNote || errorMessage || undefined}
-                className="inline-flex h-8 items-center gap-2 rounded-[16px] bg-slate-900 px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                className="inline-flex h-8 items-center gap-2 rounded-2xl bg-slate-900 px-3.5 text-[12px] font-semibold text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                Chuyen sang editor
+                Chuyen sang TipTap
               </button>
             </>
           }

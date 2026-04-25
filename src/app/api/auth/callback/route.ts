@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/utils/supabase/server'
+import { getCanonicalAppOrigin } from '@/lib/url/canonical-origin'
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
+  const origin = getCanonicalAppOrigin(request.url)
   const code = searchParams.get('code')
 
   if (code) {

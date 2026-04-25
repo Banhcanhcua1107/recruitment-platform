@@ -8,6 +8,7 @@ import type { RecruitmentPipelineStatus } from "@/types/recruitment";
 
 const FILTERS: Array<{ value: "all" | RecruitmentPipelineStatus; label: string }> = [
   { value: "all", label: "Tất cả" },
+  { value: "new", label: "Mới" },
   { value: "applied", label: "Đã nộp" },
   { value: "reviewing", label: "Đang xem xét" },
   { value: "interview", label: "Phỏng vấn" },
@@ -20,6 +21,7 @@ const STATUS_BADGES: Record<
   RecruitmentPipelineStatus,
   { label: string; className: string }
 > = {
+  new: { label: "Mới", className: "bg-slate-100 text-slate-700 border-slate-200" },
   applied: { label: "Đã nộp", className: "bg-sky-50 text-sky-700 border-sky-200" },
   reviewing: {
     label: "Đang xem xét",

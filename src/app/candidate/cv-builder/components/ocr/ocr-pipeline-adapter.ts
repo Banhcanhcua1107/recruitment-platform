@@ -7,6 +7,7 @@ import {
   hasMeaningfulDraftData,
   transformParsedCVToDraft,
 } from "./ocr-types";
+import { normalizeCvSections } from "../../section-normalization";
 import { toLegacyCompatibleBlocks } from "@/features/cv-import/transforms/block-layout";
 import type { CVSection } from "../../types";
 
@@ -328,7 +329,9 @@ export function adaptUploadCVResponseToLegacyState(
   return {
     rawBlocks,
     draftData,
-    backendSections: response.builder_sections?.length ? response.builder_sections : null,
+    backendSections: response.builder_sections?.length
+      ? normalizeCvSections(response.builder_sections)
+      : null,
     detectedSections: response.detected_sections || [],
     documentType,
     documentContent,

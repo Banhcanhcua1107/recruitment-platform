@@ -2,9 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getTemplates, createResume, TemplateRow } from "../api";
+import { getTemplates, TemplateRow } from "../api";
+import { createResume } from "../route-api";
 import { ArrowLeft, Loader2, CheckCircle2, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 const CATEGORY_LABELS: Record<string, string> = {
   all:      "Tất cả",
@@ -15,6 +17,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function NewCVPage() {
   const router = useRouter();
+  const { alert } = useAppDialog();
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -42,7 +45,12 @@ export default function NewCVPage() {
       }
     } catch (err) {
       console.error("Không thể tạo CV:", err);
-      alert("Có lỗi xảy ra. Vui lòng thử lại!");
+      await alert({
+        title: "Không thể tạo CV",
+        description: "Có lỗi xảy ra. Vui lòng thử lại!",
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
       setCreating(false);
     }
   };

@@ -3,8 +3,9 @@ import "server-only";
 import { calculateCandidateProfileCompletion } from "@/lib/candidate-profile-shared";
 import { getCurrentCandidateProfile } from "@/lib/candidate-profiles";
 import { getCandidateApplicationsList } from "@/lib/applications";
-import { getAllJobs } from "@/lib/jobs";
+import { getFreshPublicJobs } from "@/lib/jobs";
 import type { CandidateDashboardData } from "@/types/candidate-dashboard";
+import type { RecruitmentPipelineStatus } from "@/types/recruitment";
 import { createClient } from "@/utils/supabase/server";
 
 const PROFILE_VIEWS_SCHEMA_MARKERS = [
@@ -29,6 +30,30 @@ function isSchemaError(error: unknown, markers: string[]) {
   return markers.some((marker) => message.includes(marker.toLowerCase()));
 }
 
+function normalizeDashboardStatus(status: string): RecruitmentPipelineStatus {
+  switch (status) {
+    case "pending":
+    case "new":
+    case "applied":
+      return "applied";
+    case "viewed":
+    case "reviewing":
+      return "reviewing";
+    case "interviewing":
+    case "interview":
+      return "interview";
+    case "offered":
+    case "offer":
+      return "offer";
+    case "hired":
+      return "hired";
+    case "rejected":
+      return "rejected";
+    default:
+      return "applied";
+  }
+}
+
 export async function getCandidateDashboardData(): Promise<CandidateDashboardData> {
   const supabase = await createClient();
   const {
@@ -51,7 +76,7 @@ export async function getCandidateDashboardData(): Promise<CandidateDashboardDat
   ] = await Promise.all([
     getCurrentCandidateProfile(),
     getCandidateApplicationsList(),
-    getAllJobs(),
+    getFreshPublicJobs(),
     supabase
       .from("saved_jobs")
       .select("id", { count: "exact", head: true })
@@ -90,7 +115,9 @@ export async function getCandidateDashboardData(): Promise<CandidateDashboardDat
   }
 
   const completionPercentage = calculateCandidateProfileCompletion(profile);
-  const interviews = recentApplications.filter((application) => application.status === "interview").length;
+  const interviews = recentApplications.filter(
+    (application) => normalizeDashboardStatus(application.status) === "interview"
+  ).length;
 
   return {
     user: {
@@ -108,7 +135,22 @@ export async function getCandidateDashboardData(): Promise<CandidateDashboardDat
       savedJobs: savedJobsCount ?? 0,
     },
     notificationCount: unreadNotificationCount ?? 0,
-    recentApplications: recentApplications.slice(0, 5),
+    recentApplications: recentApplications.slice(0, 5).map((application) => ({
+      id: application.id,
+      jobId: application.job_id,
+      status: normalizeDashboardStatus(application.status),
+      appliedAt: application.created_at,
+      createdAt: application.created_at,
+      updatedAt: application.created_at,
+      job: {
+        id: application.job.id,
+        title: application.job.title,
+        companyName: application.job.company_name,
+        logoUrl: application.job.logo_url ?? null,
+        salary: application.job.salary ?? null,
+        location: application.job.location ?? null,
+      },
+    })),
     recommendedJobs: recommendedJobs.slice(0, 6),
     cvs: (resumeRows ?? []).map((resume) => ({
       id: String(resume.id),

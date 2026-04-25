@@ -32,7 +32,7 @@ export default async function ApplicationDetailPage({
           Trang chu
         </Link>
         <span className="material-symbols-outlined text-sm">chevron_right</span>
-        <Link href="/candidate/applications" className="hover:text-primary">
+        <Link href="/candidate/jobs/applied" className="hover:text-primary">
           Don ung tuyen cua toi
         </Link>
         <span className="material-symbols-outlined text-sm">chevron_right</span>

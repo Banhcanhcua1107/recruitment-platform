@@ -1,6 +1,6 @@
 import "server-only";
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   getValueAtPath,
@@ -12,10 +12,15 @@ import {
 } from "@/features/cv-import/sync/strategies";
 import {
   extractLayoutMeta,
-  groupBlocksToParagraphs,
   toGroupableLayoutBlockFromRecord,
   withLayoutMeta,
 } from "@/features/cv-import/transforms/block-layout";
+import {
+  buildEditableDocumentRegionsFromBlocks,
+  buildEditableRegionDraftsFromSource,
+  filterLayoutImageCandidates,
+  withEditableRegionChildren,
+} from "@/features/cv-import/transforms/editable-regions";
 import {
   getCVDocumentArtifactsForUser,
   getCVDocumentPagesForUser,
@@ -27,6 +32,7 @@ import type {
   BoundingBox,
   CreateEditableVersionResponse,
   CVArtifactRecord,
+  CVLayoutBlockRecord,
   CVOCRBlockRecord,
   EditableCVBlockMappingRecord,
   EditableCVBlockRecord,
@@ -44,12 +50,14 @@ import type {
   SaveEditableCVResponse,
   SyncStrategy,
   UpdateEditableBlockRequest,
+  UpdateEditableBlockAssetResponse,
   UpdateEditableBlockResponse,
   UpdateEditableJSONRequest,
   UpdateEditableJSONResponse,
 } from "@/types/cv-import";
 
 type MappingRow = EditableCVBlockMappingRecord;
+const EDITABLE_CV_ASSETS_BUCKET = "cv-exports";
 
 function createConflictError(message: string, details?: Record<string, unknown>) {
   const error = new Error(message) as Error & {
@@ -69,6 +77,22 @@ async function createSignedUrl(bucket: string, path: string | null, expiresIn = 
     return null;
   }
   return data.signedUrl;
+}
+
+function computeSha256(buffer: Buffer) {
+  return createHash("sha256").update(buffer).digest("hex");
+}
+
+function normalizeAssetExtension(fileName: string, contentType: string) {
+  const fromName = fileName.split(".").pop()?.trim().toLowerCase();
+  if (fromName && /^[a-z0-9]{2,5}$/.test(fromName)) {
+    return fromName;
+  }
+
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  if (contentType === "image/gif") return "gif";
+  return "jpg";
 }
 
 function buildFallbackMapping(block: CVOCRBlockRecord): Array<{
@@ -124,6 +148,24 @@ async function getOcrBlocksForDocument(documentId: string) {
 
   if (error) throw new Error(error.message);
   return (data ?? []) as CVOCRBlockRecord[];
+}
+
+async function getLayoutBlocksForDocument(documentId: string) {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from("cv_layout_blocks")
+    .select("*")
+    .eq("document_id", documentId)
+    .order("order_index", { ascending: true });
+
+  if (error) {
+    logger.warn("editable-cvs.layout-blocks.unavailable", {
+      document_id: documentId,
+      error: error.message,
+    });
+    return [];
+  }
+  return (data ?? []) as CVLayoutBlockRecord[];
 }
 
 async function getEditableCVRecordForUser(userId: string, editableCvId: string) {
@@ -352,6 +394,31 @@ function uniqueMappingsForGroupedBlocks(blocks: CVOCRBlockRecord[]) {
   return [...deduped.values()].sort((left, right) => left.sequence - right.sequence);
 }
 
+function layoutBlockLooksLikeImage(block: CVLayoutBlockRecord) {
+  if (/(avatar|image|figure|photo|picture|graphic|logo|illustration|signature)/i.test(block.type)) {
+    return true;
+  }
+
+  const kind =
+    block.metadata && typeof block.metadata === "object" && typeof block.metadata.kind === "string"
+      ? block.metadata.kind
+      : "";
+  const category =
+    block.metadata &&
+    typeof block.metadata === "object" &&
+    typeof block.metadata.category === "string"
+      ? block.metadata.category
+      : "";
+
+  return /(avatar|image|figure|photo|picture|graphic|logo|illustration|signature)/i.test(
+    `${kind} ${category}`,
+  );
+}
+
+function editableBlockLooksLikeImage(type: string) {
+  return /(avatar|image|figure|photo|picture|graphic|logo|illustration|signature)/i.test(type);
+}
+
 export async function createEditableCVFromDocument(
   userId: string,
   documentId: string,
@@ -404,9 +471,10 @@ export async function createEditableCVFromDocument(
     throw new Error("Document is not ready to be converted into an editable CV.");
   }
 
-  const [pages, ocrBlocks] = await Promise.all([
+  const [pages, ocrBlocks, layoutBlocks] = await Promise.all([
     getCVDocumentPagesForUser(userId, documentId),
     getOcrBlocksForDocument(documentId),
+    getLayoutBlocksForDocument(documentId),
   ]);
 
   const editableCvId = randomUUID();
@@ -433,52 +501,71 @@ export async function createEditableCVFromDocument(
     };
   });
 
-  const groupedEditableBlocks = groupBlocksToParagraphs(
-    ocrBlocks
-      .filter((block) => pageIdByDocumentPageId.has(block.page_id))
-      .map((block) =>
-        toGroupableLayoutBlockFromRecord(block, pageNumberByDocumentPageId.get(block.page_id) ?? 1)
+  const groupableOcrBlocks = ocrBlocks
+    .filter((block) => pageIdByDocumentPageId.has(block.page_id))
+    .map((block) =>
+      toGroupableLayoutBlockFromRecord(block, pageNumberByDocumentPageId.get(block.page_id) ?? 1)
+    );
+  const imageLayoutCandidates = filterLayoutImageCandidates(
+    layoutBlocks
+      .filter(
+        (block) => pageIdByDocumentPageId.has(block.page_id) && layoutBlockLooksLikeImage(block),
       )
+      .map((block) => ({
+        id: block.id,
+        page: pageNumberByDocumentPageId.get(block.page_id) ?? 1,
+        type: block.type,
+        confidence:
+          typeof block.metadata?.confidence === "number"
+            ? (block.metadata.confidence as number)
+            : null,
+        bbox_px: block.bbox_px,
+        bbox_normalized: block.bbox_normalized,
+      })),
+    groupableOcrBlocks,
   );
-
+  const regionDrafts = buildEditableRegionDraftsFromSource(
+    groupableOcrBlocks,
+    imageLayoutCandidates,
+  );
   const sourceOcrBlockById = new Map(ocrBlocks.map((block) => [block.id, block]));
-  const groupedEditablePairs = groupedEditableBlocks
-    .map((block) => {
-      const pageId = editablePageIdByPageNumber.get(block.page);
+  const groupedEditablePairs = regionDrafts
+    .map((draft) => {
+      const pageId = editablePageIdByPageNumber.get(draft.page);
       if (!pageId) return null;
       const timestamp = new Date().toISOString();
       return {
-        grouped: block,
+        grouped: draft,
         editable: {
           id: randomUUID(),
           editable_cv_id: editableCvId,
           page_id: pageId,
-          source_ocr_block_id: block.sourceBlocks[0]?.id ?? null,
-          type: block.type || "text",
-          original_text: block.text,
-          edited_text: block.text,
-          confidence: block.confidence,
-          bbox_px: block.bbox_px as BoundingBox,
-          bbox_normalized: block.bbox_normalized as BoundingBox,
-          style_json: withLayoutMeta({}, block.meta),
+          source_ocr_block_id: draft.type === "text" ? draft.block_ids[0] ?? null : null,
+          type: draft.block_type || (draft.type === "image" ? "image" : "text"),
+          original_text: draft.type === "text" ? draft.text : null,
+          edited_text: draft.type === "text" ? draft.text : null,
+          confidence: draft.confidence,
+          bbox_px: draft.bbox_px as BoundingBox,
+          bbox_normalized: draft.bbox_normalized as BoundingBox,
+          style_json: withEditableRegionChildren(withLayoutMeta({}, draft.meta), draft.children),
           asset_artifact_id: null,
           locked: false,
-          sequence: block.meta.reading_order,
+          sequence: draft.meta.reading_order,
           created_at: timestamp,
           updated_at: timestamp,
         },
       };
     })
     .filter(Boolean) as Array<{
-    grouped: (typeof groupedEditableBlocks)[number];
+    grouped: (typeof regionDrafts)[number];
     editable: {
       id: string;
       editable_cv_id: string;
       page_id: string;
       source_ocr_block_id: string | null;
       type: string;
-      original_text: string;
-      edited_text: string;
+      original_text: string | null;
+      edited_text: string | null;
       confidence: number | null;
       bbox_px: BoundingBox;
       bbox_normalized: BoundingBox;
@@ -493,6 +580,7 @@ export async function createEditableCVFromDocument(
   const editableBlocks = groupedEditablePairs.map((pair) => pair.editable);
 
   const editableMappings = groupedEditablePairs.flatMap(({ grouped, editable }) => {
+    if (grouped.type !== "text") return [];
     const sourceBlocks = grouped.meta.source_block_ids
       .map((sourceId) => sourceOcrBlockById.get(sourceId))
       .filter(Boolean) as CVOCRBlockRecord[];
@@ -650,6 +738,11 @@ export async function getEditableCVDetailForUser(
             };
           })
       );
+      const orderedBlocks = pageBlocks.sort(
+        (left, right) =>
+          (left.reading_order ?? left.mappings[0]?.sequence ?? 0) -
+          (right.reading_order ?? right.mappings[0]?.sequence ?? 0),
+      );
 
       return {
         page_number: page.page_number,
@@ -659,11 +752,8 @@ export async function getEditableCVDetailForUser(
           backgroundArtifact?.storage_bucket ?? "",
           backgroundArtifact?.storage_path ?? null
         ),
-        blocks: pageBlocks.sort(
-          (left, right) =>
-            (left.reading_order ?? left.mappings[0]?.sequence ?? 0) -
-            (right.reading_order ?? right.mappings[0]?.sequence ?? 0)
-        ),
+        blocks: orderedBlocks,
+        regions: buildEditableDocumentRegionsFromBlocks(orderedBlocks),
       };
     })
   );
@@ -823,6 +913,131 @@ export async function updateEditableBlockForUser(
       updated_at: updatedBlock.updated_at,
     },
     updated_json_delta: delta,
+    autosave_revision: nextRevision,
+  };
+}
+
+export async function replaceEditableBlockAssetForUser(
+  userId: string,
+  editableCvId: string,
+  blockId: string,
+  file: File | null,
+): Promise<UpdateEditableBlockAssetResponse> {
+  const admin = createAdminClient();
+  const editableCv = await getEditableCVRecordForUser(userId, editableCvId);
+  if (!editableCv) throw new Error("Editable CV not found.");
+
+  const blocks = await getEditableCVBlocks(editableCvId);
+  const block = blocks.find((item) => item.id === blockId);
+  if (!block) throw new Error("Editable block not found.");
+  if (!editableBlockLooksLikeImage(block.type) && !block.asset_artifact_id) {
+    throw new Error("This block does not support image replacement.");
+  }
+
+  const blockMeta = extractLayoutMeta(block.style_json ?? {});
+  const nextBlockVersion = blockMeta.version + 1;
+  const nextUpdatedAt = new Date().toISOString();
+  let nextAssetArtifactId: string | null = null;
+  let nextAssetImageUrl: string | null = null;
+
+  if (file) {
+    const contentType = file.type || "image/jpeg";
+    if (!contentType.startsWith("image/")) {
+      throw new Error("Only image files can replace an image region.");
+    }
+
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const sha256 = computeSha256(fileBuffer);
+    const artifactId = randomUUID();
+    const extension = normalizeAssetExtension(file.name, contentType);
+    const storagePath = `${userId}/${editableCvId}/assets/${blockId}/${artifactId}.${extension}`;
+
+    const { error: uploadError } = await admin.storage
+      .from(EDITABLE_CV_ASSETS_BUCKET)
+      .upload(storagePath, fileBuffer, {
+        contentType,
+        upsert: true,
+      });
+    if (uploadError) throw new Error(uploadError.message);
+
+    const { error: artifactError } = await admin.from("cv_document_artifacts").insert({
+      id: artifactId,
+      document_id: editableCv.document_id,
+      artifact_key: `${editableCv.document_id}:normalized_source:block-${blockId}:${sha256}`,
+      kind: "normalized_source",
+      status: "ready",
+      storage_bucket: EDITABLE_CV_ASSETS_BUCKET,
+      storage_path: storagePath,
+      content_type: contentType,
+      byte_size: fileBuffer.length,
+      sha256,
+      source_stage: "export",
+      metadata: {
+        editable_cv_id: editableCvId,
+        block_id: blockId,
+        source: "editable_block_asset",
+      },
+    });
+    if (artifactError) throw new Error(artifactError.message);
+
+    nextAssetArtifactId = artifactId;
+    nextAssetImageUrl = await createSignedUrl(EDITABLE_CV_ASSETS_BUCKET, storagePath);
+  }
+
+  const { data: updatedBlockRow, error: blockUpdateError } = await admin
+    .from("editable_cv_blocks")
+    .update({
+      asset_artifact_id: nextAssetArtifactId,
+      style_json: withLayoutMeta(block.style_json ?? {}, {
+        version: nextBlockVersion,
+        lock_state: blockMeta.lock_state,
+      }),
+      updated_at: nextUpdatedAt,
+    })
+    .eq("id", blockId)
+    .eq("editable_cv_id", editableCvId)
+    .eq("updated_at", block.updated_at)
+    .select("id")
+    .maybeSingle();
+
+  if (blockUpdateError) throw new Error(blockUpdateError.message);
+  if (!updatedBlockRow) {
+    throw createConflictError("Block version conflict", {
+      expected_block_version: blockMeta.version,
+      current_block_version: blockMeta.version,
+    });
+  }
+
+  const nextRevision = editableCv.autosave_revision + 1;
+  const { data: updatedEditableRow, error: editableUpdateError } = await admin
+    .from("editable_cvs")
+    .update({
+      autosave_revision: nextRevision,
+      updated_at: nextUpdatedAt,
+    })
+    .eq("id", editableCvId)
+    .eq("user_id", userId)
+    .eq("autosave_revision", editableCv.autosave_revision)
+    .select("id")
+    .maybeSingle();
+
+  if (editableUpdateError) throw new Error(editableUpdateError.message);
+  if (!updatedEditableRow) {
+    throw createConflictError("Revision conflict", {
+      expected_revision: editableCv.autosave_revision,
+      current_revision: editableCv.autosave_revision,
+    });
+  }
+
+  return {
+    block: {
+      id: blockId,
+      asset_artifact_id: nextAssetArtifactId,
+      asset_image_url: nextAssetImageUrl,
+      version: nextBlockVersion,
+      lock_state: blockMeta.lock_state,
+      updated_at: nextUpdatedAt,
+    },
     autosave_revision: nextRevision,
   };
 }

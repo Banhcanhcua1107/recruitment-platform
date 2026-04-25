@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { ApplicationForm } from "@/components/jobs/ApplicationForm";
 
 interface ApplicationModalProps {
@@ -35,7 +36,7 @@ export function ApplicationModal({
   }, [onClose]);
 
   return createPortal(
-    <div className="fixed inset-0 z-[120] grid place-items-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-120 grid place-items-center p-3 sm:p-6">
       <button
         type="button"
         aria-label="Đóng cửa sổ ứng tuyển"
@@ -43,7 +44,7 @@ export function ApplicationModal({
         className="absolute inset-0 bg-slate-950/60"
       />
 
-      <div className="relative z-[121] flex h-[min(calc(100dvh-0.75rem),980px)] w-full max-w-[680px] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_32px_80px_-40px_rgba(15,23,42,0.42)] sm:h-auto sm:max-h-[90vh]">
+      <div className="relative z-121 flex h-[min(calc(100dvh-0.75rem),980px)] w-full max-w-170 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_32px_80px_-40px_rgba(15,23,42,0.42)] sm:h-auto sm:max-h-[90vh]">
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
@@ -64,7 +65,7 @@ export function ApplicationModal({
               className="inline-flex size-11 shrink-0 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-950"
               aria-label="Đóng"
             >
-              <span className="material-symbols-outlined">close</span>
+              <X className="size-5" aria-hidden="true" />
             </button>
           </div>
         </div>

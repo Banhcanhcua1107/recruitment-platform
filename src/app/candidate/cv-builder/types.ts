@@ -1,6 +1,8 @@
 
 export type CVMode = 'template' | 'canvas';
 
+export type CVThemePatternId = 'dots' | 'grid' | 'diagonal' | 'waves';
+
 export interface CVProfile {
   id: string;
   userId: string;
@@ -25,12 +27,17 @@ export interface CVContent {
       secondary?: string;
       text: string;
       background: string;
+      pattern?: string;
     };
     fonts: {
       heading: string;
       body: string;
     };
     spacing: number; // Base multiplier (e.g., 4px)
+    appearance?: {
+      patternId?: CVThemePatternId;
+      syncPatternWithPrimary?: boolean;
+    };
   };
   // For Canvas mode, we might trust specific x/y. For Template, strict order.
   layout: {
@@ -68,6 +75,13 @@ export interface CVSection {
   // The actual data payload. Discriminated union could be used here for stricter typing
   data: AnySectionData; 
   
+}
+
+export interface CVSelectedSectionItem {
+  sectionId: string;
+  itemIndex: number;
+  itemId: string | null;
+  itemPath: string;
 }
   
  // Style definitions
