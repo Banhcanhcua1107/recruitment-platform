@@ -13,66 +13,29 @@ import {
   normalizeResumeTitleForCommit,
   resolveResumeEditorTitle,
 } from "../../resume-editor-persistence";
+import {
+  normalizeThemeAppearance,
+  normalizeThemeFonts,
+  normalizeThemeSpacing,
+} from "../../theme-normalization";
 import { useCVStore } from "../../store";
 import type { CVContent, CVSection } from "../../types";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 const AUTOSAVE_DELAY = 1500;
 
 type SaveStatus = "idle" | "saving" | "saved";
 
-function normalizeThemeFonts(rawFonts: unknown): CVContent["theme"]["fonts"] | undefined {
-  if (typeof rawFonts === "string") {
-    const normalized = rawFonts.trim();
-    if (!normalized) {
-      return undefined;
-    }
-
-    return {
-      heading: normalized,
-      body: normalized,
-    };
-  }
-
-  if (!rawFonts || typeof rawFonts !== "object") {
-    return undefined;
-  }
-
-  const fonts = rawFonts as Record<string, unknown>;
-  const normalizedBody = typeof fonts.body === "string" ? fonts.body.trim() : "";
-  const normalizedHeading = typeof fonts.heading === "string" ? fonts.heading.trim() : "";
-  const body = normalizedBody || normalizedHeading;
-  const heading = normalizedHeading || normalizedBody;
-
-  if (!body || !heading) {
-    return undefined;
-  }
-
-  return {
-    heading,
-    body,
-  };
-}
-
-function normalizeThemeSpacing(rawSpacing: unknown) {
-  if (typeof rawSpacing !== "number" || !Number.isFinite(rawSpacing)) {
-    return undefined;
-  }
-
-  if (rawSpacing <= 0) {
-    return undefined;
-  }
-
-  return rawSpacing;
-}
-
 export default function EditCVPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { loadResumeIntoStore, cv, undo, redo, historyIndex, history, isDirty, exportRootJson } = useCVStore();
+  const { alert } = useAppDialog();
 
   const [resume, setResume] = useState<ResumeRow | null>(null);
   const [draftResumeTitle, setDraftResumeTitle] = useState("");
   const [loadError, setLoadError] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -137,6 +100,7 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
               : undefined,
           fonts: normalizeThemeFonts(currentStyling.fonts),
           spacing: normalizeThemeSpacing(currentStyling.spacing),
+          appearance: normalizeThemeAppearance(currentStyling.appearance),
         };
 
         loadResumeIntoStore(mappedSections, themeStyling, editorTemplateId);
@@ -239,23 +203,36 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
     }
   }, [cv, exportRootJson, normalizedResumeTitle, resume]);
 
-  const handleExportRootJson = useCallback(() => {
-    if (!cv) {
+  const handleDownloadPdf = useCallback(async () => {
+    if (!resume) {
       return;
     }
 
-    const rootJson = exportRootJson();
-    const timestamp = new Date().toISOString().replace(/[.:]/g, "-");
-    const baseTitle = normalizedResumeTitle.trim().replace(/\s+/g, "-").toLowerCase();
-    const fileName = `${baseTitle || "cv"}-root-json-${timestamp}.json`;
-    const blob = new Blob([JSON.stringify(rootJson, null, 2)], { type: "application/json" });
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = objectUrl;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(objectUrl);
-  }, [cv, exportRootJson, normalizedResumeTitle]);
+    try {
+      setIsDownloadingPdf(true);
+      const { downloadResumePdf } = await import("../../download-resume-pdf");
+      const previewRoot = document.querySelector<HTMLElement>("[data-cv-preview-canvas-root='true']");
+      await downloadResumePdf({
+        resumeId: resume.id,
+        fallbackTitle: normalizedResumeTitle,
+        previewRootElement: previewRoot,
+      });
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : "Khong the tai CV PDF.";
+      const message = /unsupported color function|oklch|oklab/i.test(rawMessage)
+        ? "Trang dang giu bo nho tam script cu. Hay tai lai trang (Ctrl+F5) roi thu tai PDF lai."
+        : rawMessage;
+      console.error("Tai CV PDF that bai:", error);
+      await alert({
+        title: "Tải PDF thất bại",
+        description: message,
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  }, [normalizedResumeTitle, resume]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -324,7 +301,8 @@ export default function EditCVPage({ params }: { params: Promise<{ id: string }>
             setSaveStatus("idle");
           }}
           onOpenOCR={() => setOcrModalOpen(true)}
-          onDownload={handleExportRootJson}
+          onDownload={() => void handleDownloadPdf()}
+          isDownloading={isDownloadingPdf}
         />
       </div>
 

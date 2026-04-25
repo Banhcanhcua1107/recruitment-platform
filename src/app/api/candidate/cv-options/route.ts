@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listCandidateCvOptions } from "@/lib/applications";
+import { listCandidateCvOptions } from "@/lib/candidate-cv-options";
 
 export const runtime = "nodejs";
 

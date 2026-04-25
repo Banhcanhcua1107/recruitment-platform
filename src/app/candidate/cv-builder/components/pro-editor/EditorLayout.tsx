@@ -11,7 +11,7 @@ import { EditorRightPanel } from "@/app/candidate/cv-builder/components/pro-edit
 import { JsonDebugPanel } from "@/app/candidate/cv-builder/components/pro-editor/JsonDebugPanel";
 import type { ModalSectionCatalogItem } from "@/app/candidate/cv-builder/components/pro-editor/template-schema";
 import { CV_TEMPLATE_LIBRARY_UI } from "@/components/cv/templates/templateCatalog";
-import type { SectionType } from "../../types";
+import type { CVThemePatternId, SectionType } from "../../types";
 import { useCVStore } from "../../store";
 
 const PREVIEW_ZOOM_STEPS = [
@@ -61,6 +61,7 @@ export interface EditorLayoutProps {
   resumeTitle: string;
   saveStatus: "idle" | "saving" | "saved";
   isDirty: boolean;
+  isDownloading?: boolean;
   canUndo: boolean;
   canRedo: boolean;
   onUndo: () => void;
@@ -75,6 +76,7 @@ export function EditorLayout({
   resumeTitle,
   saveStatus,
   isDirty,
+  isDownloading = false,
   canUndo,
   canRedo,
   onUndo,
@@ -113,6 +115,10 @@ export function EditorLayout({
   const activeTemplateId = cv.meta.templateId ?? CV_TEMPLATE_LIBRARY_UI[0]?.id;
   const activeFontFamily = String(cv.theme.fonts.body || FONT_CHOICES[0]);
   const fontSizeMode = resolveFontSizeMode(Number(cv.theme.spacing || FONT_SIZE_BY_MODE.medium));
+  const activePrimaryColor = String(cv.theme.colors.primary || "#0f766e");
+  const activePatternColor = String(cv.theme.colors.pattern || cv.theme.colors.primary || "#94a3b8");
+  const activePatternId = (cv.theme.appearance?.patternId ?? "dots") as CVThemePatternId;
+  const syncPatternWithPrimary = cv.theme.appearance?.syncPatternWithPrimary ?? true;
 
   const openGeneralAddModal = () => {
     setInsertPosition(null);
@@ -138,10 +144,25 @@ export function EditorLayout({
     setMeta({ templateId });
 
     if (matchedTemplate) {
+      const preservedPrimary = String(cv.theme.colors.primary || matchedTemplate.templateStyles.colors.primary);
+      const preservedPattern = String(
+        cv.theme.colors.pattern
+        || matchedTemplate.templateStyles.colors.secondary
+        || matchedTemplate.templateStyles.colors.primary,
+      );
+
       updateTheme({
-        colors: { ...matchedTemplate.templateStyles.colors },
+        colors: {
+          ...matchedTemplate.templateStyles.colors,
+          primary: preservedPrimary,
+          pattern: preservedPattern,
+        },
         fonts: { ...matchedTemplate.templateStyles.fonts },
         spacing: matchedTemplate.templateStyles.spacing,
+        appearance: {
+          patternId: cv.theme.appearance?.patternId ?? "dots",
+          syncPatternWithPrimary: cv.theme.appearance?.syncPatternWithPrimary ?? true,
+        },
       });
     }
   };
@@ -159,6 +180,46 @@ export function EditorLayout({
   const handleSelectFontSizeMode = (mode: FontSizeMode) => {
     updateTheme({
       spacing: FONT_SIZE_BY_MODE[mode],
+    });
+  };
+
+  const handleSelectPrimaryColor = (primaryColor: string) => {
+    updateTheme({
+      colors: {
+        ...cv.theme.colors,
+        primary: primaryColor,
+      },
+    });
+  };
+
+  const handleSelectPatternId = (patternId: CVThemePatternId) => {
+    updateTheme({
+      appearance: {
+        ...cv.theme.appearance,
+        patternId,
+      },
+    });
+  };
+
+  const handleTogglePatternSync = (nextValue: boolean) => {
+    updateTheme({
+      appearance: {
+        ...cv.theme.appearance,
+        syncPatternWithPrimary: nextValue,
+      },
+    });
+  };
+
+  const handleSelectPatternColor = (patternColor: string) => {
+    updateTheme({
+      colors: {
+        ...cv.theme.colors,
+        pattern: patternColor,
+      },
+      appearance: {
+        ...cv.theme.appearance,
+        syncPatternWithPrimary: false,
+      },
     });
   };
 
@@ -229,12 +290,17 @@ export function EditorLayout({
         resumeTitle={resumeTitle}
         saveStatus={saveStatus}
         isDirty={isDirty}
+        isDownloading={isDownloading}
         canUndo={canUndo}
         canRedo={canRedo}
         activeTemplateId={activeTemplateId}
         fontFamily={activeFontFamily}
         fontOptions={[...FONT_CHOICES]}
         fontSizeMode={fontSizeMode}
+        primaryColor={activePrimaryColor}
+        patternColor={activePatternColor}
+        patternId={activePatternId}
+        syncPatternWithPrimary={syncPatternWithPrimary}
         onUndo={onUndo}
         onRedo={onRedo}
         onSave={onSave}
@@ -245,6 +311,10 @@ export function EditorLayout({
         onChangeTemplate={handleChangeTemplate}
         onChangeFontFamily={handleSelectFontFamily}
         onChangeFontSizeMode={handleSelectFontSizeMode}
+        onChangePrimaryColor={handleSelectPrimaryColor}
+        onChangePatternColor={handleSelectPatternColor}
+        onChangePatternId={handleSelectPatternId}
+        onTogglePatternSync={handleTogglePatternSync}
       />
 
       <div className="grid w-full min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden px-3 pb-6 pt-4 sm:px-4 lg:grid-cols-[minmax(0,62%)_minmax(0,38%)] lg:gap-3 lg:px-5">

@@ -66,6 +66,7 @@ export interface CVTemplateSectionStyleRule {
   icon: CVTemplateIconToken;
   titleVariant: CVSectionTitleVariant;
   iconShape: CVSectionIconShape;
+  layoutVariant?: "default" | "sidebar-reference";
   titleUppercase: boolean;
   borderClassName: string;
   backgroundClassName: string;
@@ -82,7 +83,7 @@ export interface CVTemplateSectionStyleRule {
 }
 
 export interface CVTemplateHeaderLayout {
-  variant: "reference-split";
+  variant: "reference-split" | "sidebar-profile";
   showAvatar: boolean;
   avatarSizeClassName: string;
   infoColumns: 1 | 2;

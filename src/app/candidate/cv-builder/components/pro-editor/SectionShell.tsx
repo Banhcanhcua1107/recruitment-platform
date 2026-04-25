@@ -104,7 +104,7 @@ function SectionTitle({ styleConfig }: { styleConfig: CVResolvedSectionStyleConf
         </span>
         <h3 className={cn("text-[22px] font-semibold leading-tight tracking-[-0.01em]", styleConfig.titleTextClassName)}>{titleText}</h3>
       </div>
-      <div className="mt-2 h-px bg-slate-300" />
+      <div className={cn("mt-2 h-px", styleConfig.dividerClassName)} />
     </div>
   );
 }

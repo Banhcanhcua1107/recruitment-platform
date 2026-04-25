@@ -6,27 +6,29 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import { FileText, Loader2, Search, UploadCloud } from "lucide-react";
-import {
-  ActionButton,
-  DashboardCard,
-  DataTableShell,
-  EmptyState,
-  StatusBadge,
-} from "@/components/app-shell";
+import { ActionButton } from "@/components/app-shell/ActionButton";
+import { DashboardCard } from "@/components/app-shell/DashboardCard";
+import { DataTableShell } from "@/components/app-shell/DataTableShell";
+import { EmptyState } from "@/components/app-shell/EmptyState";
+import { StatusBadge } from "@/components/app-shell/StatusBadge";
 import {
   createResume,
   deleteResume,
   getMyResumes,
   type ResumeRow,
 } from "./route-api";
-import { startCVImportAnalysis, uploadCVImport } from "@/features/cv-import/api/client";
-import { buildOptimisticImportReviewDetail } from "@/features/cv-import/review/import-review-detail";
+import {
+  getCandidateCvOptionsCached,
+  type CandidateCvOptionClientItem,
+} from "@/lib/client/candidate-cv-options";
+import type { CVSection } from "./types";
 import type { CVDocumentDetailResponse, CVImportSummaryResponse } from "@/types/cv-import";
 import { resolveDefaultResumeId } from "@/components/candidate/candidateWorkspaceContentModel";
 import {
   shouldLoadResumeList,
   shouldStartTemplateCreation,
 } from "./template-creation";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 const ImportReviewOverlayModal = dynamic(
   () =>
@@ -47,7 +49,26 @@ const PaddleOcrWorkspaceModal = dynamic(
   },
 );
 
+const CVPreviewCanvas = dynamic(
+  () =>
+    import("./components/pro-editor/CVPreviewCanvas").then(
+      (module) => module.CVPreviewCanvas,
+    ),
+  {
+    ssr: false,
+    loading: () => null,
+  },
+);
+
 const DEFAULT_RESUME_STORAGE_KEY = "talentflow:candidate:default-resume-id";
+const PDF_PREVIEW_ROOT_SELECTOR = "[data-cv-preview-canvas-root='true']";
+const PDF_PREVIEW_RENDER_TIMEOUT_MS = 5000;
+
+function waitForAnimationFrame() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
 
 const IMPORT_STATUS_LABELS: Record<CVImportSummaryResponse["document"]["status"], string> = {
   uploaded: "Đã upload",
@@ -102,14 +123,7 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-type CandidateCvOptionItem = {
-  path: string;
-  label: string;
-  createdAt: string;
-  source: "profile" | "uploaded" | "builder";
-  resumeId?: string;
-  downloadUrl?: string | null;
-};
+type CandidateCvOptionItem = CandidateCvOptionClientItem;
 
 type CVDashboardListItem =
   | {
@@ -129,26 +143,15 @@ type CVSourceFilter = "all" | "template" | "profile" | "application";
 type BuilderDashboardListItem = Extract<CVDashboardListItem, { kind: "builder" }>;
 type ExternalDashboardListItem = Extract<CVDashboardListItem, { kind: "external" }>;
 
-async function fetchCandidateCvOptions(): Promise<CandidateCvOptionItem[]> {
-  const response = await fetch("/api/candidate/cv-options", {
-    cache: "no-store",
-    credentials: "same-origin",
-  });
-
-  const payload = (await response.json()) as {
-    items?: CandidateCvOptionItem[];
-    error?: string;
-  };
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Khong the tai danh sach CV da upload.");
-  }
-
-  return Array.isArray(payload.items) ? payload.items : [];
-}
+type ResumePdfRenderState = {
+  resumeId: string;
+  sections: CVSection[];
+  templateId?: string;
+};
 
 function CVDashboardPageContent() {
   const router = useRouter();
+  const { alert, confirm } = useAppDialog();
   const searchParams = useSearchParams();
   const [resumes, setResumes] = useState<ResumeRow[]>([]);
   const [externalCvOptions, setExternalCvOptions] = useState<CandidateCvOptionItem[]>([]);
@@ -159,6 +162,7 @@ function CVDashboardPageContent() {
   const [searchKeyword, setSearchKeyword] = useState("");
   const [sortMode, setSortMode] = useState<"latest" | "name">("latest");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloadingResumeId, setDownloadingResumeId] = useState<string | null>(null);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [templateRedirectLoading, setTemplateRedirectLoading] = useState(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
@@ -167,10 +171,27 @@ function CVDashboardPageContent() {
   const [uploadedImport, setUploadedImport] = useState<CVImportSummaryResponse | null>(null);
   const [optimisticReviewDetail, setOptimisticReviewDetail] =
     useState<CVDocumentDetailResponse | null>(null);
+  const [pdfRenderState, setPdfRenderState] = useState<ResumePdfRenderState | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const pdfPreviewHostRef = useRef<HTMLDivElement | null>(null);
   const startedTemplateIdRef = useRef<string | null>(null);
   const importReviewDocumentId = searchParams.get("importReview");
   const templateId = searchParams.get("template");
+
+  const waitForPdfPreviewRoot = useCallback(async () => {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < PDF_PREVIEW_RENDER_TIMEOUT_MS) {
+      const previewRoot = pdfPreviewHostRef.current?.querySelector<HTMLElement>(PDF_PREVIEW_ROOT_SELECTOR);
+      if (previewRoot) {
+        return previewRoot;
+      }
+
+      await waitForAnimationFrame();
+    }
+
+    throw new Error("Khong the dung khung CV de tai PDF trong trang hien tai.");
+  }, []);
 
   const setImportReviewQuery = useCallback(
     (documentId: string | null) => {
@@ -194,7 +215,7 @@ function CVDashboardPageContent() {
       setLoading(true);
       const [resumeResult, optionsResult] = await Promise.allSettled([
         getMyResumes(),
-        fetchCandidateCvOptions(),
+        getCandidateCvOptionsCached(),
       ]);
 
       if (resumeResult.status === "rejected") {
@@ -260,7 +281,12 @@ function CVDashboardPageContent() {
         console.error("Khong the tao CV tu mau:", error);
         startedTemplateIdRef.current = null;
         if (!cancelled) {
-          alert("Khong the tao CV tu mau da chon. Vui long thu lai.");
+          await alert({
+            title: "Không thể tạo CV",
+            description: "Khong the tao CV tu mau da chon. Vui long thu lai.",
+            confirmText: "Đã hiểu",
+            tone: "danger",
+          });
           router.replace("/candidate/templates");
         }
       } finally {
@@ -275,7 +301,7 @@ function CVDashboardPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [router, templateId, templateRedirectLoading]);
+  }, [alert, router, templateId, templateRedirectLoading]);
 
   useEffect(() => {
     if (typeof window === "undefined" || loading) {
@@ -401,6 +427,10 @@ function CVDashboardPageContent() {
     try {
       setImportUploading(true);
       setSaveNotice("Dang tai CV len he thong...");
+      const [{ uploadCVImport }, { buildOptimisticImportReviewDetail }] = await Promise.all([
+        import("@/features/cv-import/api/client"),
+        import("@/features/cv-import/review/import-review-detail"),
+      ]);
       const response = await uploadCVImport(file, { startProcessing: false });
       setUploadedImport(response);
       setOptimisticReviewDetail(buildOptimisticImportReviewDetail(response));
@@ -408,7 +438,12 @@ function CVDashboardPageContent() {
       setImportReviewQuery(null);
     } catch (error) {
       console.error("Import CV that bai:", error);
-      alert("Khong the bat dau quy trinh import CV. Vui long thu lai.");
+      await alert({
+        title: "Import CV thất bại",
+        description: "Khong the bat dau quy trinh import CV. Vui long thu lai.",
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
       setSaveNotice(null);
     } finally {
       setImportUploading(false);
@@ -426,6 +461,10 @@ function CVDashboardPageContent() {
     try {
       setImportAnalyzingId(uploadedImport.document.id);
       setSaveNotice("Dang bat dau OCR va trich xuat JSON...");
+      const [{ startCVImportAnalysis }, { buildOptimisticImportReviewDetail }] = await Promise.all([
+        import("@/features/cv-import/api/client"),
+        import("@/features/cv-import/review/import-review-detail"),
+      ]);
       const response = await startCVImportAnalysis(uploadedImport.document.id);
       setUploadedImport(response);
       setOptimisticReviewDetail(buildOptimisticImportReviewDetail(response));
@@ -439,8 +478,28 @@ function CVDashboardPageContent() {
     }
   }, [setImportReviewQuery, uploadedImport]);
 
+  const handleOpenUploadedImportReview = useCallback(async () => {
+    if (!uploadedImport) {
+      return;
+    }
+
+    const { buildOptimisticImportReviewDetail } = await import(
+      "@/features/cv-import/review/import-review-detail"
+    );
+    setOptimisticReviewDetail(buildOptimisticImportReviewDetail(uploadedImport));
+    setImportReviewQuery(uploadedImport.document.id);
+  }, [setImportReviewQuery, uploadedImport]);
+
   const handleDeleteResume = async (resumeId: string) => {
-    if (!confirm("Ban chac chan muon xoa CV nay?")) {
+    const shouldDelete = await confirm({
+      title: "Xóa CV",
+      description: "Ban chac chan muon xoa CV nay?",
+      confirmText: "Xóa CV",
+      cancelText: "Hủy",
+      tone: "danger",
+    });
+
+    if (!shouldDelete) {
       return;
     }
 
@@ -481,6 +540,62 @@ function CVDashboardPageContent() {
     window.open(externalUrl, "_blank", "noopener,noreferrer");
   };
 
+  const handleDownloadBuilderResume = useCallback(async (resume: ResumeRow) => {
+    if (!resume?.id) {
+      setSaveNotice("Khong tim thay CV de tai.");
+      return;
+    }
+
+    try {
+      setDownloadingResumeId(resume.id);
+      const [
+        { getResumeById },
+        { downloadResumePdf },
+        { buildResumePdfPreviewData },
+        { useCVStore },
+      ] = await Promise.all([
+        import("./route-api"),
+        import("./download-resume-pdf"),
+        import("./pdf-preview-data"),
+        import("./store"),
+      ]);
+      const resumeDetail = await getResumeById(resume.id);
+      if (!resumeDetail) {
+        throw new Error("Khong tim thay du lieu CV de tai.");
+      }
+
+      const previewData = buildResumePdfPreviewData({
+        resume: resumeDetail,
+      });
+
+      useCVStore
+        .getState()
+        .loadResumeIntoStore(previewData.sections, previewData.themeStyling, previewData.templateId);
+      setPdfRenderState({
+        resumeId: resume.id,
+        sections: previewData.sections,
+        templateId: previewData.templateId,
+      });
+
+      await waitForAnimationFrame();
+      await waitForAnimationFrame();
+
+      const previewRoot = await waitForPdfPreviewRoot();
+      await downloadResumePdf({
+        resumeId: resume.id,
+        fallbackTitle: previewData.title,
+        previewRootElement: previewRoot,
+      });
+    } catch (error) {
+      console.error("Tai CV PDF that bai:", error);
+      const message = error instanceof Error ? error.message : "Khong the tai CV PDF.";
+      setSaveNotice(message);
+    } finally {
+      setDownloadingResumeId((current) => (current === resume.id ? null : current));
+      setPdfRenderState((current) => (current?.resumeId === resume.id ? null : current));
+    }
+  }, [waitForPdfPreviewRoot]);
+
   const sourceFilterOptions: Array<{ value: CVSourceFilter; label: string; count: number }> = [
     { value: "all", label: "Tất cả", count: sourceCounts.all },
     { value: "template", label: "Template web", count: sourceCounts.template },
@@ -518,6 +633,7 @@ function CVDashboardPageContent() {
         ? item.option.downloadUrl ||
           (item.option.source === "profile" ? "/api/candidate/profile/cv" : null)
         : null;
+    const isDownloadingBuilderResume = isBuilder && downloadingResumeId === item.resume.id;
     const isDefault = isBuilder && item.resume.id === defaultResumeId;
     const isSelected = isBuilder && item.resume.id === selectedResumeId;
     const isRecent = Date.now() - new Date(item.updatedAt).getTime() < 1000 * 60 * 60 * 24 * 7;
@@ -597,6 +713,12 @@ function CVDashboardPageContent() {
                       icon="edit"
                       label="Chỉnh sửa"
                       onClick={() => router.push(`/candidate/cv-builder/${item.resume.id}/edit`)}
+                    />
+                    <ActionIconButton
+                      icon={isDownloadingBuilderResume ? "hourglass_top" : "download"}
+                      label={isDownloadingBuilderResume ? "Đang tải PDF" : "Tải xuống PDF"}
+                      onClick={() => void handleDownloadBuilderResume(item.resume)}
+                      disabled={isDownloadingBuilderResume}
                     />
                     <ActionIconButton
                       icon="visibility"
@@ -735,10 +857,7 @@ function CVDashboardPageContent() {
               ) : null}
 
               <ActionButton
-                onClick={() => {
-                  setOptimisticReviewDetail(buildOptimisticImportReviewDetail(uploadedImport));
-                  setImportReviewQuery(uploadedImport.document.id);
-                }}
+                onClick={() => void handleOpenUploadedImportReview()}
                 variant="secondary"
                 size="sm"
                 icon={<span className="material-symbols-outlined text-[18px]">visibility</span>}
@@ -1015,6 +1134,30 @@ function CVDashboardPageContent() {
           </ActionButton>
         </div>
       </section>
+
+      {pdfRenderState ? (
+        <div
+          ref={pdfPreviewHostRef}
+          aria-hidden="true"
+          className="pointer-events-none fixed left-[-200vw] top-0 z-[-1] opacity-0"
+        >
+          <div className="w-fit">
+            <CVPreviewCanvas
+              sections={pdfRenderState.sections}
+              selectedSectionId={null}
+              onSelectSection={() => undefined}
+              onSelectSectionItem={undefined}
+              onUpdateSectionData={() => undefined}
+              onRequestAddSection={undefined}
+              onRemoveSection={undefined}
+              onMoveSectionUp={undefined}
+              onMoveSectionDown={undefined}
+              templateId={pdfRenderState.templateId}
+              mode="preview"
+            />
+          </div>
+        </div>
+      ) : null}
 
       <PaddleOcrWorkspaceModal isOpen={ocrModalOpen} onClose={() => setOcrModalOpen(false)} />
 

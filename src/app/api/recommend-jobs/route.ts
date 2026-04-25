@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { getAllJobs } from "@/lib/jobs";
-import { rankJobsWithGemini } from "@/lib/gemini";
+import { getLatestPublicJobSummaries } from "@/lib/public-job-summaries";
 import type { Job } from "@/types/job";
 import { recommendJobs, preFilterForGemini } from "@/lib/recommend";
-import { buildCandidateRecommendationText } from "@/lib/recommend/candidate-text";
+import {
+  buildCandidateRecommendationText,
+  buildCandidateRecommendationTextForUser,
+} from "@/lib/recommend/candidate-text";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +36,52 @@ interface RecommendationResponse {
 
 const TOP_K = 6;
 const GET_TOP_K = 5;
+const AUTH_GET_CACHE_TTL_MS = 30_000;
+const AUTH_GET_CACHE_MAX_ENTRIES = 80;
+
+type AuthGetCacheEntry = {
+  expiresAt: number;
+  promise: Promise<RecommendationResponse>;
+};
+
+const authGetCache = new Map<string, AuthGetCacheEntry>();
+
+function hasSupabaseAuthCookieHeader(request: Request) {
+  const cookieHeader = request.headers.get("cookie") || "";
+  return cookieHeader
+    .split(";")
+    .map((cookie) => cookie.trim().split("=")[0])
+    .some((name) => (
+      /^sb-.+-auth-token(?:\.\d+)?$/.test(name)
+      || name === "supabase-auth-token"
+      || /^supabase-auth-token\.\d+$/.test(name)
+    ));
+}
+
+function sweepAuthGetCache(now = Date.now()) {
+  for (const [key, entry] of authGetCache.entries()) {
+    if (entry.expiresAt <= now) {
+      authGetCache.delete(key);
+    }
+  }
+
+  while (authGetCache.size > AUTH_GET_CACHE_MAX_ENTRIES) {
+    const firstKey = authGetCache.keys().next().value;
+    if (!firstKey) {
+      break;
+    }
+    authGetCache.delete(firstKey);
+  }
+}
+
+function deleteAuthGetCache(userId: string) {
+  authGetCache.delete(userId);
+}
+
+async function getAllJobsForRecommendation(): Promise<Job[]> {
+  const { getAllJobs } = await import("@/lib/jobs");
+  return getAllJobs();
+}
 
 function normalizeStringList(value: unknown) {
   if (!Array.isArray(value)) {
@@ -204,59 +252,100 @@ function buildEmptyResponse(source: RecommendationResponse["source"] = "no-jobs"
   };
 }
 
+async function buildAuthenticatedGetResponse(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<RecommendationResponse> {
+  const { data: cached, error: cacheError } = await supabase
+    .from("job_recommendations")
+    .select("items, candidate_summary, suggested_roles, suggested_companies, updated_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (!cacheError && Array.isArray(cached?.items) && cached.items.length > 0) {
+    return {
+      candidateSummary: cached.candidate_summary ?? "",
+      suggestedRoles: cached.suggested_roles ?? [],
+      suggestedCompanies: cached.suggested_companies ?? [],
+      items: cached.items,
+      cachedAt: cached.updated_at,
+      source: "cache",
+    } satisfies RecommendationResponse;
+  }
+
+  const allJobs = await getAllJobsForRecommendation();
+
+  if (allJobs.length === 0) {
+    return buildEmptyResponse("no-jobs");
+  }
+
+  const candidateText = await buildCandidateRecommendationTextForUser(supabase, userId);
+  const fallback = buildRuleBasedFallback(candidateText, allJobs, GET_TOP_K);
+
+  if (fallback.items.length > 0) {
+    await supabase.from("job_recommendations").upsert(
+      {
+        user_id: userId,
+        items: fallback.items,
+        candidate_summary: fallback.candidateSummary,
+        suggested_roles: fallback.suggestedRoles,
+        suggested_companies: fallback.suggestedCompanies,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" },
+    );
+  }
+
+  return fallback;
+}
+
+function getAuthenticatedGetResponse(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+) {
+  const now = Date.now();
+  const cached = authGetCache.get(userId);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise;
+  }
+
+  const promise = buildAuthenticatedGetResponse(supabase, userId).catch((error) => {
+    deleteAuthGetCache(userId);
+    throw error;
+  });
+
+  authGetCache.set(userId, {
+    expiresAt: now + AUTH_GET_CACHE_TTL_MS,
+    promise,
+  });
+  sweepAuthGetCache(now);
+
+  return promise;
+}
+
 /* GET: cached-first, but never dead-empty if jobs exist */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    if (!hasSupabaseAuthCookieHeader(request)) {
+      const allJobs = (await getLatestPublicJobSummaries(GET_TOP_K)) as Job[];
+      return NextResponse.json(
+        allJobs.length > 0 ? buildGuestFallback(allJobs) : buildEmptyResponse("no-jobs"),
+      );
+    }
+
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const allJobs = await getAllJobs();
-
-    if (allJobs.length === 0) {
-      return NextResponse.json(buildEmptyResponse("no-jobs"));
-    }
-
     if (!user) {
-      return NextResponse.json(buildGuestFallback(allJobs));
-    }
-
-    const { data: cached, error: cacheError } = await supabase
-      .from("job_recommendations")
-      .select("items, candidate_summary, suggested_roles, suggested_companies, updated_at")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!cacheError && Array.isArray(cached?.items) && cached.items.length > 0) {
-      return NextResponse.json({
-        candidateSummary: cached.candidate_summary ?? "",
-        suggestedRoles: cached.suggested_roles ?? [],
-        suggestedCompanies: cached.suggested_companies ?? [],
-        items: cached.items,
-        cachedAt: cached.updated_at,
-        source: "cache",
-      } satisfies RecommendationResponse);
-    }
-
-    const candidateText = await buildCandidateRecommendationText();
-    const fallback = buildRuleBasedFallback(candidateText, allJobs, GET_TOP_K);
-
-    if (fallback.items.length > 0) {
-      await supabase.from("job_recommendations").upsert(
-        {
-          user_id: user.id,
-          items: fallback.items,
-          candidate_summary: fallback.candidateSummary,
-          suggested_roles: fallback.suggestedRoles,
-          suggested_companies: fallback.suggestedCompanies,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
+      const allJobs = (await getLatestPublicJobSummaries(GET_TOP_K)) as Job[];
+      return NextResponse.json(
+        allJobs.length > 0 ? buildGuestFallback(allJobs) : buildEmptyResponse("no-jobs"),
       );
     }
 
-    return NextResponse.json(fallback);
+    return NextResponse.json(await getAuthenticatedGetResponse(supabase, user.id));
   } catch (err: unknown) {
     console.error("recommend-jobs GET error:", err);
     return NextResponse.json(buildEmptyResponse("no-jobs"));
@@ -265,8 +354,6 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-
     let manualText = "";
     try {
       const body = (await request.json()) as { candidate_text?: unknown };
@@ -275,8 +362,20 @@ export async function POST(request: Request) {
       manualText = "";
     }
 
-    const candidateText = await buildCandidateRecommendationText(manualText);
-    const allJobs: Job[] = await getAllJobs();
+    const authUser = hasSupabaseAuthCookieHeader(request)
+      ? (await (async () => {
+          const supabase = await createClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          return { supabase, user };
+        })())
+      : null;
+
+    const candidateText = authUser?.user
+      ? await buildCandidateRecommendationTextForUser(authUser.supabase, authUser.user.id, manualText)
+      : await buildCandidateRecommendationText(manualText);
+    const allJobs: Job[] = await getAllJobsForRecommendation();
 
     if (allJobs.length === 0) {
       return NextResponse.json(buildEmptyResponse("no-jobs"));
@@ -290,6 +389,7 @@ export async function POST(request: Request) {
 
     try {
       const { filteredJobs } = preFilterForGemini(candidateText, allJobs, 40);
+      const { rankJobsWithGemini } = await import("@/lib/gemini");
       const aiResult = await rankJobsWithGemini({
         candidateText,
         jobs: filteredJobs.length > 0 ? filteredJobs : allJobs,
@@ -353,16 +453,12 @@ export async function POST(request: Request) {
       ].slice(0, 8);
     }
 
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
-
-    if (authUser && items.length > 0) {
-      await supabase
+    if (authUser?.user && items.length > 0) {
+      await authUser.supabase
         .from("job_recommendations")
         .upsert(
           {
-            user_id: authUser.id,
+            user_id: authUser.user.id,
             items,
             candidate_summary: candidateSummary,
             suggested_roles: suggestedRoles,
@@ -371,6 +467,7 @@ export async function POST(request: Request) {
           },
           { onConflict: "user_id" },
         );
+      deleteAuthGetCache(authUser.user.id);
     }
 
     return NextResponse.json({

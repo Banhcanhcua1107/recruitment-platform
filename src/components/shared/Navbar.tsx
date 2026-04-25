@@ -5,25 +5,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type User } from "@supabase/supabase-js";
-import {
-  BriefcaseBusiness,
-  Building2,
-  ChevronDown,
-  Circle,
-  FileText,
-  LayoutDashboard,
-  LayoutGrid,
-  LogOut,
-  Settings,
-  type LucideIcon,
-  UserRound,
-  Users,
-  X,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { scheduleIdleTask } from "@/lib/client-idle";
-import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
-import { createClient } from "@/utils/supabase/client";
 import {
   getGlobalHeaderModel,
   type GlobalHeaderModel,
@@ -44,17 +27,17 @@ const ROLE_LABELS: Record<string, string> = {
 
 const DESKTOP_MEDIA_QUERY = "(min-width: 1024px)";
 
-const ACCOUNT_MENU_ICONS: Record<string, LucideIcon> = {
-  apartment: Building2,
-  dashboard: LayoutDashboard,
-  dashboard_customize: LayoutGrid,
-  description: FileText,
-  groups: Users,
-  logout: LogOut,
-  person: UserRound,
-  settings: Settings,
-  work: BriefcaseBusiness,
-  work_history: BriefcaseBusiness,
+const ACCOUNT_MENU_ICONS: Record<string, string> = {
+  apartment: "apartment",
+  dashboard: "dashboard",
+  dashboard_customize: "dashboard_customize",
+  description: "description",
+  groups: "groups",
+  logout: "logout",
+  person: "person",
+  settings: "settings",
+  work: "work",
+  work_history: "work_history",
 };
 
 function isPrimaryLinkActive(pathname: string, href: string) {
@@ -115,8 +98,12 @@ function AccountMenuIcon({
   iconName: string;
   className: string;
 }) {
-  const Icon = ACCOUNT_MENU_ICONS[iconName] ?? Circle;
-  return <Icon className={className} aria-hidden="true" />;
+  const icon = ACCOUNT_MENU_ICONS[iconName] ?? "circle";
+  return (
+    <span className={`material-symbols-outlined text-[20px] leading-none ${className}`} aria-hidden="true">
+      {icon}
+    </span>
+  );
 }
 
 function AccountMenuItemRow({
@@ -228,7 +215,6 @@ function AccountMenuContent({
 
 export default function Navbar() {
   const pathname = usePathname();
-  const supabase = useMemo(() => createClient(), []);
   const [viewer, setViewer] = useState<HeaderViewer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDesktopViewport, setIsDesktopViewport] = useState(false);
@@ -242,71 +228,94 @@ export default function Navbar() {
 
   useEffect(() => {
     let active = true;
+    let cancelIdleTask: () => void = () => undefined;
+    let unsubscribeAuth: () => void = () => undefined;
 
-    async function resolveViewer(nextUser?: User | null) {
-      const authUser =
-        typeof nextUser === "undefined"
-          ? (await supabase.auth.getUser()).data.user
-          : nextUser;
+    async function initializeAuthLookup() {
+      const { createClient } = await import("@/utils/supabase/client");
 
       if (!active) {
         return;
       }
 
-      if (!authUser) {
-        setViewer(null);
+      const supabase = createClient();
+
+      async function resolveViewer(nextUser?: User | null) {
+        const authUser =
+          typeof nextUser === "undefined"
+            ? (await supabase.auth.getUser()).data.user
+            : nextUser;
+
+        if (!active) {
+          return;
+        }
+
+        if (!authUser) {
+          setViewer(null);
+          setIsLoading(false);
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, avatar_url, role, email")
+          .eq("id", authUser.id)
+          .maybeSingle();
+
+        if (!active) {
+          return;
+        }
+
+        setViewer({
+          id: authUser.id,
+          email: typeof profile?.email === "string" ? profile.email : authUser.email ?? null,
+          fullName:
+            typeof profile?.full_name === "string"
+              ? profile.full_name
+              : typeof authUser.user_metadata?.full_name === "string"
+                ? authUser.user_metadata.full_name
+                : null,
+          avatarUrl:
+            typeof profile?.avatar_url === "string" ? profile.avatar_url : null,
+          role:
+            typeof profile?.role === "string"
+              ? profile.role
+              : typeof authUser.user_metadata?.role === "string"
+                ? authUser.user_metadata.role
+                : "GUEST",
+          companyName: null,
+        });
         setIsLoading(false);
-        return;
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name, avatar_url, role, email")
-        .eq("id", authUser.id)
-        .maybeSingle();
+      cancelIdleTask = scheduleIdleTask(() => {
+        void resolveViewer();
+      }, 450);
 
-      if (!active) {
-        return;
-      }
-
-      setViewer({
-        id: authUser.id,
-        email: typeof profile?.email === "string" ? profile.email : authUser.email ?? null,
-        fullName:
-          typeof profile?.full_name === "string"
-            ? profile.full_name
-            : typeof authUser.user_metadata?.full_name === "string"
-              ? authUser.user_metadata.full_name
-              : null,
-        avatarUrl:
-          typeof profile?.avatar_url === "string" ? profile.avatar_url : null,
-        role:
-          typeof profile?.role === "string"
-            ? profile.role
-            : typeof authUser.user_metadata?.role === "string"
-              ? authUser.user_metadata.role
-              : "GUEST",
-        companyName: null,
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        void resolveViewer(session?.user ?? null);
       });
-      setIsLoading(false);
+
+      unsubscribeAuth = () => subscription.unsubscribe();
     }
 
-    const cancelIdleTask = scheduleIdleTask(() => {
-      void resolveViewer();
-    }, 450);
+    void initializeAuthLookup().catch(() => {
+      if (!active) {
+        return;
+      }
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      void resolveViewer(session?.user ?? null);
+      setViewer(null);
+      setIsLoading(false);
     });
 
     return () => {
       active = false;
       cancelIdleTask();
-      subscription.unsubscribe();
+      unsubscribeAuth();
     };
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -399,6 +408,11 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     closeAllMenus();
+    const [{ createClient }, { signOutAndRedirect }] = await Promise.all([
+      import("@/utils/supabase/client"),
+      import("@/utils/supabase/auth-helpers"),
+    ]);
+    const supabase = createClient();
     await signOutAndRedirect(supabase, "/login");
   };
 
@@ -512,8 +526,8 @@ export default function Navbar() {
                           {ROLE_LABELS[model.viewer.role] ?? model.viewer.role}
                         </p>
                       </div>
-                      <ChevronDown
-                        className={`size-4.5 text-slate-400 transition-transform ${
+                      <span
+                        className={`material-symbols-outlined text-[18px] leading-none text-slate-400 transition-transform ${
                           isDesktopViewport
                             ? isDesktopMenuOpen
                               ? "rotate-180"
@@ -523,7 +537,9 @@ export default function Navbar() {
                               : ""
                         }`}
                         aria-hidden="true"
-                      />
+                      >
+                        expand_more
+                      </span>
                     </button>
 
                     {isDesktopViewport && isDesktopMenuOpen ? (
@@ -608,7 +624,9 @@ export default function Navbar() {
                 className="rounded-full border border-slate-200 p-2 text-slate-500 transition-colors hover:bg-slate-50"
                 aria-label="Close"
               >
-                <X className="size-5" aria-hidden="true" />
+                <span className="material-symbols-outlined text-xl leading-none" aria-hidden="true">
+                  close
+                </span>
               </button>
             </div>
 

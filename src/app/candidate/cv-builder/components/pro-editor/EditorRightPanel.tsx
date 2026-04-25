@@ -603,6 +603,27 @@ function isLikelyCopiedSuggestion(original: string, suggestion: string) {
   return similarity > 0.9;
 }
 
+function isLikelyRecoverableAITransportError(message: string) {
+  return /(timed out|timeout|fetch failed|network|econnrefused|enotfound|getaddrinfo|connection refused|upstream unavailable|temporarily unavailable)/i
+    .test(message);
+}
+
+function toFriendlyAITransportErrorMessage(message: string) {
+  if (/(timed out|timeout)/i.test(message)) {
+    return "Ollama phản hồi quá chậm. Vui lòng thử lại.";
+  }
+
+  if (/(econnrefused|enotfound|getaddrinfo|connection refused|dns|invalid url|failed to parse url)/i.test(message)) {
+    return "Không kết nối được tới Ollama. Kiểm tra cấu hình URL giữa local và Docker.";
+  }
+
+  if (/(fetch failed|network|socket hang up|connection reset|temporarily unavailable|upstream unavailable)/i.test(message)) {
+    return "Kết nối tới Ollama bị gián đoạn. Vui lòng thử lại.";
+  }
+
+  return "Không thể tạo gợi ý AI lúc này. Vui lòng thử lại.";
+}
+
 function resolveAISuggestionRequestPayload(
   section: CVSection | null,
   selectedSectionItem: CVSelectedSectionItem | null,
@@ -1855,10 +1876,19 @@ export function EditorRightPanel({
         );
 
         if (process.env.NODE_ENV !== "production") {
-          console.error("[EditorRightPanel][AI] Optimize failed", {
+          console.warn("[EditorRightPanel][AI] Optimize unavailable", {
             sourceKey: suggestionSourceKey,
-            payload: aiRequestPayload,
-            result,
+            error: message,
+            provider,
+            debug: result.debug
+              ? {
+                  traceId: result.debug.traceId,
+                  failureReason: result.debug.failureReason,
+                  ollamaErrorType: result.debug.ollamaErrorType,
+                  ollamaAttempts: result.debug.ollamaAttempts,
+                  ollamaEndpoint: result.debug.ollamaEndpoint,
+                }
+              : undefined,
           });
         }
       } catch (error) {
@@ -1866,13 +1896,14 @@ export function EditorRightPanel({
           return;
         }
 
-        const message = error instanceof Error ? error.message : "Không thể gọi AI suggestion.";
+        const technicalMessage = error instanceof Error ? error.message : String(error);
+        const message = toFriendlyAITransportErrorMessage(technicalMessage);
         setAiSuggestionState({
           sourceKey: suggestionSourceKey,
           status: "error",
           value: "",
           provider: null,
-          error: `AI suggestion không khả dụng: ${message}`,
+          error: message,
         });
         setSuggestionDraftState((current) =>
           current.sourceKey === suggestionSourceKey
@@ -1884,11 +1915,17 @@ export function EditorRightPanel({
         );
 
         if (process.env.NODE_ENV !== "production") {
-          console.error("[EditorRightPanel][AI] Unexpected optimize error", {
+          const payload = {
             sourceKey: suggestionSourceKey,
             payload: aiRequestPayload,
-            error,
-          });
+            error: technicalMessage,
+          };
+
+          if (isLikelyRecoverableAITransportError(technicalMessage)) {
+            console.warn("[EditorRightPanel][AI] Recoverable optimize transport error", payload);
+          } else {
+            console.error("[EditorRightPanel][AI] Unexpected optimize error", payload);
+          }
         }
       }
     };
@@ -2123,6 +2160,15 @@ export function EditorRightPanel({
                       <div className="mt-2 space-y-2 text-[11px] leading-5 text-slate-700">
                         <p>Trace ID: {activeAISuggestionState.debug.traceId}</p>
                         <p>Model: {activeAISuggestionState.debug.model}</p>
+                        {activeAISuggestionState.debug.ollamaErrorType ? (
+                          <p>Error type: {activeAISuggestionState.debug.ollamaErrorType}</p>
+                        ) : null}
+                        {activeAISuggestionState.debug.ollamaAttempts ? (
+                          <p>Ollama attempts: {activeAISuggestionState.debug.ollamaAttempts}</p>
+                        ) : null}
+                        {activeAISuggestionState.debug.ollamaEndpoint ? (
+                          <p>Ollama endpoint: {activeAISuggestionState.debug.ollamaEndpoint}</p>
+                        ) : null}
                         <p>Similarity: {activeAISuggestionState.debug.similarityScore.toFixed(3)}</p>
                         <p>Retried: {activeAISuggestionState.debug.retriedBecauseSimilar ? "yes" : "no"}</p>
                         <p>Used retry result: {activeAISuggestionState.debug.usedRetryResult ? "yes" : "no"}</p>

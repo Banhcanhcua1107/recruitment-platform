@@ -1,9 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  createResume,
-  createResumeFromSections,
-  getMyResumes,
-} from "@/lib/resumes";
+import { getMyResumeList } from "@/lib/cv-builder-resume-list";
 
 function getResumeCollectionStatusCode(message: string) {
   if (message === "Unauthorized") {
@@ -15,7 +11,7 @@ function getResumeCollectionStatusCode(message: string) {
 
 export async function GET() {
   try {
-    const items = await getMyResumes();
+    const items = await getMyResumeList();
     return NextResponse.json({ items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
@@ -46,6 +42,7 @@ export async function POST(request: Request) {
         };
 
     if (Array.isArray((body as { sections?: unknown }).sections)) {
+      const { createResumeFromSections } = await import("@/lib/resumes");
       const item = await createResumeFromSections(
         (body as {
           sections: Array<{
@@ -60,6 +57,7 @@ export async function POST(request: Request) {
     }
 
     if ((body as { templateId?: string }).templateId) {
+      const { createResume } = await import("@/lib/resumes");
       const item = await createResume(
         String((body as { templateId?: string }).templateId),
         typeof (body as { title?: string }).title === "string"

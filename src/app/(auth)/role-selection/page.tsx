@@ -5,11 +5,13 @@ import { ArrowRight, Building2, UserRound } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
 import { updateRole } from "@/app/(auth)/actions";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 export default function RoleSelectionPage() {
   const [role, setRole] = useState<"candidate" | "employer">("candidate");
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
+  const { alert } = useAppDialog();
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -17,7 +19,12 @@ export default function RoleSelectionPage() {
     const result = await updateRole(role);
     
     if (result?.error) {
-        alert(result.error);
+        await alert({
+          title: "Không thể cập nhật vai trò",
+          description: result.error,
+          confirmText: "Đã hiểu",
+          tone: "danger",
+        });
         setLoading(false);
     }
     // Success redirect is handled by action

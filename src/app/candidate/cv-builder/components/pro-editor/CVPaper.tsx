@@ -8,11 +8,23 @@ interface CVPaperProps {
   template: CVTemplateConfig;
   fontFamilyClassName?: string;
   bodyTextClassName?: string;
+  outerClassName?: string;
+  paperClassName?: string;
+  paperPatternClassName?: string;
   children: ReactNode;
 }
 
-export function CVPaper({ template, fontFamilyClassName, bodyTextClassName, children }: CVPaperProps) {
+export function CVPaper({
+  template,
+  fontFamilyClassName,
+  bodyTextClassName,
+  outerClassName,
+  paperClassName,
+  paperPatternClassName,
+  children,
+}: CVPaperProps) {
   const isTealFamily = template.visualFamily === "teal";
+  const resolvedPatternClassName = paperPatternClassName ?? template.pageSettings.paperPatternClassName;
 
   if (isTealFamily) {
     return (
@@ -20,13 +32,14 @@ export function CVPaper({ template, fontFamilyClassName, bodyTextClassName, chil
         className={cn(
           "mx-auto h-280.5 w-full max-w-198.5 overflow-hidden bg-white print:h-[297mm] print:w-[210mm] print:max-w-none print:border-0 print:bg-white print:px-0 print:py-0 print:shadow-none",
           template.pageSettings.paperFrameClassName,
-          template.pageSettings.paperPatternClassName,
+          resolvedPatternClassName,
           template.pageSettings.paperPaddingClassName,
           template.typographySettings.bodyFontClassName,
           template.typographySettings.bodyTextClassName,
           fontFamilyClassName,
           bodyTextClassName,
           template.colorPalette.pageTextClassName,
+          paperClassName,
         )}
       >
         {children}
@@ -39,19 +52,21 @@ export function CVPaper({ template, fontFamilyClassName, bodyTextClassName, chil
       className={cn(
         "mx-auto w-full max-w-215 rounded-[28px] border border-slate-200 bg-white/72 px-4 py-6 shadow-[0_26px_60px_-36px_rgba(15,23,42,0.28)] sm:px-8 sm:py-10 print:max-w-none print:rounded-none print:border-0 print:bg-white print:px-0 print:py-0 print:shadow-none",
         template.pageSettings.outerFrameClassName,
+        outerClassName,
       )}
     >
       <div
         className={cn(
           "mx-auto h-280.5 w-198.5 max-w-full overflow-hidden print:h-[297mm] print:w-[210mm]",
           template.pageSettings.paperFrameClassName,
-          template.pageSettings.paperPatternClassName,
+          resolvedPatternClassName,
           template.pageSettings.paperPaddingClassName,
           template.typographySettings.bodyFontClassName,
           template.typographySettings.bodyTextClassName,
           fontFamilyClassName,
           bodyTextClassName,
           template.colorPalette.pageTextClassName,
+          paperClassName,
         )}
       >
         {children}

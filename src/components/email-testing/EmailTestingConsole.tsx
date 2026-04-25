@@ -8,6 +8,7 @@ import type {
   FakeAccountRole,
   TestInboxMessage,
 } from "@/types/email-testing";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 type ConsoleTab = "accounts" | "inbox";
 
@@ -105,6 +106,7 @@ export default function EmailTestingConsole({
   mailpitWebUrl,
   initialTab,
 }: EmailTestingConsoleProps) {
+  const { confirm } = useAppDialog();
   const [activeTab, setActiveTab] = useState<ConsoleTab>(initialTab);
   const [accounts, setAccounts] = useState<FakeAccount[]>([]);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -391,9 +393,13 @@ export default function EmailTestingConsole({
   }
 
   async function deleteAllAccounts() {
-    const confirmDelete = window.confirm(
-      "Ban co chac chan muon xoa toan bo tai khoan test? Hanh dong nay khong the hoan tac.",
-    );
+    const confirmDelete = await confirm({
+      title: "Xóa toàn bộ tài khoản test",
+      description: "Ban co chac chan muon xoa toan bo tai khoan test? Hanh dong nay khong the hoan tac.",
+      confirmText: "Xóa tất cả",
+      cancelText: "Hủy",
+      tone: "danger",
+    });
 
     if (!confirmDelete) {
       return;

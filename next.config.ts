@@ -6,23 +6,42 @@ const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
 });
 
+const dockerDevWatchIgnores = [
+  "**/.agent/**",
+  "**/.agents/**",
+  "**/.claude/**",
+  "**/.git/**",
+  "**/.gitnexus/**",
+  "**/.next/**",
+  "**/.perf/**",
+  "**/.tmp/**",
+  "**/.tmp-*/**",
+  "**/.venv/**",
+  "**/.vscode/**",
+  "**/.worktrees/**",
+  "**/.swc/**",
+  "**/ai-service/**",
+  "**/artifacts/**",
+  "**/build/**",
+  "**/coverage/**",
+  "**/node_modules/**",
+  "**/out/**",
+  "**/playwright-report/**",
+  "**/public/webviewer/**",
+  "**/supabase/.temp/**",
+  "**/test-results/**",
+  "**/*.log",
+  "**/*.tsbuildinfo",
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
-  watchOptions: isDockerDev
-    ? {
-        pollIntervalMs: 1000,
-      }
-    : undefined,
   webpack: (config, { dev }) => {
     if (dev && isDockerDev) {
       config.watchOptions = {
         ...(config.watchOptions ?? {}),
         aggregateTimeout: 300,
-        ignored: [
-          "**/.git/**",
-          "**/.next/**",
-          "**/node_modules/**",
-        ],
+        ignored: dockerDevWatchIgnores,
         poll: 1000,
       };
     }

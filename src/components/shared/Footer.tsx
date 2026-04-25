@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { BriefcaseBusiness, ChevronDown } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -9,7 +8,9 @@ export default function Footer() {
           <div className="col-span-2 md:col-span-1">
             <div className="mb-6 flex items-center gap-2 text-slate-900 dark:text-white">
               <div className="flex size-6 items-center justify-center text-primary">
-                <BriefcaseBusiness className="size-6" aria-hidden="true" />
+                <span className="material-symbols-outlined text-2xl" aria-hidden="true">
+                  work
+                </span>
               </div>
               <h2 className="text-lg font-extrabold leading-tight">TalentFlow</h2>
             </div>
@@ -105,7 +106,9 @@ export default function Footer() {
             <span className="text-sm text-slate-400">Ngôn ngữ:</span>
             <div className="flex cursor-pointer items-center gap-1 text-slate-500 transition-colors hover:text-primary">
               <span className="text-sm font-medium">Tiếng Việt</span>
-              <ChevronDown className="size-4" aria-hidden="true" />
+              <span className="material-symbols-outlined text-base" aria-hidden="true">
+                expand_more
+              </span>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { Eye, Loader2, Sparkles } from "lucide-react";
 import type { CVTemplateDefinition } from "@/components/cv/templates/templateCatalog";
+import { ResumeTemplateThumbnail } from "@/components/cv/templates/ResumeTemplateThumbnail";
 
 interface TemplateCardProps {
   template: CVTemplateDefinition;
@@ -22,16 +23,13 @@ export function TemplateCard({
   const tagList = template.tags.length > 0 ? template.tags : [template.category];
 
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[var(--app-shadow-soft)] transition-all duration-300 hover:-translate-y-1.5 hover:border-slate-300 hover:shadow-[0_28px_60px_-34px_rgba(15,23,42,0.4)] focus-within:ring-2 focus-within:ring-sky-300/60 focus-within:ring-offset-2 focus-within:ring-offset-slate-100">
-      <div className="relative aspect-3/4 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.92),rgba(241,245,249,0.92)_48%,rgba(226,232,240,0.86))] p-3">
-        <div className="h-full w-full overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.42)] transition-transform duration-500 group-hover:-translate-y-0.5 group-hover:scale-[1.015]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={template.thumbnail}
-            alt={template.name}
-            className="h-full w-full bg-white object-contain object-top"
-          />
-        </div>
+    <article className="group flex h-full flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-(--app-shadow-soft) transition-all duration-300 hover:-translate-y-1.5 hover:border-slate-300 hover:shadow-[0_28px_60px_-34px_rgba(15,23,42,0.4)] focus-within:ring-2 focus-within:ring-sky-300/60 focus-within:ring-offset-2 focus-within:ring-offset-slate-100">
+      <div className="relative bg-[linear-gradient(180deg,rgba(248,250,252,0.72),rgba(226,232,240,0.7))] p-3">
+        <ResumeTemplateThumbnail
+          template={template}
+          density="card"
+          className="transition-transform duration-500 group-hover:-translate-y-0.5 group-hover:scale-[1.01]"
+        />
 
         <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
           <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur-md">
@@ -66,7 +64,7 @@ export function TemplateCard({
           ))}
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2">
+        <div className="mt-5 grid grid-cols-[1fr_auto] gap-2">
           <button
             type="button"
             onClick={() => onPreview(template)}
@@ -80,19 +78,11 @@ export function TemplateCard({
             type="button"
             onClick={() => onUseTemplate(template)}
             disabled={disabled || isCreating}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-3 py-2.5 text-sm font-bold text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label={isCreating ? "Đang tạo CV" : "Dùng mẫu này"}
+            title={isCreating ? "Đang tạo CV" : "Dùng mẫu này"}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white transition hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300/60 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isCreating ? (
-              <>
-                <Loader2 size={15} className="animate-spin" />
-                Đang tạo
-              </>
-            ) : (
-              <>
-                <Sparkles size={15} />
-                Dùng mẫu này
-              </>
-            )}
+            {isCreating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
           </button>
         </div>
       </div>

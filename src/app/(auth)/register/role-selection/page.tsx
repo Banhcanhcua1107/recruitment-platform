@@ -5,12 +5,14 @@ import { ArrowRight, Building2, UserRound } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { signOutAndRedirect } from "@/utils/supabase/auth-helpers";
 import { useRouter } from "next/navigation";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 export default function RoleSelectionPage() {
   const [role, setRole] = useState<"candidate" | "hr">("candidate");
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
   const router = useRouter();
+  const { alert } = useAppDialog();
 
   const handleConfirm = async () => {
     setLoading(true);
@@ -30,7 +32,12 @@ export default function RoleSelectionPage() {
       if (!error) {
         router.push(role === 'hr' ? '/hr/dashboard' : '/candidate/dashboard');
       } else {
-        alert("Có lỗi xảy ra, vui lòng thử lại!");
+        await alert({
+          title: "Có lỗi xảy ra",
+          description: "Có lỗi xảy ra, vui lòng thử lại!",
+          confirmText: "Đã hiểu",
+          tone: "danger",
+        });
       }
     }
     setLoading(false);

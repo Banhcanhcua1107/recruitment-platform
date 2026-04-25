@@ -1,6 +1,11 @@
 param(
     [switch]$SkipBuild,
+    [switch]$Rebuild,
+    [switch]$Reset,
     [switch]$Clean,
+    [switch]$Webpack,
+    [switch]$NoWarmup,
+    [switch]$Preview,
     [int]$ServiceTimeoutSec = 300
 )
 
@@ -10,18 +15,32 @@ Set-StrictMode -Version Latest
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptRoot
 
-$ComposeArgs = @('--env-file', '.env.local', '-f', 'docker-compose.prod.yml')
-$CanonicalLocalOrigin = 'http://localhost:3000'
-$CanonicalLocalOriginWithSlash = "$CanonicalLocalOrigin/"
-$RequiredEnvKeys = @(
-    'NEXT_PUBLIC_SUPABASE_URL',
-    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-    'SUPABASE_SERVICE_ROLE_KEY',
-    'APP_URL',
-    'NEXT_PUBLIC_APP_URL',
-    'NEXT_PUBLIC_BASE_URL'
+$ComposeArgs = @('--env-file', '.env.local', '-f', 'docker-compose.yml')
+$RequiredFiles = @(
+    'docker-compose.yml',
+    'Dockerfile',
+    'Dockerfile.frontend',
+    'package.json',
+    'package-lock.json',
+    'ai-service/Dockerfile',
+    'ai-service/requirements.txt',
+    '.dockerignore',
+    '.env.local'
 )
-$LocalOriginKeys = @('APP_URL', 'NEXT_PUBLIC_APP_URL', 'NEXT_PUBLIC_BASE_URL')
+$RunningServices = @('ai-service', 'frontend', 'celery-worker')
+$BuildRules = @(
+    [PSCustomObject]@{
+        Service = 'ai-service'
+        Image = 'recruitment-platform-ai-service-dev'
+        Inputs = @('ai-service/Dockerfile', 'ai-service/requirements.txt', '.dockerignore')
+    },
+    [PSCustomObject]@{
+        Service = 'frontend'
+        Image = 'recruitment-platform-frontend'
+        Inputs = @('Dockerfile', 'package.json', 'package-lock.json', '.dockerignore')
+    }
+)
+$script:ComposeConfig = $null
 
 function Write-Step {
     param([string]$Message)
@@ -41,6 +60,31 @@ function Fail {
     exit 1
 }
 
+function Set-FrontendRuntimeMode {
+    if ($Preview -and $Webpack) {
+        Fail 'Use either -Preview or -Webpack, not both. Preview runs next build/next start; -Webpack is only for dev fallback.'
+    }
+
+    if ($Preview) {
+        $env:FRONTEND_MODE = 'preview'
+        $env:NEXT_DEV_SCRIPT = 'dev:docker'
+        Write-Step 'Configure frontend runtime'
+        Write-Info 'Frontend mode: preview (next build + standalone start, no hot reload)'
+        return
+    }
+
+    $env:FRONTEND_MODE = 'dev'
+    $env:NEXT_DEV_SCRIPT = if ($Webpack) { 'dev:docker:webpack' } else { 'dev:docker' }
+
+    Write-Step 'Configure frontend runtime'
+    if ($Webpack) {
+        Write-Info 'Frontend dev compiler: webpack fallback'
+    }
+    else {
+        Write-Info 'Frontend dev compiler: Turbopack'
+    }
+}
+
 function Require-Command {
     param([string]$Name)
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -48,286 +92,376 @@ function Require-Command {
     }
 }
 
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][scriptblock]$Command
+    )
+
+    Write-Info $Label
+    & $Command
+    if ($LASTEXITCODE -ne 0) {
+        Fail "$Label failed."
+    }
+}
+
+function Invoke-NativeQuiet {
+    param([Parameter(Mandatory = $true)][scriptblock]$Command)
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $Command *> $null
+        return $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
+function Get-ComposeConfig {
+    if ($null -ne $script:ComposeConfig) {
+        return $script:ComposeConfig
+    }
+
+    $jsonText = (& docker compose @ComposeArgs config --format json | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        Fail 'docker compose config --format json failed.'
+    }
+
+    $script:ComposeConfig = $jsonText | ConvertFrom-Json
+    return $script:ComposeConfig
+}
+
+function Get-ObjectPropertyValue {
+    param(
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+
+    return $property.Value
+}
+
+function Ensure-RepoRoot {
+    Write-Step 'Validate repository files'
+    foreach ($file in $RequiredFiles) {
+        if (-not (Test-Path -LiteralPath $file)) {
+            Fail "Required file is missing: $file"
+        }
+    }
+    Write-Info "Working directory: $ScriptRoot"
+}
+
 function Ensure-Docker {
-    Write-Step '1/10 Check Docker daemon'
+    Write-Step 'Check Docker Desktop / Docker daemon'
     Require-Command 'docker'
 
-    & docker info *> $null
+    if ((Invoke-NativeQuiet { docker info }) -ne 0) {
+        Fail 'Docker daemon is not ready. Start Docker Desktop, wait until it finishes booting, then run ./run.ps1 again.'
+    }
+
+    if ((Invoke-NativeQuiet { docker compose version }) -ne 0) {
+        Fail 'Docker Compose plugin is missing or not working.'
+    }
+
+    Write-Info ((& docker compose version) -join ' ')
+}
+
+function Test-LocalImagesHaveBuild {
+    Write-Step 'Validate compose config'
+
+    & docker compose @ComposeArgs config --quiet
     if ($LASTEXITCODE -ne 0) {
-        Fail 'Docker daemon is not running. Start Docker Desktop and run again.'
+        Fail 'docker compose config --quiet failed.'
     }
 
-    & docker compose version *> $null
-    if ($LASTEXITCODE -ne 0) {
-        Fail 'docker compose plugin is missing.'
-    }
-
-    Write-Info 'Docker is ready.'
-}
-
-function Ensure-NodeVersion {
-    Write-Step '2/10 Check Node.js version (>=22)'
-    Require-Command 'node'
-
-    $versionRaw = (& node -v).Trim()
-    if (-not $versionRaw) {
-        Fail 'Cannot read Node.js version.'
-    }
-
-    $match = [regex]::Match($versionRaw, '^v?(\d+)\.')
-    if (-not $match.Success) {
-        Fail "Unexpected Node.js version format: $versionRaw"
-    }
-
-    $major = [int]$match.Groups[1].Value
-    if ($major -lt 22) {
-        Fail "Node.js >=22 required. Current: $versionRaw"
-    }
-
-    Write-Info "Node version OK: $versionRaw"
-}
-
-function Ensure-Dependencies {
-    Write-Step '3/10 Install dependencies if missing'
-    Require-Command 'npm'
-
-    if (-not (Test-Path -LiteralPath 'package-lock.json')) {
-        Fail 'package-lock.json not found. Please run from repository root.'
-    }
-
-    $nextCmdPath = Join-Path $ScriptRoot 'node_modules/.bin/next.cmd'
-    $nextBinPath = Join-Path $ScriptRoot 'node_modules/.bin/next'
-
-    $needsInstall = $false
-    $installReason = ''
-
-    if (-not (Test-Path -LiteralPath 'node_modules')) {
-        $needsInstall = $true
-        $installReason = 'node_modules not found'
-    }
-    elseif ((-not (Test-Path -LiteralPath $nextCmdPath)) -and (-not (Test-Path -LiteralPath $nextBinPath))) {
-        $needsInstall = $true
-        $installReason = 'next binary missing in node_modules/.bin'
-    }
-
-    if ($needsInstall) {
-        $frontendContainer = (& docker compose @ComposeArgs ps -q frontend 2>$null | Out-String).Trim()
-        if ($frontendContainer) {
-            Write-Info 'Detected running compose stack -> stopping temporarily to avoid file locks'
-            & docker compose @ComposeArgs down --remove-orphans
-            if ($LASTEXITCODE -ne 0) {
-                Fail 'Failed to stop running compose stack before dependency install.'
-            }
-        }
-
-        if ((Test-Path -LiteralPath 'node_modules') -and ($installReason -eq 'next binary missing in node_modules/.bin')) {
-            Write-Info "$installReason -> trying npm install first"
-            & npm install --no-audit --no-fund
-            if ($LASTEXITCODE -eq 0) {
-                $hasNextAfterInstall = (Test-Path -LiteralPath $nextCmdPath) -or (Test-Path -LiteralPath $nextBinPath)
-                if ($hasNextAfterInstall) {
-                    Write-Info 'Dependencies repaired with npm install.'
-                    return
-                }
-            }
-            Write-Info 'npm install could not repair dependencies -> falling back to npm ci'
-        }
-
-        Write-Info "$installReason -> running npm ci"
-        & npm ci
-        if ($LASTEXITCODE -ne 0) {
-            Write-Info 'npm ci failed -> retrying once after cleaning node_modules and npm cache verify'
-
-            if (Test-Path -LiteralPath 'node_modules') {
-                Remove-Item -LiteralPath 'node_modules' -Recurse -Force -ErrorAction SilentlyContinue
-            }
-
-            & npm cache verify *> $null
-            & npm ci
-            if ($LASTEXITCODE -ne 0) {
-                Fail 'npm ci failed after retry. Close apps locking node_modules (editor/antivirus), then run again.'
-            }
-        }
-        Write-Info 'Dependencies installed.'
-    }
-    else {
-        Write-Info 'Dependencies already installed -> skip npm ci'
-    }
-}
-
-function Read-EnvMap {
-    param([string]$Path)
-
-    $map = @{}
-    $lines = Get-Content -LiteralPath $Path
-
-    foreach ($rawLine in $lines) {
-        $line = $rawLine.Trim()
-        if (-not $line) { continue }
-        if ($line.StartsWith('#')) { continue }
-
-        $eqIndex = $line.IndexOf('=')
-        if ($eqIndex -lt 1) { continue }
-
-        $key = $line.Substring(0, $eqIndex).Trim()
-        $value = $line.Substring($eqIndex + 1).Trim()
-
-        if ($key) {
-            $map[$key] = $value
+    $config = Get-ComposeConfig
+    $badServices = @()
+    foreach ($service in $config.services.PSObject.Properties) {
+        $imageProperty = $service.Value.PSObject.Properties['image']
+        $image = if ($null -ne $imageProperty) { [string]$imageProperty.Value } else { '' }
+        $hasBuild = $null -ne $service.Value.PSObject.Properties['build']
+        if ($image -like 'recruitment-platform-*-dev' -and -not $hasBuild) {
+            $badServices += $service.Name
         }
     }
 
-    return $map
+    if ($badServices.Count -gt 0) {
+        Fail ("Local dev image services without build: " + ($badServices -join ', '))
+    }
+
+    Write-Info 'Compose config is valid; local dev image services all have build definitions.'
 }
 
-function Normalize-Origin {
-    param([string]$Value)
-
-    if ([string]::IsNullOrWhiteSpace($Value)) {
-        return $null
+function Get-FrontendHostPort {
+    $defaultPort = 3000
+    $config = Get-ComposeConfig
+    $servicesProperty = $config.PSObject.Properties['services']
+    if ($null -eq $servicesProperty) {
+        return $defaultPort
     }
 
-    $candidate = $Value.Trim()
-    $uri = $null
-    if (-not [System.Uri]::TryCreate($candidate, [System.UriKind]::Absolute, [ref]$uri)) {
-        return $null
+    $frontendProperty = $servicesProperty.Value.PSObject.Properties['frontend']
+    if ($null -eq $frontendProperty) {
+        return $defaultPort
     }
 
-    $normalizedHost = $uri.Host.ToLowerInvariant()
-    if ($normalizedHost -eq 'localhost' -or $normalizedHost -eq '0.0.0.0' -or $normalizedHost -eq '127.0.0.1') {
-        return $CanonicalLocalOrigin
+    $portsProperty = $frontendProperty.Value.PSObject.Properties['ports']
+    if ($null -eq $portsProperty) {
+        return $defaultPort
     }
 
-    $builder = New-Object System.UriBuilder($uri)
-    if (($builder.Scheme -eq 'http' -and $builder.Port -eq 80) -or ($builder.Scheme -eq 'https' -and $builder.Port -eq 443)) {
-        $builder.Port = -1
-    }
-
-    return $builder.Uri.GetLeftPart([System.UriPartial]::Authority).TrimEnd('/')
-}
-
-function Ensure-EnvFile {
-    Write-Step '4/10 Validate .env.local'
-
-    if (-not (Test-Path -LiteralPath '.env.local')) {
-        Fail '.env.local not found. Create it from .env.example first.'
-    }
-
-    $envMap = Read-EnvMap -Path '.env.local'
-    $missing = @()
-
-    foreach ($key in $RequiredEnvKeys) {
-        if (-not $envMap.ContainsKey($key)) {
-            $missing += $key
+    foreach ($portMapping in @($portsProperty.Value)) {
+        if ($portMapping -is [string]) {
+            if ($portMapping -match '^(?:[^:]+:)?(?<published>\d+):(?<target>3000)(?:/tcp)?$') {
+                return [int]$Matches.published
+            }
             continue
         }
 
-        $value = [string]$envMap[$key]
-        if ([string]::IsNullOrWhiteSpace($value) -or $value -eq '""' -or $value -eq "''") {
-            $missing += $key
+        $target = Get-ObjectPropertyValue -Object $portMapping -Name 'target'
+        $published = Get-ObjectPropertyValue -Object $portMapping -Name 'published'
+        $protocol = Get-ObjectPropertyValue -Object $portMapping -Name 'protocol'
+        if ([string]::IsNullOrWhiteSpace([string]$protocol)) {
+            $protocol = 'tcp'
+        }
+
+        if ([string]$target -eq '3000' -and [string]$protocol -eq 'tcp' -and -not [string]::IsNullOrWhiteSpace([string]$published)) {
+            return [int]$published
         }
     }
 
-    if ($missing.Count -gt 0) {
-        Fail ("Missing required .env.local keys: " + ($missing -join ', '))
-    }
-
-    $originMismatches = @()
-    foreach ($key in $LocalOriginKeys) {
-        $normalizedValue = Normalize-Origin -Value ([string]$envMap[$key])
-        if ($normalizedValue -ne $CanonicalLocalOrigin) {
-            $originMismatches += "$key=$($envMap[$key])"
-        }
-    }
-
-    if ($originMismatches.Count -gt 0) {
-        Fail (
-            "Local URL keys must point to $CanonicalLocalOrigin. Mismatched values: " +
-            ($originMismatches -join ', ')
-        )
-    }
-
-    Write-Info 'Required env keys are present.'
+    return $defaultPort
 }
 
-function Build-NextApp {
-    Write-Step '5/10 Build Next.js production'
+function Get-PortListeners {
+    param([Parameter(Mandatory = $true)][int]$Port)
 
-    if (Test-Path -LiteralPath '.next') {
-        Write-Info 'Clearing .next cache to avoid stale route/type artifacts from dev mode'
+    if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
+        Fail 'Get-NetTCPConnection is not available in this PowerShell session. Run ./run.ps1 from Windows PowerShell or PowerShell 7 on Windows.'
+    }
+
+    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    foreach ($listener in $listeners) {
+        $ownerPid = [int]$listener.OwningProcess
+        $processName = 'unknown'
         try {
-            Remove-Item -LiteralPath '.next' -Recurse -Force -ErrorAction Stop
+            $process = Get-Process -Id $ownerPid -ErrorAction Stop
+            if (-not [string]::IsNullOrWhiteSpace($process.ProcessName)) {
+                $processName = $process.ProcessName
+                if ($processName -notlike '*.exe') {
+                    $processName = "$processName.exe"
+                }
+            }
         }
         catch {
-            Fail "Could not remove .next cache ($($_.Exception.Message)). Stop any running next dev process and retry."
+            $processName = 'unknown'
+        }
+
+        [PSCustomObject]@{
+            LocalAddress = [string]$listener.LocalAddress
+            LocalPort = [int]$listener.LocalPort
+            PID = $ownerPid
+            ProcessName = $processName
+        }
+    }
+}
+
+function Test-PortOwnedByCurrentComposeFrontend {
+    param([Parameter(Mandatory = $true)][int]$Port)
+
+    $containerId = (& docker compose @ComposeArgs ps -q frontend 2>$null | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($containerId)) {
+        return $false
+    }
+
+    $publishedPorts = (& docker compose @ComposeArgs port frontend 3000 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($publishedPorts)) {
+        return $false
+    }
+
+    foreach ($line in ($publishedPorts -split "\r?\n")) {
+        if ($line -match ':(?<port>\d+)$' -and [int]$Matches.port -eq $Port) {
+            return $true
         }
     }
 
-    & npm run build
-    if ($LASTEXITCODE -ne 0) {
-        Fail 'npm run build failed.'
-    }
-    Write-Info 'Next.js production build completed.'
+    return $false
 }
 
-function Build-DockerImages {
-    Write-Step '6/10 Build Docker images'
-    & docker compose @ComposeArgs build
-    if ($LASTEXITCODE -ne 0) {
-        Write-Info 'docker compose build failed -> pruning builder cache and retrying once'
-        & docker builder prune -af
-        if ($LASTEXITCODE -ne 0) {
-            Fail 'docker builder prune failed.'
+function Test-FrontendPortAvailable {
+    Write-Step 'Check frontend host port'
+    $frontendPort = Get-FrontendHostPort
+    Write-Info "Frontend host port: $frontendPort"
+
+    $listeners = @(Get-PortListeners -Port $frontendPort)
+    if ($listeners.Count -eq 0) {
+        Write-Info "Port $frontendPort is free."
+        return
+    }
+
+    if (Test-PortOwnedByCurrentComposeFrontend -Port $frontendPort) {
+        Write-Info "Port $frontendPort is already owned by this compose project's frontend service; continuing."
+        return
+    }
+
+    Write-Host ""
+    Write-Host "ERROR: Port $frontendPort is already in use. Docker cannot bind the frontend container to this port." -ForegroundColor Red
+    foreach ($listener in $listeners) {
+        Write-Host ("  Port {0} is listening on {1} by {2} (PID {3})." -f $listener.LocalPort, $listener.LocalAddress, $listener.ProcessName, $listener.PID) -ForegroundColor Yellow
+    }
+    Write-Host ""
+    Write-Host "Stop the process that owns the port, then rerun ./run.ps1." -ForegroundColor Yellow
+    Write-Host "Suggestions:" -ForegroundColor Yellow
+    Write-Host "  - If it is a local Next.js/dev server, stop that terminal with Ctrl+C." -ForegroundColor Yellow
+    Write-Host "  - If it is an old Docker dev stack from this repo, run ./stop.ps1." -ForegroundColor Yellow
+    Write-Host "  - On Windows, you can run Stop-Process -Id <PID> only if you are sure it is safe." -ForegroundColor Yellow
+    exit 1
+}
+
+function Reset-StackIfRequested {
+    if (-not ($Reset -or $Clean)) {
+        return
+    }
+
+    Write-Step 'Reset requested: stop stack and remove volumes'
+    Invoke-Checked 'docker compose down -v --remove-orphans' {
+        docker compose @ComposeArgs down --remove-orphans -v
+    }
+}
+
+function Get-ImageId {
+    param([Parameter(Mandatory = $true)][string]$Image)
+
+    $imageId = (& docker image ls -q $Image 2>$null | Select-Object -First 1)
+    if ([string]::IsNullOrWhiteSpace($imageId)) {
+        return $null
+    }
+
+    return [string]$imageId
+}
+
+function Get-ImageCreatedUtc {
+    param([Parameter(Mandatory = $true)][string]$Image)
+
+    $createdRaw = (& docker image inspect $Image --format '{{.Created}}' 2>$null | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($createdRaw)) {
+        Fail "Cannot inspect local image timestamp: $Image"
+    }
+
+    return ([DateTimeOffset]::Parse($createdRaw)).UtcDateTime
+}
+
+function Get-NewerInput {
+    param(
+        [Parameter(Mandatory = $true)][array]$Inputs,
+        [Parameter(Mandatory = $true)][datetime]$ImageCreatedUtc
+    )
+
+    foreach ($inputPath in $Inputs) {
+        if (-not (Test-Path -LiteralPath $inputPath)) {
+            Fail "Build input is missing: $inputPath"
         }
 
-        & docker compose @ComposeArgs build
-        if ($LASTEXITCODE -ne 0) {
-            Fail 'docker compose build failed after retry.'
+        $item = Get-Item -LiteralPath $inputPath
+        if ($item.LastWriteTimeUtc -gt $ImageCreatedUtc) {
+            return [string]$inputPath
         }
     }
-    Write-Info 'Docker images built.'
+
+    return $null
 }
 
-function Start-Compose {
-    Write-Step '7/10 Start docker-compose.prod.yml'
-    & docker compose @ComposeArgs up -d
-    if ($LASTEXITCODE -ne 0) {
-        Fail 'docker compose up failed.'
+function Get-BuildServicesToRun {
+    if ($Rebuild) {
+        Write-Info 'Rebuild requested -> all local dev images will be rebuilt.'
+        return @($BuildRules | ForEach-Object { $_.Service })
     }
-    Write-Info 'Compose stack started.'
+
+    $services = @()
+    foreach ($rule in $BuildRules) {
+        $imageId = Get-ImageId -Image $rule.Image
+        if ([string]::IsNullOrWhiteSpace($imageId)) {
+            Write-Info "$($rule.Image) is missing -> build $($rule.Service)"
+            $services += $rule.Service
+            continue
+        }
+
+        $imageCreatedUtc = Get-ImageCreatedUtc -Image $rule.Image
+        $newerInput = Get-NewerInput -Inputs $rule.Inputs -ImageCreatedUtc $imageCreatedUtc
+        if ($newerInput) {
+            Write-Info "$($rule.Image) is older than $newerInput -> build $($rule.Service)"
+            $services += $rule.Service
+            continue
+        }
+
+        Write-Info "$($rule.Image) is current -> skip build"
+    }
+
+    return $services
 }
 
-function Wait-ServiceHealthy {
+function Start-Stack {
+    Write-Step 'Build if needed and start full local dev stack'
+
+    if ($SkipBuild) {
+        Write-Info 'Build check skipped by -SkipBuild.'
+        Invoke-Checked 'docker compose up -d --no-build' {
+            docker compose @ComposeArgs up -d --no-build
+        }
+    }
+    else {
+        $servicesToBuild = @(Get-BuildServicesToRun)
+        if ($servicesToBuild.Count -gt 0) {
+            Invoke-Checked ("docker compose build " + ($servicesToBuild -join ' ')) {
+                docker compose @ComposeArgs build @servicesToBuild
+            }
+        }
+        else {
+            Write-Info 'No Docker image rebuild needed.'
+        }
+
+        Invoke-Checked 'docker compose up -d --no-build' {
+            docker compose @ComposeArgs up -d --no-build
+        }
+    }
+}
+
+function Wait-ServiceReady {
     param(
         [Parameter(Mandatory = $true)][string]$Service,
-        [Parameter(Mandatory = $true)][int]$TimeoutSec
+        [Parameter(Mandatory = $true)][bool]$RequireHealthy
     )
 
     $start = Get-Date
-
     while ($true) {
         $elapsed = ((Get-Date) - $start).TotalSeconds
-        if ($elapsed -ge $TimeoutSec) {
+        if ($elapsed -ge $ServiceTimeoutSec) {
             & docker compose @ComposeArgs logs --tail 120 $Service
-            Fail "Timeout waiting for service '$Service' to become healthy."
+            Fail "Timeout waiting for service '$Service'."
         }
 
-        $containerId = (& docker compose @ComposeArgs ps -q $Service).Trim()
+        $containerId = (& docker compose @ComposeArgs ps -q $Service | Out-String).Trim()
         if (-not $containerId) {
             Write-Info "Waiting $Service ... container not created yet"
             Start-Sleep -Seconds 3
             continue
         }
 
-        $state = (& docker inspect --format '{{.State.Status}}' $containerId).Trim()
-        $health = (& docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' $containerId).Trim()
+        $state = (& docker inspect --format '{{.State.Status}}' $containerId | Out-String).Trim()
+        $health = (& docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' $containerId | Out-String).Trim()
 
         if ($state -ne 'running') {
             & docker compose @ComposeArgs logs --tail 120 $Service
             Fail "Service '$Service' is not running (state=$state)."
         }
 
-        if ($health -eq 'healthy' -or $health -eq 'none') {
+        if (-not $RequireHealthy -or $health -eq 'healthy' -or $health -eq 'none') {
             Write-Info "$Service is $state / $health"
             return
         }
@@ -342,83 +476,194 @@ function Wait-ServiceHealthy {
     }
 }
 
-function Wait-AllServices {
-    Write-Step '8/10 Wait for healthy services (frontend, nginx, redis, mongodb, ai-service, mailpit)'
-
-    $services = @('frontend', 'nginx', 'redis', 'mongodb', 'ai-service', 'mailpit')
-    foreach ($service in $services) {
-        Wait-ServiceHealthy -Service $service -TimeoutSec $ServiceTimeoutSec
-    }
-}
-
-function Assert-Http200 {
+function Wait-HttpReady {
     param(
-        [Parameter(Mandatory = $true)][string]$Url,
-        [int]$Retries = 20,
-        [int]$DelaySec = 3
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Url
     )
 
-    for ($i = 1; $i -le $Retries; $i++) {
+    $start = Get-Date
+    while ($true) {
+        $elapsed = ((Get-Date) - $start).TotalSeconds
+        if ($elapsed -ge $ServiceTimeoutSec) {
+            Fail "Timeout waiting for $Name at $Url"
+        }
+
         try {
-            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 15
-            if ($response.StatusCode -eq 200) {
-                Write-Info "$Url -> 200"
+            $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 10
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+                Write-Info "$Name is reachable: $Url"
                 return
             }
         }
         catch {
-            if ($i -eq $Retries) {
-                Fail "Health check failed for $Url : $($_.Exception.Message)"
-            }
+            Write-Info "Waiting $Name ... $($_.Exception.Message)"
         }
 
-        Write-Info "Retry $i/$Retries for $Url"
-        Start-Sleep -Seconds $DelaySec
+        Start-Sleep -Seconds 3
+    }
+}
+
+function Wait-TcpReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][int]$Port
+    )
+
+    $start = Get-Date
+    while ($true) {
+        $elapsed = ((Get-Date) - $start).TotalSeconds
+        if ($elapsed -ge $ServiceTimeoutSec) {
+            Fail "Timeout waiting for $Name at ${HostName}:$Port"
+        }
+
+        $client = [System.Net.Sockets.TcpClient]::new()
+        try {
+            $connect = $client.BeginConnect($HostName, $Port, $null, $null)
+            if ($connect.AsyncWaitHandle.WaitOne([TimeSpan]::FromSeconds(2))) {
+                $client.EndConnect($connect)
+                Write-Info "$Name is accepting TCP connections: ${HostName}:$Port"
+                return
+            }
+        }
+        catch {
+            Write-Info "Waiting $Name ... $($_.Exception.Message)"
+        }
+        finally {
+            $client.Close()
+        }
+
+        Start-Sleep -Seconds 2
+    }
+}
+
+function Wait-Stack {
+    Write-Step 'Wait for services'
+
+    foreach ($service in $RunningServices) {
+        Wait-ServiceReady -Service $service -RequireHealthy $false
     }
 
-    Fail "Health check failed for $Url"
+    $frontendPort = Get-FrontendHostPort
+    Wait-TcpReady -Name 'frontend server' -HostName 'localhost' -Port $frontendPort
+    Wait-HttpReady -Name 'ai-service health' -Url 'http://localhost:8000/health'
+    Wait-HttpReady -Name 'mailpit' -Url 'http://localhost:8025'
 }
 
-function Check-HealthEndpoints {
-    Write-Step '9/10 Test health endpoints'
-    Assert-Http200 -Url $CanonicalLocalOriginWithSlash
-    Assert-Http200 -Url "$CanonicalLocalOrigin/healthz"
-    Assert-Http200 -Url "$CanonicalLocalOrigin/api/health"
-    Assert-Http200 -Url 'http://localhost:8025'
+function Get-HttpStatusFromException {
+    param([Parameter(Mandatory = $true)]$ErrorRecord)
+
+    $responseProperty = $ErrorRecord.Exception.PSObject.Properties['Response']
+    if ($null -eq $responseProperty) {
+        return $null
+    }
+
+    $response = $responseProperty.Value
+    if ($null -eq $response) {
+        return $null
+    }
+
+    try {
+        return [int]$response.StatusCode
+    }
+    catch {
+        return $null
+    }
 }
 
-function Print-FinalOutput {
-    Write-Step '10/10 Ready'
-    Write-Host 'Project is running at:' -ForegroundColor Green
-    Write-Host $CanonicalLocalOriginWithSlash -ForegroundColor Green
-    Write-Host 'Mailpit inbox is running at:' -ForegroundColor Green
-    Write-Host 'http://localhost:8025' -ForegroundColor Green
+function Invoke-WarmupRoute {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $frontendPort = Get-FrontendHostPort
+    $url = "http://localhost:${frontendPort}${Path}"
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    $statusCode = $null
+
+    try {
+        $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 90 -MaximumRedirection 0
+        $statusCode = [int]$response.StatusCode
+    }
+    catch {
+        $statusCode = Get-HttpStatusFromException -ErrorRecord $_
+        if ($null -eq $statusCode) {
+            Write-Host ("    warmup {0}: WARN {1} after {2:n1}s" -f $Label, $_.Exception.Message, $timer.Elapsed.TotalSeconds) -ForegroundColor Yellow
+            return
+        }
+    }
+    finally {
+        $timer.Stop()
+    }
+
+    $message = "warmup {0}: HTTP {1} in {2:n1}s" -f $Label, $statusCode, $timer.Elapsed.TotalSeconds
+    if ($statusCode -ge 500) {
+        Write-Host "    $message" -ForegroundColor Yellow
+        return
+    }
+
+    Write-Info $message
 }
 
-if ($Clean) {
-    Write-Step 'Clean mode: remove old stack first'
-    & docker compose @ComposeArgs down --remove-orphans -v
+function Warmup-FrontendRoutes {
+    if ($NoWarmup) {
+        Write-Info 'Route warmup skipped by -NoWarmup.'
+        return
+    }
+
+    Write-Step 'Warm frontend routes'
+    $routes = @(
+        [PSCustomObject]@{ Label = 'home'; Path = '/' },
+        [PSCustomObject]@{ Label = 'jobs'; Path = '/jobs' },
+        [PSCustomObject]@{ Label = 'api jobs'; Path = '/api/jobs?sort=newest&page=1&limit=10' },
+        [PSCustomObject]@{ Label = 'recommend jobs'; Path = '/api/recommend-jobs' },
+        [PSCustomObject]@{ Label = 'resume list'; Path = '/api/cv-builder/resumes' },
+        [PSCustomObject]@{ Label = 'cv options'; Path = '/api/candidate/cv-options' },
+        [PSCustomObject]@{ Label = 'cv builder shell'; Path = '/candidate/cv-builder' },
+        [PSCustomObject]@{ Label = 'recommended jobs shell'; Path = '/candidate/jobs/recommended' }
+    )
+
+    foreach ($route in $routes) {
+        Invoke-WarmupRoute -Label $route.Label -Path $route.Path
+    }
+}
+
+function Print-Status {
+    Write-Step 'Compose status'
+    & docker compose @ComposeArgs ps
     if ($LASTEXITCODE -ne 0) {
-        Fail 'Clean step failed (docker compose down).'
+        Fail 'docker compose ps failed.'
     }
-    Write-Info 'Old stack removed.'
 }
 
+function Print-Urls {
+    Write-Step 'Ready'
+    $frontendPort = Get-FrontendHostPort
+    $frontendUrl = "http://localhost:$frontendPort"
+    Write-Host 'Local dev stack is ready:' -ForegroundColor Green
+    Write-Host "  Frontend:          $frontendUrl" -ForegroundColor Green
+    Write-Host '  AI service health: http://localhost:8000/health' -ForegroundColor Green
+    Write-Host '  Mailpit inbox:     http://localhost:8025' -ForegroundColor Green
+    Write-Host '  MongoDB:           mongodb://localhost:27017/recruitment_platform' -ForegroundColor Green
+    Write-Host '  Redis:             redis://localhost:6379/0' -ForegroundColor Green
+    Write-Host ''
+    Write-Host 'Stop with: ./stop.ps1' -ForegroundColor Cyan
+    Write-Host 'Reset data with: ./stop.ps1 -Reset' -ForegroundColor Cyan
+    Write-Host 'Force rebuild with: ./run.ps1 -Rebuild' -ForegroundColor Cyan
+    Write-Host 'Webpack fallback: ./run.ps1 -Webpack' -ForegroundColor Cyan
+    Write-Host 'Production preview: ./run.ps1 -Preview' -ForegroundColor Cyan
+}
+
+Ensure-RepoRoot
+Set-FrontendRuntimeMode
 Ensure-Docker
-Ensure-NodeVersion
-Ensure-Dependencies
-Ensure-EnvFile
-
-if ($SkipBuild) {
-    Write-Step '5/10 + 6/10 Skip build steps (-SkipBuild)'
-    Write-Info 'Skipping Next.js build and Docker image build.'
-}
-else {
-    Build-NextApp
-    Build-DockerImages
-}
-
-Start-Compose
-Wait-AllServices
-Check-HealthEndpoints
-Print-FinalOutput
+Test-LocalImagesHaveBuild
+Reset-StackIfRequested
+Test-FrontendPortAvailable
+Start-Stack
+Wait-Stack
+Warmup-FrontendRoutes
+Print-Status
+Print-Urls

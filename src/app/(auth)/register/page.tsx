@@ -8,6 +8,7 @@ import { ArrowLeft, Building2, Eye, EyeOff, MailCheck, Star, UserRound } from "l
 import { createClient } from "@/utils/supabase/client";
 import { signInWithGoogle } from "@/utils/supabase/auth-helpers";
 import { signup, verifyOtp } from "@/app/(auth)/actions";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 function RegisterPageContent() {
   const searchParams = useSearchParams();
@@ -20,6 +21,7 @@ function RegisterPageContent() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [role, setRole] = useState<"candidate" | "employer">(requestedRole);
+  const { alert } = useAppDialog();
 
   const handleGoogleRegister = async () => {
     await signInWithGoogle(supabase);
@@ -33,7 +35,12 @@ function RegisterPageContent() {
     const confirmPassword = formData.get("confirmPassword") as string;
 
     if (password !== confirmPassword) {
-      alert("Mat khau nhap lai khong khop!");
+      await alert({
+        title: "Mật khẩu chưa khớp",
+        description: "Mat khau nhap lai khong khop!",
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
       return;
     }
 
@@ -43,7 +50,12 @@ function RegisterPageContent() {
     const result = await signup(formData);
 
     if (result?.error) {
-      alert(`Loi: ${result.error}`);
+      await alert({
+        title: "Đăng ký thất bại",
+        description: `Loi: ${result.error}`,
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
       setLoading(false);
     } else if (result?.success) {
       setEmailForOtp(formData.get("email") as string);
@@ -59,7 +71,12 @@ function RegisterPageContent() {
     const result = await verifyOtp(emailForOtp, otp);
 
     if (result?.error) {
-      alert(`Loi xac thuc: ${result.error}`);
+      await alert({
+        title: "Xác thực OTP thất bại",
+        description: `Loi xac thuc: ${result.error}`,
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
       setLoading(false);
     }
   };

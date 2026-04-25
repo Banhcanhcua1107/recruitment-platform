@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import { useProfileBuilder } from '../stores/profileBuilderStore';
 import { Section, getSectionMeta, isSectionEmpty } from '../types/profile';
+import { useAppDialog } from '@/components/ui/app-dialog';
 
 interface SectionCardProps {
   section: Section;
@@ -13,6 +14,7 @@ interface SectionCardProps {
 
 export default function SectionCard({ section, children, onEdit, readOnly = false }: SectionCardProps) {
   const { removeSection, editingSectionId, setEditingSection, toggleSectionVisibility } = useProfileBuilder();
+  const { confirm } = useAppDialog();
   
   const meta = getSectionMeta(section.type);
   const isEmpty = isSectionEmpty(section);
@@ -26,8 +28,16 @@ export default function SectionCard({ section, children, onEdit, readOnly = fals
     }
   };
 
-  const handleDelete = () => {
-    if (confirm('Bạn có chắc muốn xóa mục này?')) {
+  const handleDelete = async () => {
+    const approved = await confirm({
+      title: "Xóa mục hồ sơ",
+      description: "Bạn có chắc muốn xóa mục này?",
+      confirmText: "Xóa mục",
+      cancelText: "Giữ lại",
+      tone: "danger",
+    });
+
+    if (approved) {
       removeSection(section.id);
     }
   };
@@ -95,7 +105,7 @@ export default function SectionCard({ section, children, onEdit, readOnly = fals
 
           <button
             type="button"
-            onClick={handleDelete}
+            onClick={() => void handleDelete()}
             className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
             title="Xoa"
           >

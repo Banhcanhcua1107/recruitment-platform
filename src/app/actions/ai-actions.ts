@@ -1,6 +1,8 @@
 "use server";
 
+import { existsSync } from "node:fs";
 import { fetchWithTimeout, UpstreamTimeoutError } from "@/lib/upstream-http";
+import { CV_WRITER_SYSTEM_PROMPT_VI, CV_WRITER_SYSTEM_PROMPT_EN } from "./ai-config";
 
 // ── Language detection ──────────────────────────────────────
 // Returns "vi" if the text contains Vietnamese diacritics, otherwise "en"
@@ -153,12 +155,27 @@ function isTooSimilar(original: string, suggestion: string, threshold = 0.80): b
   return calculateDiceSimilarity(original, suggestion) > threshold;
 }
 
-import { CV_WRITER_SYSTEM_PROMPT_VI, CV_WRITER_SYSTEM_PROMPT_EN } from "./ai-config";
+function resolvePositiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (Number.isFinite(parsed) && parsed > 0) {
+    return parsed;
+  }
+  return fallback;
+}
 
-const OLLAMA_REQUEST_TIMEOUT_MS = Number.parseInt(
-  process.env.OLLAMA_REQUEST_TIMEOUT_MS || "20000",
-  10,
-);
+function resolveNonNegativeInteger(value: string | undefined, fallback: number) {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return parsed;
+  }
+  return fallback;
+}
+
+const OLLAMA_REQUEST_TIMEOUT_MS = resolvePositiveInteger(process.env.OLLAMA_REQUEST_TIMEOUT_MS, 60000);
+const OLLAMA_RETRY_MAX_RETRIES = resolveNonNegativeInteger(process.env.OLLAMA_RETRY_MAX_RETRIES, 1);
+const OLLAMA_RETRY_BASE_DELAY_MS = resolvePositiveInteger(process.env.OLLAMA_RETRY_BASE_DELAY_MS, 900);
+const OLLAMA_RETRY_MAX_DELAY_MS = resolvePositiveInteger(process.env.OLLAMA_RETRY_MAX_DELAY_MS, 1500);
+const IS_CONTAINER_RUNTIME = existsSync("/.dockerenv");
 
 // ── Build the system prompt ─────────────────────────────────
 function buildSystemPrompt(lang: "vi" | "en", format: ContentFormat): string {
@@ -281,6 +298,9 @@ interface OllamaCallResult {
   rawOutput: string;
   model: string;
   error: string | null;
+  failure: OllamaCallFailure | null;
+  endpoint: string;
+  attempts: number;
   requestPreview: {
     baseUrl: string;
     model: string;
@@ -291,6 +311,144 @@ interface OllamaCallResult {
   };
 }
 
+type OllamaFailureType = "timeout" | "unreachable" | "network" | "http" | "empty_output" | "unknown";
+
+interface OllamaCallFailure {
+  type: OllamaFailureType;
+  recoverable: boolean;
+  userMessage: string;
+  technicalMessage: string;
+  endpoint: string;
+  statusCode?: number;
+}
+
+function normalizeBaseUrl(url: string) {
+  return url.replace(/\/+$/, "");
+}
+
+function isLocalhostOllamaUrl(url: string) {
+  return /^https?:\/\/(localhost|127(?:\.\d{1,3}){3})(:\d+)?\b/i.test(url);
+}
+
+function resolveLocalDockerHintMessage(endpoint: string) {
+  if (IS_CONTAINER_RUNTIME && isLocalhostOllamaUrl(endpoint)) {
+    return "Phát hiện app đang chạy trong container nhưng OLLAMA_BASE_URL đang trỏ localhost. Hãy đổi sang http://host.docker.internal:11434.";
+  }
+
+  return "Kiểm tra cấu hình URL giữa local và Docker (local: http://localhost:11434, Docker: http://host.docker.internal:11434).";
+}
+
+function summarizeUpstreamDetail(value: string, maxChars = 320) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxChars)}...`;
+}
+
+function waitFor(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function resolveRetryDelayMs(attempt: number) {
+  const stepped = OLLAMA_RETRY_BASE_DELAY_MS + (attempt - 1) * 250;
+  return Math.min(Math.max(stepped, 300), OLLAMA_RETRY_MAX_DELAY_MS);
+}
+
+function isRecoverableHttpStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function classifyOllamaHttpFailure(status: number, detail: string, endpoint: string): OllamaCallFailure {
+  const snippet = summarizeUpstreamDetail(detail);
+  const technicalMessage = snippet ? `HTTP ${status}: ${snippet}` : `HTTP ${status}`;
+  const recoverable = isRecoverableHttpStatus(status);
+
+  if (recoverable) {
+    return {
+      type: "http",
+      recoverable: true,
+      userMessage: `Ollama tạm thời không sẵn sàng (HTTP ${status}). Vui lòng thử lại.`,
+      technicalMessage,
+      statusCode: status,
+      endpoint,
+    };
+  }
+
+  return {
+    type: "http",
+    recoverable: false,
+    userMessage: `Ollama trả về lỗi HTTP ${status}. Vui lòng kiểm tra cấu hình hoặc nội dung yêu cầu.`,
+    technicalMessage,
+    statusCode: status,
+    endpoint,
+  };
+}
+
+function classifyOllamaThrownFailure(err: unknown, endpoint: string): OllamaCallFailure {
+  if (err instanceof UpstreamTimeoutError) {
+    return {
+      type: "timeout",
+      recoverable: true,
+      userMessage: "Ollama phản hồi quá chậm. Vui lòng thử lại.",
+      technicalMessage: err.message,
+      endpoint,
+    };
+  }
+
+  const technicalMessage = err instanceof Error ? err.message : String(err);
+  const normalized = technicalMessage.toLowerCase();
+
+  if (/(econnrefused|enotfound|eai_again|getaddrinfo|connection refused|dns|invalid url|failed to parse url|no route to host)/i.test(normalized)) {
+    return {
+      type: "unreachable",
+      recoverable: true,
+      userMessage: `Không kết nối được tới Ollama. ${resolveLocalDockerHintMessage(endpoint)}`,
+      technicalMessage,
+      endpoint,
+    };
+  }
+
+  if (/(fetch failed|network|socket hang up|connection reset|etimedout|timed out|temporarily unavailable|upstream unavailable)/i.test(normalized)) {
+    return {
+      type: "network",
+      recoverable: true,
+      userMessage: "Kết nối tới Ollama bị gián đoạn. Vui lòng thử lại.",
+      technicalMessage,
+      endpoint,
+    };
+  }
+
+  return {
+    type: "unknown",
+    recoverable: false,
+    userMessage: "Không thể nhận phản hồi từ Ollama. Vui lòng thử lại sau.",
+    technicalMessage,
+    endpoint,
+  };
+}
+
+function createEmptyOutputFailure(endpoint: string): OllamaCallFailure {
+  return {
+    type: "empty_output",
+    recoverable: false,
+    userMessage: "AI không trả về nội dung hợp lệ.",
+    technicalMessage: "Ollama returned empty message.content.",
+    endpoint,
+  };
+}
+
+function shouldRetryFailure(failure: OllamaCallFailure, attempt: number, maxAttempts: number) {
+  return failure.recoverable && attempt < maxAttempts;
+}
+
 // ── Ollama caller ────────────────────────────────────────────
 async function callOllama(
   systemPrompt: string,
@@ -298,8 +456,10 @@ async function callOllama(
   prefill = "",
   temperature = 0.2
 ): Promise<OllamaCallResult> {
-  const baseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
+  const baseUrl = normalizeBaseUrl(process.env.OLLAMA_BASE_URL ?? "http://localhost:11434");
   const model   = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+  const endpoint = `${baseUrl}/api/chat`;
+  const maxAttempts = OLLAMA_RETRY_MAX_RETRIES + 1;
 
   const requestPreview = {
     baseUrl,
@@ -318,78 +478,189 @@ async function callOllama(
   // Ollama returns only the continuation — we must prepend the seed back ourselves.
   if (prefill) messages.push({ role: "assistant", content: prefill });
 
-  try {
-    const { response } = await fetchWithTimeout(
-      `${baseUrl}/api/chat`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Connection: "keep-alive",
-        },
-        body: JSON.stringify({
-          model,
-          stream: false,
-          options: {
-            temperature,
-            num_predict: 500, // Giới hạn độ dài để không viết quá dài
-            top_p: 0.8,
-            // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
-            stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"],
-          },
-          messages,
-        }),
-      },
-      {
-        timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
-        timeoutMessage: `Ollama request timed out after ${OLLAMA_REQUEST_TIMEOUT_MS}ms.`,
-      },
-    );
-
-    if (!response.ok) {
-      const detail = await response.text();
-      console.error(`[Ollama] HTTP ${response.status}:`, detail);
-      return {
-        output: "",
-        rawOutput: "",
-        model,
-        error: `HTTP ${response.status}: ${detail}`,
-        requestPreview,
-      };
-    }
-
-    const body = await response.json();
-    const content = (body?.message?.content ?? "").trim();
-    const fullOutput = prefill ? prefill + content : content;
-
-    return {
-      output: fullOutput,
-      rawOutput: fullOutput,
-      model,
-      error: null,
-      requestPreview,
-    };
-  } catch (err) {
-    if (err instanceof UpstreamTimeoutError) {
-      console.error("[Ollama] timeout:", err.message);
-      return {
-        output: "",
-        rawOutput: "",
-        model,
-        error: err.message,
-        requestPreview,
-      };
-    }
-
-    console.error("[Ollama] call failed:", err);
-    return {
-      output: "",
-      rawOutput: "",
-      model,
-      error: err instanceof Error ? err.message : String(err),
-      requestPreview,
-    };
+  if (IS_CONTAINER_RUNTIME && isLocalhostOllamaUrl(baseUrl)) {
+    console.warn("[Ollama] OLLAMA_BASE_URL is localhost inside container runtime", {
+      baseUrl,
+      hint: "Use http://host.docker.internal:11434 for Docker setup.",
+    });
   }
+
+  let lastFailure: OllamaCallFailure | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const { response } = await fetchWithTimeout(
+        endpoint,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Connection: "keep-alive",
+          },
+          body: JSON.stringify({
+            model,
+            stream: false,
+            options: {
+              temperature,
+              num_predict: 500, // Giới hạn độ dài để không viết quá dài
+              top_p: 0.8,
+              // Thêm Stop Sequences để AI dừng lại khi định nói nhảm
+              stop: ["Okay", "Note:", "Lưu ý:", "Wait", "Hmm", "\n\n\n"],
+            },
+            messages,
+          }),
+        },
+        {
+          timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
+          timeoutMessage: `Ollama request timed out after ${OLLAMA_REQUEST_TIMEOUT_MS}ms.`,
+        },
+      );
+
+      if (!response.ok) {
+        const detail = await response.text();
+        const failure = classifyOllamaHttpFailure(response.status, detail, endpoint);
+        lastFailure = failure;
+
+        if (shouldRetryFailure(failure, attempt, maxAttempts)) {
+          const delayMs = resolveRetryDelayMs(attempt);
+          console.warn("[Ollama] recoverable HTTP failure, scheduling retry", {
+            endpoint,
+            model,
+            attempt,
+            maxAttempts,
+            statusCode: response.status,
+            delayMs,
+          });
+          await waitFor(delayMs);
+          continue;
+        }
+
+        const logger = failure.recoverable ? console.warn : console.error;
+        logger("[Ollama] HTTP failure", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+          statusCode: response.status,
+          error: failure.technicalMessage,
+        });
+
+        return {
+          output: "",
+          rawOutput: "",
+          model,
+          error: failure.technicalMessage,
+          failure,
+          endpoint,
+          attempts: attempt,
+          requestPreview,
+        };
+      }
+
+      const body = await response.json();
+      const content = (body?.message?.content ?? "").trim();
+      const fullOutput = prefill ? prefill + content : content;
+
+      if (!fullOutput.trim()) {
+        const failure = createEmptyOutputFailure(endpoint);
+        console.warn("[Ollama] empty output", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+        });
+
+        return {
+          output: "",
+          rawOutput: "",
+          model,
+          error: failure.technicalMessage,
+          failure,
+          endpoint,
+          attempts: attempt,
+          requestPreview,
+        };
+      }
+
+      if (attempt > 1) {
+        console.info("[Ollama] recovered after retry", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+        });
+      }
+
+      return {
+        output: fullOutput,
+        rawOutput: fullOutput,
+        model,
+        error: null,
+        failure: null,
+        endpoint,
+        attempts: attempt,
+        requestPreview,
+      };
+    } catch (err) {
+      const failure = classifyOllamaThrownFailure(err, endpoint);
+      lastFailure = failure;
+
+      if (shouldRetryFailure(failure, attempt, maxAttempts)) {
+        const delayMs = resolveRetryDelayMs(attempt);
+        console.warn("[Ollama] recoverable call failure, scheduling retry", {
+          endpoint,
+          model,
+          attempt,
+          maxAttempts,
+          type: failure.type,
+          error: failure.technicalMessage,
+          delayMs,
+        });
+        await waitFor(delayMs);
+        continue;
+      }
+
+      const logger = failure.recoverable ? console.warn : console.error;
+      logger("[Ollama] call failed", {
+        endpoint,
+        model,
+        attempt,
+        maxAttempts,
+        type: failure.type,
+        error: failure.technicalMessage,
+      });
+
+      return {
+        output: "",
+        rawOutput: "",
+        model,
+        error: failure.technicalMessage,
+        failure,
+        endpoint,
+        attempts: attempt,
+        requestPreview,
+      };
+    }
+  }
+
+  const fallbackFailure: OllamaCallFailure = lastFailure ?? {
+    type: "unknown",
+    recoverable: false,
+    userMessage: "Không thể nhận phản hồi từ Ollama. Vui lòng thử lại sau.",
+    technicalMessage: "Unknown Ollama failure.",
+    endpoint,
+  };
+
+  return {
+    output: "",
+    rawOutput: "",
+    model,
+    error: fallbackFailure.technicalMessage,
+    failure: fallbackFailure,
+    endpoint,
+    attempts: maxAttempts,
+    requestPreview,
+  };
 }
 
 // ════════════════════════════════════════════════════════════
@@ -409,6 +680,9 @@ export interface OptimizeDebugInfo {
   systemPromptPreview: string;
   userPromptPreview: string;
   failureReason?: string;
+  ollamaErrorType?: OllamaFailureType;
+  ollamaEndpoint?: string;
+  ollamaAttempts?: number;
 }
 
 export interface OptimizeResult {
@@ -448,6 +722,8 @@ export async function optimizeCVContent(
     console.info(`[AI optimize][${traceId}] first attempt`, {
       model: firstAttempt.model,
       request: firstAttempt.requestPreview,
+      attempts: firstAttempt.attempts,
+      failureType: firstAttempt.failure?.type,
       error: firstAttempt.error,
       rawOutputPreview: truncateForDebug(firstAttempt.rawOutput),
     });
@@ -455,11 +731,13 @@ export async function optimizeCVContent(
 
   if (!firstAttempt.output) {
     const model = process.env.OLLAMA_CV_SUGGEST_MODEL ?? "qwen3:4b";
+    const failure = firstAttempt.failure;
     const baseError = firstAttempt.error || "Ollama không phản hồi.";
+    const userMessage = failure?.userMessage || "Ollama không phản hồi. Vui lòng thử lại.";
 
     return {
       success: false,
-      error: `${baseError} Đảm bảo Ollama đang chạy và model '${model}' đã được pull.`,
+      error: userMessage,
       provider: `ollama/${model}`,
       debug: includeDebug
         ? {
@@ -474,7 +752,10 @@ export async function optimizeCVContent(
             finalAttemptRawPreview: "",
             systemPromptPreview: truncateForDebug(systemPrompt, 500),
             userPromptPreview: truncateForDebug(userPrompt, 700),
-            failureReason: baseError,
+            failureReason: failure?.technicalMessage || baseError,
+            ollamaErrorType: failure?.type,
+            ollamaEndpoint: firstAttempt.endpoint,
+            ollamaAttempts: firstAttempt.attempts,
           }
         : undefined,
     };
@@ -553,6 +834,8 @@ export async function optimizeCVContent(
             finalAttemptRawPreview: truncateForDebug(finalRaw),
             systemPromptPreview: truncateForDebug(systemPrompt, 500),
             userPromptPreview: truncateForDebug(userPrompt, 700),
+            ollamaEndpoint: firstAttempt.endpoint,
+            ollamaAttempts: firstAttempt.attempts,
           }
         : undefined,
     };
@@ -591,6 +874,8 @@ export async function optimizeCVContent(
           systemPromptPreview: truncateForDebug(systemPrompt, 500),
           userPromptPreview: truncateForDebug(userPrompt, 700),
           failureReason,
+          ollamaEndpoint: firstAttempt.endpoint,
+          ollamaAttempts: firstAttempt.attempts,
         }
       : undefined,
   };
@@ -642,7 +927,8 @@ Return pure JSON (no markdown), format:
     return {
       success: false,
       error:
-        ollamaResult.error
+        ollamaResult.failure?.userMessage
+        || ollamaResult.error
         || "Ollama không phản hồi. Kiểm tra 'ollama serve' và 'ollama pull qwen3:4b'.",
     };
   }

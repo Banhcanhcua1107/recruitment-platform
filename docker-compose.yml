@@ -104,6 +104,9 @@ services:
 
   celery-worker:
     image: recruitment-platform-ai-service-dev
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
     working_dir: /workspace/ai-service
     env_file:
       - .env.local
@@ -135,6 +138,7 @@ services:
         condition: service_healthy
 
   frontend:
+    image: recruitment-platform-frontend
     build:
       context: .
       dockerfile: Dockerfile
@@ -147,6 +151,8 @@ services:
       NEXT_PUBLIC_AI_SERVICE_URL: http://localhost:8000
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       DOCKER_DEV: "true"
+      FRONTEND_MODE: ${FRONTEND_MODE:-dev}
+      NEXT_DEV_SCRIPT: ${NEXT_DEV_SCRIPT:-dev:docker}
       CHOKIDAR_USEPOLLING: "true"
       WATCHPACK_POLLING: "true"
       EMAIL_MODE: ${EMAIL_MODE:-test}
@@ -164,14 +170,14 @@ services:
       REAL_SMTP_PASS: ${REAL_SMTP_PASS:-}
       REAL_SMTP_FROM: ${REAL_SMTP_FROM:-}
     command:
-      - npm
-      - run
-      - dev:docker
-      - --
-      - --hostname
-      - 0.0.0.0
-      - --port
-      - "3000"
+      - sh
+      - -c
+      - |
+        if [ "$$FRONTEND_MODE" = "preview" ]; then
+          npm run build && HOSTNAME=0.0.0.0 PORT=3000 npm run start:standalone
+        else
+          npm run "$$NEXT_DEV_SCRIPT" -- --hostname 0.0.0.0 --port 3000
+        fi
     ports:
       - "3000:3000"
     volumes:

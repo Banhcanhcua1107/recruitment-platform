@@ -93,13 +93,18 @@ function cloneEmptyNodeFromTemplate(node: SharedSectionNode, seed: string): Shar
   };
 }
 
-function renderReadonlyParagraph(value: string, placeholder: string) {
+function renderReadonlyParagraph(
+  value: string,
+  placeholder: string,
+  contentTextClassName: string,
+  placeholderClassName: string,
+) {
   if (!value.trim()) {
-    return <span className="text-[13px] italic text-slate-400">{placeholder}</span>;
+    return <span className={cn("text-[13px] italic", placeholderClassName)}>{placeholder}</span>;
   }
 
   return (
-    <div className="space-y-1 text-[14px] leading-[1.65] text-slate-800">
+    <div className={cn("space-y-1 text-[14px] leading-[1.65]", contentTextClassName)}>
       {value
         .split(/\r?\n/)
         .filter((line) => line.trim().length > 0)
@@ -110,15 +115,20 @@ function renderReadonlyParagraph(value: string, placeholder: string) {
   );
 }
 
-function renderReadonlyList(items: string[], placeholder: string) {
+function renderReadonlyList(
+  items: string[],
+  placeholder: string,
+  contentTextClassName: string,
+  placeholderClassName: string,
+) {
   const normalized = items.map((item) => item.trim()).filter(Boolean);
 
   if (normalized.length === 0) {
-    return <span className="text-[13px] italic text-slate-400">{placeholder}</span>;
+    return <span className={cn("text-[13px] italic", placeholderClassName)}>{placeholder}</span>;
   }
 
   return (
-    <ul className="list-disc space-y-1 pl-5 text-[13px] leading-[1.65] text-slate-800">
+    <ul className={cn("list-disc space-y-1 pl-5 text-[13px] leading-[1.65]", contentTextClassName)}>
       {normalized.map((item, index) => (
         <li key={`${item}-${index}`}>{item}</li>
       ))}
@@ -268,7 +278,12 @@ export function SectionRenderer({
                 {node.label}
               </p>
             ) : null}
-            {renderReadonlyParagraph(node.value, placeholder)}
+            {renderReadonlyParagraph(
+              node.value,
+              placeholder,
+              styleConfig.contentTextClassName,
+              template.colorPalette.mutedTextClassName,
+            )}
           </div>
         );
       }
@@ -299,11 +314,12 @@ export function SectionRenderer({
             multiline={node.multiline ?? true}
             minRows={node.multiline === false ? 1 : 3}
             showToolbar={node.multiline !== false}
+            readClassName={cn("px-0 py-0 text-[14px] leading-[1.65]", styleConfig.contentTextClassName)}
           />
         </div>
       );
     },
-    [canEdit, mode, template.colorPalette.mutedTextClassName, updateNode],
+    [canEdit, mode, styleConfig.contentTextClassName, template.colorPalette.mutedTextClassName, updateNode],
   );
 
   const renderListNode = useCallback(
@@ -318,7 +334,12 @@ export function SectionRenderer({
                 {node.label}
               </p>
             ) : null}
-            {renderReadonlyList(node.items, placeholder)}
+            {renderReadonlyList(
+              node.items,
+              placeholder,
+              styleConfig.contentTextClassName,
+              template.colorPalette.mutedTextClassName,
+            )}
           </div>
         );
       }
@@ -346,11 +367,12 @@ export function SectionRenderer({
                 };
               });
             }}
+            readClassName={cn("px-0 py-0 text-[13px] leading-[1.65]", styleConfig.contentTextClassName)}
           />
         </div>
       );
     },
-    [canEdit, mode, template.colorPalette.mutedTextClassName, updateNode],
+    [canEdit, mode, styleConfig.contentTextClassName, template.colorPalette.mutedTextClassName, updateNode],
   );
 
   const renderNode = (node: SharedSectionNode, path: NodePath, depth: number): ReactElement => {
@@ -378,7 +400,7 @@ export function SectionRenderer({
         )}
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[13px] font-semibold text-slate-900">{groupNode.label}</p>
+          <p className={cn("text-[13px] font-semibold", styleConfig.titleTextClassName)}>{groupNode.label}</p>
           <div className="flex items-center gap-2">
             {groupNode.repeatable ? (
               <span className={cn("text-[11px] font-medium", template.colorPalette.mutedTextClassName)}>
@@ -462,7 +484,7 @@ export function SectionRenderer({
       showAddButtons={mode === "edit"}
       disableInteractions={mode !== "edit"}
     >
-      <div className="space-y-2.5 text-[14px] leading-6 text-slate-800">
+      <div className={cn("space-y-2.5 text-[14px] leading-6", styleConfig.contentTextClassName)}>
         {payload.sections.map((node, index) => (
           <Fragment key={node.id}>{renderNode(node, [index], 0)}</Fragment>
         ))}

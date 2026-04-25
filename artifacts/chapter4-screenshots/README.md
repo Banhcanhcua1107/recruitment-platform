@@ -1,0 +1,94 @@
+# Chapter 4 Screenshot Index
+
+Generated from the local TalentFlow UI capture run.
+
+- 4.1-homepage.png -> Hình 4.1. Giao diện trang chủ TalentFlow
+  - Mục: 4.2 Cổng công khai
+  - Ghi chú: Public
+- 4.2-jobs-list.png -> Hình 4.2. Giao diện danh sách việc làm và bộ lọc tìm kiếm
+  - Mục: 4.2 Cổng công khai
+  - Ghi chú: Public
+- 4.3-job-detail-apply.png -> Hình 4.3. Trang chi tiết việc làm với khu vực ứng tuyển
+  - Mục: 4.2 Cổng công khai
+  - Ghi chú: Public
+- 4.4-companies-list.png -> Hình 4.4. Danh mục công ty đang tuyển dụng
+  - Mục: 4.2 Cổng công khai
+  - Ghi chú: Public
+- 4.5-company-profile.png -> Hình 4.5. Trang hồ sơ công ty và việc làm đang mở
+  - Mục: 4.2 Cổng công khai
+  - Ghi chú: Public
+- 4.6-login-page.png -> Hình 4.6. Màn hình đăng nhập TalentFlow
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.7-candidate-dashboard.png -> Hình 4.7. Dashboard ứng viên
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.8-candidate-profile.png -> Hình 4.8. Hồ sơ ứng viên
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.9-candidate-saved-jobs.png -> Hình 4.9. Danh sách việc làm đã lưu
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.10-candidate-recommended-jobs.png -> Hình 4.10. Danh sách việc làm gợi ý
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.11-candidate-applied-jobs.png -> Hình 4.11. Danh sách đơn đã ứng tuyển
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.12-application-detail.png -> Hình 4.12. Chi tiết đơn ứng tuyển và timeline xử lý
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.13-candidate-notifications.png -> Hình 4.13. Thiết lập thông báo tài khoản ứng viên
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.14-candidate-security.png -> Hình 4.14. Thiết lập bảo mật và tài khoản
+  - Mục: 4.3 Phân hệ ứng viên
+  - Ghi chú: Candidate
+- 4.15-cv-builder-dashboard.png -> Hình 4.15. Trang quản lý CV và kho CV đồng bộ
+  - Mục: 4.4 Phân hệ CV
+  - Ghi chú: Candidate
+- 4.16-cv-templates.png -> Hình 4.16. Thư viện template CV
+  - Mục: 4.4 Phân hệ CV
+  - Ghi chú: Candidate
+- 4.17-cv-new.png -> Hình 4.17. Màn hình tạo CV mới từ template
+  - Mục: 4.4 Phân hệ CV
+  - Ghi chú: Candidate
+- 4.18-cv-edit.png -> Hình 4.18. CV Builder với CV đang chỉnh sửa
+  - Mục: 4.4 Phân hệ CV
+  - Ghi chú: Candidate
+- 4.19-cv-import-uploaded.png -> Hình 4.19. CV đã tải lên và sẵn sàng phân tích
+  - Mục: 4.4 Phân hệ CV
+  - Ghi chú: Candidate
+- 4.20-cv-import-review.png -> Hình 4.20. Giao diện review OCR và phân tích CV
+  - Mục: 4.4 Phân hệ CV
+  - Ghi chú: Candidate
+- 4.24-hr-dashboard.png -> Hình 4.24. Dashboard nhà tuyển dụng
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.25-hr-jobs.png -> Hình 4.25. Quản lý danh mục tin tuyển dụng
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.26-hr-job-detail.png -> Hình 4.26. Chi tiết tin tuyển dụng trong dashboard recruiter
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.27-hr-candidates-marketplace.png -> Hình 4.27. Tìm kiếm ứng viên công khai
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.28-hr-public-candidate-profile.png -> Hình 4.28. Hồ sơ ứng viên công khai từ góc nhìn recruiter
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.29-hr-candidates-pipeline.png -> Hình 4.29. ATS pipeline và bộ lọc ứng viên
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.30-hr-company.png -> Hình 4.30. Quản lý hồ sơ công ty
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.31-hr-company-preview.png -> Hình 4.31. Xem trước hồ sơ công ty đã công bố
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.32-hr-notifications.png -> Hình 4.32. Trung tâm thông báo của recruiter
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter
+- 4.33-hr-calendar.png -> Hình 4.33. Lịch phỏng vấn recruiter
+  - Mục: 4.5 Phân hệ nhà tuyển dụng
+  - Ghi chú: Recruiter

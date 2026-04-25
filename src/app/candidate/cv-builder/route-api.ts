@@ -29,11 +29,34 @@ async function requestCvBuilderApi<T>(
   return payload;
 }
 
+const RESUME_LIST_CACHE_TTL_MS = 5_000;
+let resumeListCache:
+  | {
+      expiresAt: number;
+      promise: Promise<ResumeRow[]>;
+    }
+  | null = null;
+
+function invalidateResumeListCache() {
+  resumeListCache = null;
+}
+
 export async function getMyResumes(): Promise<ResumeRow[]> {
-  const payload = await requestCvBuilderApi<{ items?: ResumeRow[] }>("/api/cv-builder/resumes", {
+  const now = Date.now();
+  if (resumeListCache && resumeListCache.expiresAt > now) {
+    return resumeListCache.promise;
+  }
+
+  const promise = requestCvBuilderApi<{ items?: ResumeRow[] }>("/api/cv-builder/resumes", {
     errorMessage: "Khong the tai danh sach CV.",
-  });
-  return Array.isArray(payload.items) ? payload.items : [];
+  }).then((payload) => (Array.isArray(payload.items) ? payload.items : []));
+
+  resumeListCache = {
+    expiresAt: now + RESUME_LIST_CACHE_TTL_MS,
+    promise,
+  };
+
+  return promise;
 }
 
 export async function getResumeById(id: string): Promise<ResumeRow | null> {
@@ -69,6 +92,7 @@ export async function createResume(
       errorMessage: "Khong the tao CV moi.",
     },
   );
+  invalidateResumeListCache();
   return payload.item ?? null;
 }
 
@@ -85,6 +109,7 @@ export async function saveResume(
     body: JSON.stringify(updates),
     errorMessage: "Khong the luu CV.",
   });
+  invalidateResumeListCache();
 }
 
 export async function deleteResume(id: string): Promise<void> {
@@ -92,6 +117,7 @@ export async function deleteResume(id: string): Promise<void> {
     method: "DELETE",
     errorMessage: "Khong the xoa CV.",
   });
+  invalidateResumeListCache();
 }
 
 export async function renameResume(id: string, title: string): Promise<void> {
@@ -120,5 +146,6 @@ export async function createResumeFromSections(
       errorMessage: "Khong the tao CV tu du lieu da phan tich.",
     },
   );
+  invalidateResumeListCache();
   return payload.item ?? null;
 }

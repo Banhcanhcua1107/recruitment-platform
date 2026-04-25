@@ -74,10 +74,19 @@ function buildJsonDebugSnapshot(action: string, beforeCV: CVContent, afterCV: CV
   };
 }
 
-const DEFAULT_THEME = {
-  colors: { primary: '#00b14f', text: '#111827', background: '#ffffff' }, // User requested Green
+const DEFAULT_THEME: CVContent['theme'] = {
+  colors: {
+    primary: '#00b14f',
+    text: '#111827',
+    background: '#ffffff',
+    pattern: '#94a3b8',
+  },
   fonts: { heading: 'Manrope', body: 'Manrope' }, // Clean sans-serif
   spacing: 4,
+  appearance: {
+    patternId: 'dots',
+    syncPatternWithPrimary: true,
+  },
 };
 
 function mergeThemeWithDefaults(styling?: Partial<CVContent['theme']>): CVContent['theme'] {
@@ -86,6 +95,9 @@ function mergeThemeWithDefaults(styling?: Partial<CVContent['theme']>): CVConten
     : undefined;
   const safeFonts = styling?.fonts && typeof styling.fonts === 'object'
     ? styling.fonts
+    : undefined;
+  const safeAppearance = styling?.appearance && typeof styling.appearance === 'object'
+    ? styling.appearance
     : undefined;
   const safeSpacing = typeof styling?.spacing === 'number' && Number.isFinite(styling.spacing)
     ? styling.spacing
@@ -103,6 +115,10 @@ function mergeThemeWithDefaults(styling?: Partial<CVContent['theme']>): CVConten
       ...(safeFonts ?? {}),
     },
     spacing: safeSpacing,
+    appearance: {
+      ...DEFAULT_THEME.appearance,
+      ...(safeAppearance ?? {}),
+    },
   };
 }
 
@@ -673,6 +689,10 @@ export const useCVStore = create<EditorState>((set, get) => ({
       spacing: typeof themeUpdates.spacing === 'number' && Number.isFinite(themeUpdates.spacing)
         ? themeUpdates.spacing
         : state.cv.theme.spacing,
+      appearance: {
+        ...(state.cv.theme.appearance ?? {}),
+        ...(themeUpdates.appearance ?? {}),
+      },
     };
 
     return {

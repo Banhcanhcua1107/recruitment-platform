@@ -12,6 +12,7 @@ import {
   localizeApplicationMessage,
   type ApplicationCvSource,
 } from "@/lib/application-messages";
+import { getCandidateCvOptionsCached } from "@/lib/client/candidate-cv-options";
 import { cn } from "@/lib/utils";
 
 interface ApplicationFormProps {
@@ -97,24 +98,19 @@ async function loadApplicationDefaults() {
   }
 
   cachedDefaultsPromise = (async () => {
-    const [profileResponse, cvResponse] = await Promise.all([
+    const [profileResponse, cvOptions] = await Promise.all([
       fetch("/api/candidate/profile", { cache: "no-store" }),
-      fetch("/api/candidate/cv-options", { cache: "no-store" }),
+      getCandidateCvOptionsCached(),
     ]);
     const profileResult = await profileResponse.json();
-    const cvResult = await cvResponse.json();
 
     if (!profileResponse.ok) {
       throw new Error(profileResult.error || "Không thể tải thông tin hồ sơ ứng viên.");
     }
 
-    if (!cvResponse.ok) {
-      throw new Error(cvResult.error || "Không thể tải danh sách CV đã lưu.");
-    }
-
     const nextDefaults = buildDefaults(
       profileResult.profile as CandidateProfileRecord,
-      Array.isArray(cvResult.items) ? (cvResult.items as CandidateCvOption[]) : []
+      cvOptions as CandidateCvOption[]
     );
 
     cachedDefaults = nextDefaults;

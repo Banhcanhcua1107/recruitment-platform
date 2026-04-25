@@ -1,14 +1,13 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { SlidersHorizontal, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import type { Job } from "@/types/job";
 import { scheduleIdleTask } from "@/lib/client-idle";
-import { createClient } from "@/utils/supabase/client";
 import { JobsFilterSidebar } from "./components/JobsFilterSidebar";
 import { JobsHero } from "./components/JobsHero";
-import { JobsRecommendationSection } from "./components/JobsRecommendationSection";
 import { JobsResultsSection } from "./components/JobsResultsSection";
 import type {
   JobCardMatchMeta,
@@ -22,7 +21,26 @@ import {
   uniqueIndustries,
   uniqueValues,
 } from "./jobs-page.utils";
-import { useRecommendedJobs } from "./useRecommendedJobs";
+
+const JobsRecommendationsClient = dynamic(
+  () =>
+    import("./components/JobsRecommendationsClient").then(
+      (module) => module.JobsRecommendationsClient,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-5 shadow-sm">
+        <div className="h-5 w-40 animate-pulse rounded bg-slate-200" />
+        <div className="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
+          {[1, 2].map((item) => (
+            <div key={item} className="h-28 animate-pulse rounded-2xl bg-white" />
+          ))}
+        </div>
+      </div>
+    ),
+  },
+);
 
 function toggleArr(values: string[], nextValue: string) {
   return values.includes(nextValue)
@@ -192,6 +210,9 @@ export default function JobFiltersClient({
   const [employerCompanyName, setEmployerCompanyName] = React.useState("");
   const [onlyMyCompanyJobs, setOnlyMyCompanyJobs] = React.useState(false);
   const [debouncedQ, setDebouncedQ] = React.useState(initialFilters.q);
+  const [recommendationMap, setRecommendationMap] = React.useState<
+    Record<string, JobCardMatchMeta>
+  >({});
 
   const initialRequestKeyRef = React.useRef(
     buildApiParams({
@@ -207,34 +228,6 @@ export default function JobFiltersClient({
     }).toString(),
   );
   const hasHandledInitialFetch = React.useRef(false);
-
-  const {
-    status: recommendationStatus,
-    data: recommendationData,
-    error: recommendationError,
-  } = useRecommendedJobs({ enabled: aiRecommendationsEnabled });
-
-  const recommendationMap = React.useMemo(() => {
-    if (!aiRecommendationsEnabled || recommendationStatus !== "ready" || !recommendationData) {
-      return {} as Record<string, JobCardMatchMeta>;
-    }
-
-    return recommendationData.items.reduce<Record<string, JobCardMatchMeta>>((accumulator, item) => {
-      const jobId = item.job.id || item.jobId;
-      if (!jobId) {
-        return accumulator;
-      }
-
-      accumulator[jobId] = {
-        matchScore: item.matchScore,
-        fitLevel: item.fitLevel,
-        badge: item.fitLevel === "High" ? "Top match" : "Recommended",
-        matchedSkills: item.matchedSkills,
-      };
-
-      return accumulator;
-    }, {});
-  }, [aiRecommendationsEnabled, recommendationData, recommendationStatus]);
 
   React.useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -254,6 +247,7 @@ export default function JobFiltersClient({
 
     async function loadEmployerCompany() {
       try {
+        const { createClient } = await import("@/utils/supabase/client");
         const supabase = createClient();
         const {
           data: { user },
@@ -653,6 +647,13 @@ export default function JobFiltersClient({
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
+  const handleRecommendationMapChange = React.useCallback(
+    (nextMap: Record<string, JobCardMatchMeta>) => {
+      setRecommendationMap(nextMap);
+    },
+    [],
+  );
+
   const sidebar = (
     <JobsFilterSidebar
       activeFilterCount={activeFilterCount}
@@ -697,11 +698,10 @@ export default function JobFiltersClient({
       <main className="mx-auto w-full max-w-368 space-y-10 px-6 pb-24 pt-8 md:px-8 xl:px-10">
         {aiRecommendationsEnabled ? (
           <div className="[content-visibility:auto] [contain-intrinsic-size:320px]">
-            <JobsRecommendationSection
-              status={recommendationStatus}
-              data={recommendationData}
-              error={recommendationError}
+            <JobsRecommendationsClient
+              enabled={aiRecommendationsEnabled}
               onBrowseAll={scrollToAllJobs}
+              onRecommendationMapChange={handleRecommendationMapChange}
             />
           </div>
         ) : null}

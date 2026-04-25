@@ -1,6 +1,6 @@
 "use client";
 
-import { AppTopbar } from "@/components/app-shell";
+import { AppTopbar } from "@/components/app-shell/AppTopbar";
 import type { WorkspaceHeaderConfig, WorkspaceShellModel } from "./types";
 
 interface WorkspaceHeaderProps {

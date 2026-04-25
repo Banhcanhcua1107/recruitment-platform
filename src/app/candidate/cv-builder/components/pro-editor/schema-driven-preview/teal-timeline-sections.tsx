@@ -200,6 +200,11 @@ interface SectionHeaderProps {
   isSectionActive: boolean;
   onChangeTitle: (nextTitle: string) => void;
   onChangeIcon?: (nextIcon: CVTemplateIconToken) => void;
+  titleTextClassName?: string;
+  dividerClassName?: string;
+  iconBackgroundClassName?: string;
+  iconBorderClassName?: string;
+  iconColorClassName?: string;
 }
 
 function toSafeText(value: unknown) {
@@ -382,12 +387,21 @@ function resolveRepeatableSplitState(data: unknown, rawItems: unknown[]): Repeat
 export function resolveTealSectionFrameClassName(input: {
   showSectionChrome: boolean;
   isActive: boolean;
+  borderClassName?: string;
+  backgroundClassName?: string;
 }) {
+  const activeBorderClassName = input.borderClassName ?? "border-teal-200";
+  const activeBackgroundClassName = input.backgroundClassName ?? "bg-white";
+
   if (input.showSectionChrome) {
-    return input.isActive ? "border-teal-200 bg-white" : "border-transparent bg-transparent";
+    return input.isActive
+      ? `${activeBorderClassName} ${activeBackgroundClassName}`
+      : "border-transparent bg-transparent";
   }
 
-  return input.isActive ? "border-teal-200 bg-white pt-0" : "border-transparent bg-transparent pt-0";
+  return input.isActive
+    ? `${activeBorderClassName} ${activeBackgroundClassName} pt-0`
+    : "border-transparent bg-transparent pt-0";
 }
 
 function resolveRepeatableAddTarget<TNode extends Record<string, unknown>>(input: {
@@ -910,6 +924,41 @@ function normalizeSkillItems(data: SkillsSectionData): TealSkillItemData[] {
   });
 }
 
+function isSidebarReferenceLayoutVariant(layoutVariant?: string) {
+  return layoutVariant === "sidebar-reference";
+}
+
+function shouldUseSidebarContrastPalette(styleConfig: {
+  titleTextClassName?: string;
+  contentTextClassName?: string;
+}) {
+  return `${styleConfig.titleTextClassName || ""} ${styleConfig.contentTextClassName || ""}`
+    .includes("--cv-template-sidebar-");
+}
+
+function normalizeSkillLevel(level: number | undefined): number | null {
+  if (!Number.isFinite(level)) {
+    return null;
+  }
+
+  const resolved = Math.max(0, Math.min(100, Math.round(level ?? 0)));
+  return resolved > 0 ? resolved : null;
+}
+
+function resolveSkillLevelWidthClass(level: number) {
+  if (level >= 95) return "w-full";
+  if (level >= 90) return "w-11/12";
+  if (level >= 80) return "w-5/6";
+  if (level >= 70) return "w-3/4";
+  if (level >= 60) return "w-2/3";
+  if (level >= 50) return "w-1/2";
+  if (level >= 40) return "w-2/5";
+  if (level >= 30) return "w-1/3";
+  if (level >= 20) return "w-1/4";
+  if (level >= 10) return "w-1/6";
+  return "w-1/12";
+}
+
 function buildSkillsPayload(title: string, items: TealSkillItemData[]) {
   return {
     title,
@@ -1091,7 +1140,18 @@ export function buildAwardsPayload(title: string, items: TealAwardItemData[]) {
   };
 }
 
-export function SectionHeader({ title, icon, isSectionActive, onChangeTitle, onChangeIcon }: SectionHeaderProps) {
+export function SectionHeader({
+  title,
+  icon,
+  isSectionActive,
+  onChangeTitle,
+  onChangeIcon,
+  titleTextClassName,
+  dividerClassName,
+  iconBackgroundClassName,
+  iconBorderClassName,
+  iconColorClassName,
+}: SectionHeaderProps) {
   const Icon = ICON_MAP[icon] ?? FileText;
   const pickerRef = useRef<HTMLDivElement | null>(null);
   const [showIconPicker, setShowIconPicker] = useState(false);
@@ -1155,10 +1215,11 @@ export function SectionHeader({ title, icon, isSectionActive, onChangeTitle, onC
               setShowIconPicker((previousState) => !previousState);
             }}
             className={cn(
-              "inline-flex h-5 w-5 items-center justify-center border text-white transition",
-              canEditIcon
-                ? "border-teal-500 bg-teal-500 hover:bg-teal-600"
-                : "border-teal-500 bg-teal-500",
+              "inline-flex h-5 w-5 items-center justify-center border transition",
+              iconBorderClassName ?? "border-[rgb(var(--cv-template-accent-rgb,15_118_110))]",
+              iconBackgroundClassName ?? "bg-[rgb(var(--cv-template-accent-rgb,15_118_110))]",
+              iconColorClassName ?? "text-white",
+              canEditIcon ? "hover:brightness-95" : "",
             )}
             title={canEditIcon ? "Chọn biểu tượng mục" : "Biểu tượng mục"}
           >
@@ -1188,8 +1249,8 @@ export function SectionHeader({ title, icon, isSectionActive, onChangeTitle, onC
                     className={cn(
                       "inline-flex h-7 w-7 items-center justify-center border text-slate-600 transition",
                       isSelected
-                        ? "border-teal-500 bg-teal-50 text-teal-700"
-                        : "border-slate-200 hover:border-teal-300 hover:text-teal-700",
+                        ? "border-[rgb(var(--cv-template-accent-rgb,15_118_110))] bg-[rgb(var(--cv-template-accent-rgb,15_118_110)/0.12)] text-[rgb(var(--cv-template-accent-rgb,15_118_110))]"
+                        : "border-slate-200 hover:border-[rgb(var(--cv-template-accent-rgb,15_118_110))] hover:text-[rgb(var(--cv-template-accent-rgb,15_118_110))]",
                     )}
                     title={iconToken}
                   >
@@ -1208,12 +1269,15 @@ export function SectionHeader({ title, icon, isSectionActive, onChangeTitle, onC
             onCommit={onChangeTitle}
             multiline={false}
             showToolbar={false}
-            readClassName="px-0 py-0 text-[16px] font-semibold leading-6 text-teal-700"
+            readClassName={cn(
+              "px-0 py-0 text-[16px] font-semibold leading-6",
+              titleTextClassName ?? "text-[rgb(var(--cv-template-accent-rgb,15_118_110))]",
+            )}
             editClassName="rounded-none border border-slate-300 bg-white px-1 py-0.5 shadow-none"
           />
         </div>
       </div>
-      <span className="mt-1 block h-px w-full bg-slate-300" />
+      <span className={cn("mt-1 block h-px w-full", dividerClassName ?? "bg-slate-300")} />
     </div>
   );
 }
@@ -1264,6 +1328,7 @@ export function TealCustomSection({
   const sectionText = toSafeText(data.text);
   const listItems = Array.isArray(data.items) ? data.items.map((item) => toSafeText(item)) : [];
   const hasList = Array.isArray(data.items);
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
 
   return (
     <div className="group relative break-inside-avoid-page" data-cv-section-shell>
@@ -1280,6 +1345,8 @@ export function TealCustomSection({
           resolveTealSectionFrameClassName({
             showSectionChrome: true,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -1289,6 +1356,11 @@ export function TealCustomSection({
           isSectionActive={isActive}
           onChangeIcon={(nextIcon) => onEdit({ icon: nextIcon })}
           onChangeTitle={(nextTitle) => onEdit({ ...data, title: nextTitle })}
+          titleTextClassName={styleConfig.titleTextClassName}
+          dividerClassName={styleConfig.dividerClassName}
+          iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+          iconBorderClassName={styleConfig.iconBorderClassName}
+          iconColorClassName={styleConfig.iconColorClassName}
         />
 
         <div className="space-y-2 pl-1" data-cv-section-content>
@@ -1306,7 +1378,12 @@ export function TealCustomSection({
             multiline
             minRows={3}
             showToolbar
-            readClassName="px-0 py-0 text-[13px] leading-[1.8] text-slate-700"
+            readClassName={cn(
+              "px-0 py-0 text-[13px] leading-[1.8]",
+              useSidebarContrastPalette
+                ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                : "text-slate-700",
+            )}
             editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
           />
 
@@ -1322,7 +1399,12 @@ export function TealCustomSection({
                   text: sectionText,
                   items: nextItems.length > 0 ? nextItems : undefined,
                 })}
-              readClassName="px-0 py-0 text-[13px] leading-6 text-slate-800"
+              readClassName={cn(
+                "px-0 py-0 text-[13px] leading-6",
+                useSidebarContrastPalette
+                  ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                  : "text-slate-800",
+              )}
               editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
             />
           ) : null}
@@ -1337,6 +1419,7 @@ interface OverviewItemProps {
   index: number;
   isSectionActive: boolean;
   isSelected: boolean;
+  useSidebarContrastPalette?: boolean;
   onSelect: (index: number) => void;
   onChange: (index: number, nextContent: string) => void;
   onRemove: (index: number) => void;
@@ -1347,6 +1430,7 @@ export function OverviewItem({
   index,
   isSectionActive,
   isSelected,
+  useSidebarContrastPalette = false,
   onSelect,
   onChange,
   onRemove,
@@ -1355,7 +1439,11 @@ export function OverviewItem({
     <div
       className={cn(
         "group/overview relative border px-1 py-0.5 transition-colors",
-        isSectionActive && isSelected ? "border-slate-300 bg-white" : "border-transparent",
+        isSectionActive && isSelected
+          ? useSidebarContrastPalette
+            ? "border-[rgb(var(--cv-template-sidebar-divider-rgb,162_189_177)/0.82)] bg-[rgb(var(--cv-template-sidebar-overlay-rgb,95_136_114)/0.28)]"
+            : "border-slate-300 bg-white"
+          : "border-transparent",
       )}
       data-cv-split-item="true"
       data-cv-item-id={item.id || ""}
@@ -1372,7 +1460,12 @@ export function OverviewItem({
         minRows={1}
         showToolbar
         preserveDashBullets
-        readClassName="px-0 py-0 text-[14px] leading-6 text-slate-800"
+        readClassName={cn(
+          "px-0 py-0 text-[14px] leading-6",
+          useSidebarContrastPalette
+            ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+            : "text-slate-800",
+        )}
         editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
       />
 
@@ -1410,6 +1503,7 @@ export function OverviewSection({
     showSectionChrome,
   } = resolveRepeatableSplitState(data, rawOverviewItems);
   const sectionTitle = toSafeText(data.title) || styleConfig.title;
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
   const showAddActions = isActive;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const safeSelectedIndex =
@@ -1494,6 +1588,8 @@ export function OverviewSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -1517,6 +1613,11 @@ export function OverviewSection({
 
               onEdit(buildOverviewPayload(nextTitle, overviewItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
@@ -1528,6 +1629,7 @@ export function OverviewSection({
               index={index}
               isSectionActive={isActive}
               isSelected={safeSelectedIndex === index}
+              useSidebarContrastPalette={useSidebarContrastPalette}
               onSelect={setSelectedIndex}
               onChange={(targetIndex, nextContent) => {
                 const nextItems = overviewItems.map((currentItem, currentIndex) =>
@@ -1601,6 +1703,8 @@ interface WorkExperienceItemProps {
   index: number;
   isSectionActive: boolean;
   isSelected: boolean;
+  isSidebarReferenceLayout?: boolean;
+  useSidebarContrastPalette?: boolean;
   onSelect: (index: number) => void;
   onChange: (index: number, updates: Partial<TealWorkExperienceItemData>) => void;
   onRemove: (index: number) => void;
@@ -1611,6 +1715,8 @@ export function WorkExperienceItem({
   index,
   isSectionActive,
   isSelected,
+  isSidebarReferenceLayout = false,
+  useSidebarContrastPalette = false,
   onSelect,
   onChange,
   onRemove,
@@ -1619,7 +1725,11 @@ export function WorkExperienceItem({
     <div
       className={cn(
         "group/work relative border px-1 py-1 transition-colors",
-        isSectionActive && isSelected ? "border-slate-300 bg-white" : "border-transparent",
+        isSectionActive && isSelected
+          ? useSidebarContrastPalette
+            ? "border-[rgb(var(--cv-template-sidebar-divider-rgb,162_189_177)/0.82)] bg-[rgb(var(--cv-template-sidebar-overlay-rgb,95_136_114)/0.28)]"
+            : "border-slate-300 bg-white"
+          : "border-transparent",
       )}
       data-cv-split-item="true"
       data-cv-item-id={item.id || ""}
@@ -1627,42 +1737,59 @@ export function WorkExperienceItem({
       onMouseDown={() => onSelect(index)}
       onFocusCapture={() => onSelect(index)}
     >
-      <div className="grid grid-cols-[3fr_7fr] gap-x-2">
-        <div>
-          <EditableText
-            value={item.leftDate}
-            placeholder="01/2018 – Present"
-            isSectionActive={isSectionActive}
-            onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
-            multiline={false}
-            showToolbar={false}
-            readClassName="px-0 py-0 text-[14px] font-semibold leading-6 text-slate-800"
-            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-          />
-        </div>
+      {isSidebarReferenceLayout ? (
+        <div className="space-y-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 space-y-0.5">
+              <EditableText
+                value={item.rightTitle}
+                placeholder="Tên công ty"
+                isSectionActive={isSectionActive}
+                onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
+                multiline={false}
+                showToolbar={false}
+                readClassName={cn(
+                  "px-0 py-0 text-[14px] font-bold leading-6",
+                  useSidebarContrastPalette
+                    ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                    : "text-slate-900",
+                )}
+                editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+              />
 
-        <div className="space-y-0.5">
-          <EditableText
-            value={item.rightTitle}
-            placeholder="Tên công ty"
-            isSectionActive={isSectionActive}
-            onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
-            multiline={false}
-            showToolbar={false}
-            readClassName="px-0 py-0 text-[14px] font-bold leading-6 text-slate-900"
-            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-          />
+              <EditableText
+                value={item.rightSubtitle}
+                placeholder="Vị trí hoặc mô tả ngắn"
+                isSectionActive={isSectionActive}
+                onCommit={(nextValue) => onChange(index, { rightSubtitle: nextValue })}
+                multiline={false}
+                showToolbar={false}
+                readClassName={cn(
+                  "px-0 py-0 text-[14px] italic leading-6",
+                  useSidebarContrastPalette
+                    ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                    : "text-slate-700",
+                )}
+                editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+              />
+            </div>
 
-          <EditableText
-            value={item.rightSubtitle}
-            placeholder="Vị trí hoặc mô tả ngắn"
-            isSectionActive={isSectionActive}
-            onCommit={(nextValue) => onChange(index, { rightSubtitle: nextValue })}
-            multiline={false}
-            showToolbar={false}
-            readClassName="px-0 py-0 text-[14px] italic leading-6 text-slate-700"
-            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-          />
+            <EditableText
+              value={item.leftDate}
+              placeholder="01/2018 – Present"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName={cn(
+                "px-0 py-0 text-right text-[12px] font-semibold leading-6",
+                useSidebarContrastPalette
+                  ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                  : "text-[rgb(var(--cv-template-primary-rgb,31_90_59))]",
+              )}
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 text-right shadow-none"
+            />
+          </div>
 
           <EditableText
             value={item.rightDescription}
@@ -1672,11 +1799,67 @@ export function WorkExperienceItem({
             multiline
             minRows={1}
             showToolbar
-            readClassName="px-0 py-0 text-[13px] leading-5 text-slate-700"
+            readClassName={cn(
+              "px-0 py-0 text-[13px] leading-5",
+              useSidebarContrastPalette
+                ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                : "text-slate-700",
+            )}
             editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
           />
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-[3fr_7fr] gap-x-2">
+          <div>
+            <EditableText
+              value={item.leftDate}
+              placeholder="01/2018 – Present"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[14px] font-semibold leading-6 text-slate-800"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+          </div>
+
+          <div className="space-y-0.5">
+            <EditableText
+              value={item.rightTitle}
+              placeholder="Tên công ty"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[14px] font-bold leading-6 text-slate-900"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+
+            <EditableText
+              value={item.rightSubtitle}
+              placeholder="Vị trí hoặc mô tả ngắn"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { rightSubtitle: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[14px] italic leading-6 text-slate-700"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+
+            <EditableText
+              value={item.rightDescription}
+              placeholder="- Mô tả công việc\n- Thành tích chính"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { rightDescription: nextValue })}
+              multiline
+              minRows={1}
+              showToolbar
+              readClassName="px-0 py-0 text-[13px] leading-5 text-slate-700"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+          </div>
+        </div>
+      )}
 
       {isSectionActive && isSelected ? (
         <button
@@ -1712,6 +1895,8 @@ export function WorkExperienceSection({
     showSectionChrome,
   } = resolveRepeatableSplitState(data, rawWorkItems);
   const sectionTitle = toSafeText(data.title) || styleConfig.title;
+  const isSidebarReferenceLayout = isSidebarReferenceLayoutVariant(styleConfig.layoutVariant);
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
   const showAddActions = isActive;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const safeSelectedIndex =
@@ -1775,6 +1960,8 @@ export function WorkExperienceSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -1795,10 +1982,23 @@ export function WorkExperienceSection({
 
               onEdit(buildWorkExperiencePayload(nextTitle, workItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
-        <div className="divide-y divide-slate-300/70" data-cv-section-content>
+        <div
+          className={cn(
+            "divide-y",
+            useSidebarContrastPalette
+              ? "divide-[rgb(var(--cv-template-sidebar-divider-rgb,162_189_177)/0.58)]"
+              : "divide-slate-300/70",
+          )}
+          data-cv-section-content
+        >
           {workItems.map((item, index) => (
             <WorkExperienceItem
               key={item.id || `work-item-${index}`}
@@ -1806,6 +2006,8 @@ export function WorkExperienceSection({
               index={index}
               isSectionActive={isActive}
               isSelected={safeSelectedIndex === index}
+              isSidebarReferenceLayout={isSidebarReferenceLayout}
+              useSidebarContrastPalette={useSidebarContrastPalette}
               onSelect={setSelectedIndex}
               onChange={(targetIndex, updates) => {
                 const nextItems = workItems.map((currentItem, currentIndex) =>
@@ -1874,6 +2076,8 @@ interface ActivityItemProps {
   index: number;
   isSectionActive: boolean;
   isSelected: boolean;
+  isSidebarReferenceLayout?: boolean;
+  useSidebarContrastPalette?: boolean;
   onSelect: (index: number) => void;
   onChange: (index: number, updates: Partial<TealActivityItemData>) => void;
   onRemove: (index: number) => void;
@@ -1884,6 +2088,8 @@ export function ActivityItem({
   index,
   isSectionActive,
   isSelected,
+  isSidebarReferenceLayout = false,
+  useSidebarContrastPalette = false,
   onSelect,
   onChange,
   onRemove,
@@ -1892,7 +2098,11 @@ export function ActivityItem({
     <div
       className={cn(
         "group/activity relative border px-1 py-1 transition-colors",
-        isSectionActive && isSelected ? "border-slate-300 bg-white" : "border-transparent",
+        isSectionActive && isSelected
+          ? useSidebarContrastPalette
+            ? "border-[rgb(var(--cv-template-sidebar-divider-rgb,162_189_177)/0.82)] bg-[rgb(var(--cv-template-sidebar-overlay-rgb,95_136_114)/0.28)]"
+            : "border-slate-300 bg-white"
+          : "border-transparent",
       )}
       data-cv-split-item="true"
       data-cv-item-id={item.id || ""}
@@ -1900,29 +2110,41 @@ export function ActivityItem({
       onMouseDown={() => onSelect(index)}
       onFocusCapture={() => onSelect(index)}
     >
-      <div className="grid grid-cols-[3fr_7fr] gap-x-2">
-        <EditableText
-          value={item.leftDate}
-          placeholder="06/2016"
-          isSectionActive={isSectionActive}
-          onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
-          multiline={false}
-          showToolbar={false}
-          readClassName="px-0 py-0 text-[14px] font-semibold leading-6 text-slate-800"
-          editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-        />
-
+      {isSidebarReferenceLayout ? (
         <div className="space-y-0.5">
-          <EditableText
-            value={item.rightTitle}
-            placeholder="Tên hoạt động"
-            isSectionActive={isSectionActive}
-            onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
-            multiline={false}
-            showToolbar={false}
-            readClassName="px-0 py-0 text-[14px] font-bold leading-6 text-slate-900"
-            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-          />
+          <div className="flex items-start justify-between gap-2">
+            <EditableText
+              value={item.rightTitle}
+              placeholder="Tên hoạt động"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName={cn(
+                "px-0 py-0 text-[14px] font-bold leading-6",
+                useSidebarContrastPalette
+                  ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                  : "text-slate-900",
+              )}
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+
+            <EditableText
+              value={item.leftDate}
+              placeholder="06/2016"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName={cn(
+                "px-0 py-0 text-right text-[12px] font-semibold leading-6",
+                useSidebarContrastPalette
+                  ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                  : "text-[rgb(var(--cv-template-primary-rgb,31_90_59))]",
+              )}
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 text-right shadow-none"
+            />
+          </div>
 
           <EditableText
             value={item.rightSubtitle}
@@ -1931,11 +2153,53 @@ export function ActivityItem({
             onCommit={(nextValue) => onChange(index, { rightSubtitle: nextValue })}
             multiline={false}
             showToolbar={false}
-            readClassName="px-0 py-0 text-[14px] leading-6 text-slate-700"
+            readClassName={cn(
+              "px-0 py-0 text-[14px] leading-6",
+              useSidebarContrastPalette
+                ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                : "text-slate-700",
+            )}
             editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
           />
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-[3fr_7fr] gap-x-2">
+          <EditableText
+            value={item.leftDate}
+            placeholder="06/2016"
+            isSectionActive={isSectionActive}
+            onCommit={(nextValue) => onChange(index, { leftDate: nextValue })}
+            multiline={false}
+            showToolbar={false}
+            readClassName="px-0 py-0 text-[14px] font-semibold leading-6 text-slate-800"
+            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+          />
+
+          <div className="space-y-0.5">
+            <EditableText
+              value={item.rightTitle}
+              placeholder="Tên hoạt động"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { rightTitle: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[14px] font-bold leading-6 text-slate-900"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+
+            <EditableText
+              value={item.rightSubtitle}
+              placeholder="Vai trò"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { rightSubtitle: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[14px] leading-6 text-slate-700"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+          </div>
+        </div>
+      )}
 
       {isSectionActive && isSelected ? (
         <button
@@ -1971,6 +2235,8 @@ export function TealActivitiesSection({
     showSectionChrome,
   } = resolveRepeatableSplitState(data, rawActivityItems);
   const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const isSidebarReferenceLayout = isSidebarReferenceLayoutVariant(styleConfig.layoutVariant);
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
   const showAddActions = isActive;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const safeSelectedIndex =
@@ -2035,6 +2301,8 @@ export function TealActivitiesSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -2055,10 +2323,23 @@ export function TealActivitiesSection({
 
               onEdit(buildActivitiesPayload(nextTitle, activityItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
-        <div className="divide-y divide-slate-300/70" data-cv-section-content>
+        <div
+          className={cn(
+            "divide-y",
+            useSidebarContrastPalette
+              ? "divide-[rgb(var(--cv-template-sidebar-divider-rgb,162_189_177)/0.58)]"
+              : "divide-slate-300/70",
+          )}
+          data-cv-section-content
+        >
           {activityItems.map((item, index) => (
             <ActivityItem
               key={item.id || `activity-item-${index}`}
@@ -2066,6 +2347,8 @@ export function TealActivitiesSection({
               index={index}
               isSectionActive={isActive}
               isSelected={safeSelectedIndex === index}
+              isSidebarReferenceLayout={isSidebarReferenceLayout}
+              useSidebarContrastPalette={useSidebarContrastPalette}
               onSelect={setSelectedIndex}
               onChange={(targetIndex, updates) => {
                 const nextItems = activityItems.map((currentItem, currentIndex) =>
@@ -2132,6 +2415,8 @@ interface SkillGroupListProps {
   label: string;
   items: TealSkillItemData[];
   isSectionActive: boolean;
+  isSidebarReferenceLayout?: boolean;
+  useSidebarContrastPalette?: boolean;
   onChangeName: (id: string, nextName: string) => void;
   onRemove: (id: string) => void;
 }
@@ -2140,11 +2425,112 @@ function SkillGroupList({
   label,
   items,
   isSectionActive,
+  isSidebarReferenceLayout = false,
+  useSidebarContrastPalette = false,
   onChangeName,
   onRemove,
 }: SkillGroupListProps) {
   if (items.length === 0) {
     return null;
+  }
+
+  if (isSidebarReferenceLayout) {
+    return (
+      <div className="space-y-1.5 text-[13px]">
+        <span
+          className={cn(
+            "inline-flex text-[12px] font-bold uppercase tracking-[0.12em]",
+            useSidebarContrastPalette
+              ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+              : "text-[rgb(var(--cv-template-primary-rgb,31_90_59))]",
+          )}
+        >
+          {label}
+        </span>
+
+        <ul className="space-y-1.5">
+          {items.map((item, index) => {
+            const level = normalizeSkillLevel(item.level);
+
+            return (
+              <li
+                key={item.id}
+                className="group/skill-item relative pr-6"
+                data-cv-split-item="true"
+                data-cv-item-id={item.id || ""}
+                data-cv-item-index={index}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <EditableText
+                    value={item.name}
+                    placeholder="Nội dung kỹ năng"
+                    isSectionActive={isSectionActive}
+                    onCommit={(nextValue) => onChangeName(item.id, nextValue)}
+                    multiline={false}
+                    showToolbar={false}
+                    readClassName={cn(
+                      "px-0 py-0 text-[13px] leading-6",
+                      useSidebarContrastPalette
+                        ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                        : "text-slate-800",
+                    )}
+                    editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+                  />
+
+                  {level ? (
+                    <span
+                      className={cn(
+                        "text-[11px] font-semibold",
+                        useSidebarContrastPalette
+                          ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                          : "text-[rgb(var(--cv-template-primary-rgb,31_90_59))]",
+                      )}
+                    >
+                      {level}%
+                    </span>
+                  ) : null}
+                </div>
+
+                {level ? (
+                  <div
+                    className={cn(
+                      "mt-1 h-1.5 w-full overflow-hidden rounded-full",
+                      useSidebarContrastPalette
+                        ? "bg-[rgb(var(--cv-template-sidebar-skill-track-rgb,120_177_168)/0.65)]"
+                        : "bg-[rgb(var(--cv-template-primary-rgb,31_90_59)/0.2)]",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "h-full rounded-full",
+                        useSidebarContrastPalette
+                          ? "bg-[rgb(var(--cv-template-sidebar-skill-fill-rgb,255_255_255))]"
+                          : "bg-[rgb(var(--cv-template-primary-rgb,31_90_59))]",
+                        resolveSkillLevelWidthClass(level),
+                      )}
+                    />
+                  </div>
+                ) : null}
+
+                {isSectionActive ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemove(item.id);
+                    }}
+                    className="absolute right-0 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-rose-50 text-rose-500 opacity-0 transition group-hover/skill-item:opacity-100 hover:bg-rose-100"
+                    title="Xóa kỹ năng"
+                  >
+                    <Trash2 size={9} />
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
   }
 
   return (
@@ -2227,6 +2613,8 @@ export function TealSkillsSection({
   const showSectionChrome = !isSplitContinuation;
   const showSkillAddActions = isActive;
   const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const isSidebarReferenceLayout = isSidebarReferenceLayoutVariant(styleConfig.layoutVariant);
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
 
   const updateSkillItems = (nextItems: TealSkillItemData[]) => {
     if (!sourceItemsFromSplit) {
@@ -2325,6 +2713,8 @@ export function TealSkillsSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -2345,6 +2735,11 @@ export function TealSkillsSection({
 
               onEdit(buildSkillsPayload(nextTitle, skillItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
@@ -2353,6 +2748,8 @@ export function TealSkillsSection({
             label="Kỹ năng chính"
             items={mainItems}
             isSectionActive={isActive}
+            isSidebarReferenceLayout={isSidebarReferenceLayout}
+            useSidebarContrastPalette={useSidebarContrastPalette}
             onChangeName={updateSkillName}
             onRemove={removeSkillItem}
           />
@@ -2360,6 +2757,8 @@ export function TealSkillsSection({
             label="Kỹ năng khác"
             items={otherItems}
             isSectionActive={isActive}
+            isSidebarReferenceLayout={isSidebarReferenceLayout}
+            useSidebarContrastPalette={useSidebarContrastPalette}
             onChangeName={updateSkillName}
             onRemove={removeSkillItem}
           />
@@ -2380,6 +2779,8 @@ interface TealAwardLineProps {
   item: TealAwardItemData;
   index: number;
   isSectionActive: boolean;
+  isSidebarReferenceLayout?: boolean;
+  useSidebarContrastPalette?: boolean;
   onChange: (index: number, updates: Partial<TealAwardItemData>) => void;
   onRemove: (index: number) => void;
 }
@@ -2393,7 +2794,15 @@ export function shouldRenderExpandedAwardLine(item: TealAwardItemData, isSection
     .some((value) => value.trim().length > 0);
 }
 
-function TealAwardLine({ item, index, isSectionActive, onChange, onRemove }: TealAwardLineProps) {
+function TealAwardLine({
+  item,
+  index,
+  isSectionActive,
+  isSidebarReferenceLayout = false,
+  useSidebarContrastPalette = false,
+  onChange,
+  onRemove,
+}: TealAwardLineProps) {
   const shouldRenderExpandedLine = shouldRenderExpandedAwardLine(item, isSectionActive);
 
   if (!shouldRenderExpandedLine) {
@@ -2434,57 +2843,133 @@ function TealAwardLine({ item, index, isSectionActive, onChange, onRemove }: Tea
 
   return (
     <div
-      className="group/award-item relative grid grid-cols-[5.25rem_1fr] gap-x-4"
+      className={cn(
+        "group/award-item relative",
+        isSidebarReferenceLayout ? "space-y-0.5" : "grid grid-cols-[5.25rem_1fr] gap-x-4",
+      )}
       data-cv-split-item="true"
       data-cv-item-id={item.id || ""}
       data-cv-item-index={index}
     >
-      <EditableText
-        value={item.date}
-        placeholder="06/2016"
-        isSectionActive={isSectionActive}
-        onCommit={(nextValue) => onChange(index, { date: nextValue })}
-        multiline={false}
-        showToolbar={false}
-        readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-900"
-        editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-      />
+      {isSidebarReferenceLayout ? (
+        <>
+          <div className="flex items-start justify-between gap-2">
+            <EditableText
+              value={item.title}
+              placeholder="Tên giải thưởng"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { title: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName={cn(
+                "px-0 py-0 text-[13px] font-bold leading-6",
+                useSidebarContrastPalette
+                  ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                  : "text-slate-900",
+              )}
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
 
-      <div className="space-y-0.5">
-        <EditableText
-          value={item.title}
-          placeholder="Tên giải thưởng"
-          isSectionActive={isSectionActive}
-          onCommit={(nextValue) => onChange(index, { title: nextValue })}
-          multiline={false}
-          showToolbar={false}
-          readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-900"
-          editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-        />
+            <EditableText
+              value={item.date}
+              placeholder="06/2016"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { date: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName={cn(
+                "px-0 py-0 text-right text-[12px] font-semibold leading-6",
+                useSidebarContrastPalette
+                  ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                  : "text-[rgb(var(--cv-template-primary-rgb,31_90_59))]",
+              )}
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 text-right shadow-none"
+            />
+          </div>
 
-        <EditableText
-          value={item.detail}
-          placeholder="Mô tả ngắn hoặc liên kết chứng minh"
-          isSectionActive={isSectionActive}
-          onCommit={(nextValue) => onChange(index, { detail: nextValue })}
-          multiline
-          minRows={1}
-          showToolbar={false}
-          readClassName="px-0 py-0 text-[12px] leading-5 text-slate-700"
-          editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-        />
+          <EditableText
+            value={item.detail}
+            placeholder="Mô tả ngắn hoặc liên kết chứng minh"
+            isSectionActive={isSectionActive}
+            onCommit={(nextValue) => onChange(index, { detail: nextValue })}
+            multiline
+            minRows={1}
+            showToolbar={false}
+            readClassName={cn(
+              "px-0 py-0 text-[12px] leading-5",
+              useSidebarContrastPalette
+                ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                : "text-slate-700",
+            )}
+            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+          />
 
-        <EditableText
-          value={item.issuer}
-          placeholder="Đơn vị tổ chức"
-          isSectionActive={isSectionActive}
-          onCommit={(nextValue) => onChange(index, { issuer: nextValue })}
-          multiline={false}
-          showToolbar={false}
-          readClassName="px-0 py-0 text-[11.5px] leading-5 text-slate-500"
-          editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-        />
-      </div>
+          <EditableText
+            value={item.issuer}
+            placeholder="Đơn vị tổ chức"
+            isSectionActive={isSectionActive}
+            onCommit={(nextValue) => onChange(index, { issuer: nextValue })}
+            multiline={false}
+            showToolbar={false}
+            readClassName={cn(
+              "px-0 py-0 text-[11.5px] leading-5",
+              useSidebarContrastPalette
+                ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                : "text-slate-500",
+            )}
+            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+          />
+        </>
+      ) : (
+        <>
+          <EditableText
+            value={item.date}
+            placeholder="06/2016"
+            isSectionActive={isSectionActive}
+            onCommit={(nextValue) => onChange(index, { date: nextValue })}
+            multiline={false}
+            showToolbar={false}
+            readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-900"
+            editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+          />
+
+          <div className="space-y-0.5">
+            <EditableText
+              value={item.title}
+              placeholder="Tên giải thưởng"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { title: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-900"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+
+            <EditableText
+              value={item.detail}
+              placeholder="Mô tả ngắn hoặc liên kết chứng minh"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { detail: nextValue })}
+              multiline
+              minRows={1}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[12px] leading-5 text-slate-700"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+
+            <EditableText
+              value={item.issuer}
+              placeholder="Đơn vị tổ chức"
+              isSectionActive={isSectionActive}
+              onCommit={(nextValue) => onChange(index, { issuer: nextValue })}
+              multiline={false}
+              showToolbar={false}
+              readClassName="px-0 py-0 text-[11.5px] leading-5 text-slate-500"
+              editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+            />
+          </div>
+        </>
+      )}
 
       {isSectionActive ? (
         <button
@@ -2520,6 +3005,8 @@ export function TealAwardsSection({
     showSectionChrome,
   } = resolveRepeatableSplitState(data, rawAwardItems);
   const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const isSidebarReferenceLayout = isSidebarReferenceLayoutVariant(styleConfig.layoutVariant);
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
   const showAddActions = isActive;
 
   const updateAwardItems = (nextItems: TealAwardItemData[]) => {
@@ -2558,6 +3045,8 @@ export function TealAwardsSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -2578,6 +3067,11 @@ export function TealAwardsSection({
 
               onEdit(buildAwardsPayload(nextTitle, awardItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
@@ -2588,6 +3082,8 @@ export function TealAwardsSection({
               item={item}
               index={index}
               isSectionActive={isActive}
+              isSidebarReferenceLayout={isSidebarReferenceLayout}
+              useSidebarContrastPalette={useSidebarContrastPalette}
               onChange={(targetIndex, updates) => {
                 const nextItems = awardItems.map((currentItem, currentIndex) =>
                   currentIndex === targetIndex
@@ -2703,6 +3199,8 @@ export function TealProjectsSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -2723,6 +3221,11 @@ export function TealProjectsSection({
 
               onEdit(buildProjectsSectionPayload(nextTitle, projectItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
@@ -2751,6 +3254,8 @@ export function TealEducationSection({
     showSectionChrome,
   } = resolveRepeatableSplitState(data, rawEducationItems);
   const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const isSidebarReferenceLayout = isSidebarReferenceLayoutVariant(styleConfig.layoutVariant);
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
   const showAddActions = isActive;
 
   const updateEducationItems = (nextItems: TealEducationItemData[]) => {
@@ -2789,6 +3294,8 @@ export function TealEducationSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -2809,6 +3316,11 @@ export function TealEducationSection({
 
               onEdit(buildEducationPayload(nextTitle, educationItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
@@ -2816,83 +3328,181 @@ export function TealEducationSection({
           {educationItems.map((item, index) => (
             <div
               key={item.id || `education-item-${index}`}
-              className="group/edu-item relative grid grid-cols-[7.5rem_1fr] gap-x-3 border-b border-slate-200/75 px-0.5 py-1.5 last:border-b-0"
+              className={cn(
+                "group/edu-item relative border-b px-0.5 py-1.5 last:border-b-0",
+                useSidebarContrastPalette
+                  ? "border-[rgb(var(--cv-template-sidebar-divider-rgb,162_189_177)/0.58)]"
+                  : "border-slate-200/75",
+                isSidebarReferenceLayout ? "space-y-0.5" : "grid grid-cols-[7.5rem_1fr] gap-x-3",
+              )}
               data-cv-split-item="true"
               data-cv-item-id={item.id || ""}
               data-cv-item-index={index}
             >
-              <div>
-                <EditableText
-                  value={`${item.startDate}${item.endDate ? ` - ${item.endDate}` : ""}`}
-                  placeholder="2017-09 - 2021-06"
-                  isSectionActive={isActive}
-                  onCommit={(nextValue) => {
-                    const [startDate, ...rest] = nextValue.split(/\s*[–-]\s*/);
-                    const endDate = rest.join(" - ").trim();
-                    updateEducationItems(
-                      educationItems.map((currentItem, currentIndex) =>
-                        currentIndex === index
-                          ? {
-                              ...currentItem,
-                              startDate: startDate?.trim() || "",
-                              endDate,
-                            }
-                          : currentItem,
-                      ),
-                    );
-                  }}
-                  multiline={false}
-                  showToolbar={false}
-                  readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-700"
-                  editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-                />
-              </div>
+              {isSidebarReferenceLayout ? (
+                <>
+                  <div className="flex items-start justify-between gap-2">
+                    <EditableText
+                      value={item.institution}
+                      placeholder="Nhập trường"
+                      isSectionActive={isActive}
+                      onCommit={(nextValue) => {
+                        updateEducationItems(
+                          educationItems.map((currentItem, currentIndex) =>
+                            currentIndex === index
+                              ? {
+                                  ...currentItem,
+                                  institution: nextValue,
+                                }
+                              : currentItem,
+                          ),
+                        );
+                      }}
+                      multiline={false}
+                      showToolbar={false}
+                      readClassName={cn(
+                        "px-0 py-0 text-[13px] font-bold leading-6",
+                        useSidebarContrastPalette
+                          ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                          : "text-slate-900",
+                      )}
+                      editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+                    />
 
-              <div className="space-y-0.5">
-                <EditableText
-                  value={item.institution}
-                  placeholder="Nhập trường"
-                  isSectionActive={isActive}
-                  onCommit={(nextValue) => {
-                    updateEducationItems(
-                      educationItems.map((currentItem, currentIndex) =>
-                        currentIndex === index
-                          ? {
-                              ...currentItem,
-                              institution: nextValue,
-                            }
-                          : currentItem,
-                      ),
-                    );
-                  }}
-                  multiline={false}
-                  showToolbar={false}
-                  readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-900"
-                  editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-                />
+                    <EditableText
+                      value={`${item.startDate}${item.endDate ? ` - ${item.endDate}` : ""}`}
+                      placeholder="2017-09 - 2021-06"
+                      isSectionActive={isActive}
+                      onCommit={(nextValue) => {
+                        const [startDate, ...rest] = nextValue.split(/\s*[–-]\s*/);
+                        const endDate = rest.join(" - ").trim();
+                        updateEducationItems(
+                          educationItems.map((currentItem, currentIndex) =>
+                            currentIndex === index
+                              ? {
+                                  ...currentItem,
+                                  startDate: startDate?.trim() || "",
+                                  endDate,
+                                }
+                              : currentItem,
+                          ),
+                        );
+                      }}
+                      multiline={false}
+                      showToolbar={false}
+                      readClassName={cn(
+                        "px-0 py-0 text-right text-[12px] font-semibold leading-6",
+                        useSidebarContrastPalette
+                          ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                          : "text-[rgb(var(--cv-template-primary-rgb,31_90_59))]",
+                      )}
+                      editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 text-right shadow-none"
+                    />
+                  </div>
 
-                <EditableText
-                  value={item.degree}
-                  placeholder="Nhập chuyên ngành"
-                  isSectionActive={isActive}
-                  onCommit={(nextValue) => {
-                    updateEducationItems(
-                      educationItems.map((currentItem, currentIndex) =>
-                        currentIndex === index
-                          ? {
-                              ...currentItem,
-                              degree: nextValue,
-                            }
-                          : currentItem,
-                      ),
-                    );
-                  }}
-                  multiline={false}
-                  showToolbar={false}
-                  readClassName="px-0 py-0 text-[12.5px] italic leading-6 text-slate-600"
-                  editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
-                />
-              </div>
+                  <EditableText
+                    value={item.degree}
+                    placeholder="Nhập chuyên ngành"
+                    isSectionActive={isActive}
+                    onCommit={(nextValue) => {
+                      updateEducationItems(
+                        educationItems.map((currentItem, currentIndex) =>
+                          currentIndex === index
+                            ? {
+                                ...currentItem,
+                                degree: nextValue,
+                              }
+                            : currentItem,
+                        ),
+                      );
+                    }}
+                    multiline={false}
+                    showToolbar={false}
+                    readClassName={cn(
+                      "px-0 py-0 text-[12.5px] italic leading-6",
+                      useSidebarContrastPalette
+                        ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                        : "text-slate-600",
+                    )}
+                    editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+                  />
+                </>
+              ) : (
+                <>
+                  <div>
+                    <EditableText
+                      value={`${item.startDate}${item.endDate ? ` - ${item.endDate}` : ""}`}
+                      placeholder="2017-09 - 2021-06"
+                      isSectionActive={isActive}
+                      onCommit={(nextValue) => {
+                        const [startDate, ...rest] = nextValue.split(/\s*[–-]\s*/);
+                        const endDate = rest.join(" - ").trim();
+                        updateEducationItems(
+                          educationItems.map((currentItem, currentIndex) =>
+                            currentIndex === index
+                              ? {
+                                  ...currentItem,
+                                  startDate: startDate?.trim() || "",
+                                  endDate,
+                                }
+                              : currentItem,
+                          ),
+                        );
+                      }}
+                      multiline={false}
+                      showToolbar={false}
+                      readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-700"
+                      editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+                    />
+                  </div>
+
+                  <div className="space-y-0.5">
+                    <EditableText
+                      value={item.institution}
+                      placeholder="Nhập trường"
+                      isSectionActive={isActive}
+                      onCommit={(nextValue) => {
+                        updateEducationItems(
+                          educationItems.map((currentItem, currentIndex) =>
+                            currentIndex === index
+                              ? {
+                                  ...currentItem,
+                                  institution: nextValue,
+                                }
+                              : currentItem,
+                          ),
+                        );
+                      }}
+                      multiline={false}
+                      showToolbar={false}
+                      readClassName="px-0 py-0 text-[13px] font-bold leading-6 text-slate-900"
+                      editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+                    />
+
+                    <EditableText
+                      value={item.degree}
+                      placeholder="Nhập chuyên ngành"
+                      isSectionActive={isActive}
+                      onCommit={(nextValue) => {
+                        updateEducationItems(
+                          educationItems.map((currentItem, currentIndex) =>
+                            currentIndex === index
+                              ? {
+                                  ...currentItem,
+                                  degree: nextValue,
+                                }
+                              : currentItem,
+                          ),
+                        );
+                      }}
+                      multiline={false}
+                      showToolbar={false}
+                      readClassName="px-0 py-0 text-[12.5px] italic leading-6 text-slate-600"
+                      editClassName="rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
+                    />
+                  </div>
+                </>
+              )}
 
               {isActive ? (
                 <button
@@ -3009,6 +3619,8 @@ export function TealCertificatesSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -3029,6 +3641,11 @@ export function TealCertificatesSection({
 
               onEdit(buildCertificatesPayload(nextTitle, certificateItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
@@ -3208,6 +3825,7 @@ export function TealLanguagesSection({
     showSectionChrome,
   } = resolveRepeatableSplitState(data, rawLanguageItems);
   const sectionTitle = toSafeText((data as { title?: unknown }).title) || styleConfig.title;
+  const useSidebarContrastPalette = shouldUseSidebarContrastPalette(styleConfig);
   const showAddActions = isActive;
 
   const updateLanguageItems = (nextItems: TealLanguageItemData[]) => {
@@ -3246,6 +3864,8 @@ export function TealLanguagesSection({
           resolveTealSectionFrameClassName({
             showSectionChrome,
             isActive,
+            borderClassName: styleConfig.borderClassName,
+            backgroundClassName: styleConfig.backgroundClassName,
           }),
         )}
       >
@@ -3266,10 +3886,21 @@ export function TealLanguagesSection({
 
               onEdit(buildLanguagesPayload(nextTitle, languageItems));
             }}
+            titleTextClassName={styleConfig.titleTextClassName}
+            dividerClassName={styleConfig.dividerClassName}
+            iconBackgroundClassName={styleConfig.iconBackgroundClassName}
+            iconBorderClassName={styleConfig.iconBorderClassName}
+            iconColorClassName={styleConfig.iconColorClassName}
           />
         ) : null}
 
-        <ul className="list-disc space-y-1 pl-5" data-cv-section-content>
+        <ul
+          className={cn(
+            "list-disc space-y-1 pl-5",
+            useSidebarContrastPalette ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]" : "",
+          )}
+          data-cv-section-content
+        >
           {languageItems.map((item, index) => (
             <li
               key={item.id || `language-item-${index}`}
@@ -3297,10 +3928,24 @@ export function TealLanguagesSection({
                   }}
                   multiline={false}
                   showToolbar={false}
-                  readClassName="inline px-0 py-0 text-[13px] leading-6 text-slate-800"
+                  readClassName={cn(
+                    "inline px-0 py-0 text-[13px] leading-6",
+                    useSidebarContrastPalette
+                      ? "text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                      : "text-slate-800",
+                  )}
                   editClassName="inline rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
                 />
-                <span className="text-[13px] text-slate-500">-</span>
+                <span
+                  className={cn(
+                    "text-[13px]",
+                    useSidebarContrastPalette
+                      ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                      : "text-slate-500",
+                  )}
+                >
+                  -
+                </span>
                 <EditableText
                   value={item.level}
                   placeholder="Mức độ"
@@ -3319,7 +3964,12 @@ export function TealLanguagesSection({
                   }}
                   multiline={false}
                   showToolbar={false}
-                  readClassName="inline px-0 py-0 text-[13px] leading-6 text-slate-700"
+                  readClassName={cn(
+                    "inline px-0 py-0 text-[13px] leading-6",
+                    useSidebarContrastPalette
+                      ? "text-[rgb(var(--cv-template-sidebar-muted-rgb,205_224_213))]"
+                      : "text-slate-700",
+                  )}
                   editClassName="inline rounded-none border border-slate-300 bg-white px-0.5 py-0 shadow-none"
                 />
               </div>

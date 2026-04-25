@@ -2,6 +2,14 @@
 .next
 .venv
 .vscode
+.agent
+.agents
+.claude
+.gitnexus
+.perf
+.tmp
+.tmp-*
+.worktrees
 node_modules
 ai-service/venv
 __pycache__
@@ -15,3 +23,9 @@ __pycache__
 coverage
 build
 out
+artifacts
+lint_output.txt
+chapter-*.md
+database-table-description.md
+systemoverview.md
+run.txt

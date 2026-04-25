@@ -6,12 +6,43 @@ function getSafeRedirectUrl(path: string, request: NextRequest) {
   return buildCanonicalAppUrl(path, request.url)
 }
 
-export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({
+function createPassThroughResponse(request: NextRequest) {
+  return NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
+}
+
+function hasSupabaseAuthCookie(request: NextRequest) {
+  return request.cookies.getAll().some(({ name }) => (
+    /^sb-.+-auth-token(?:\.\d+)?$/.test(name)
+    || name === 'supabase-auth-token'
+    || /^supabase-auth-token\.\d+$/.test(name)
+  ))
+}
+
+function isProtectedPath(path: string) {
+  return path.startsWith('/candidate') || path.startsWith('/hr') || path.startsWith('/profile')
+}
+
+function isRoleSelectionRoute(path: string) {
+  return path === '/role-selection' || path.startsWith('/register/role-selection')
+}
+
+export async function updateSession(request: NextRequest) {
+  const path = request.nextUrl.pathname
+  const isRoleSelectionPath = isRoleSelectionRoute(path)
+
+  if (!hasSupabaseAuthCookie(request)) {
+    if (isProtectedPath(path) || isRoleSelectionPath) {
+      return NextResponse.redirect(getSafeRedirectUrl('/login', request))
+    }
+
+    return createPassThroughResponse(request)
+  }
+
+  let response = createPassThroughResponse(request)
 
   // 1. Create Supabase Client
   const supabase = createServerClient(
@@ -37,9 +68,6 @@ export async function updateSession(request: NextRequest) {
 
   // 2. Refresh Session
   const { data: { user } } = await supabase.auth.getUser()
-  const path = request.nextUrl.pathname
-  const isRoleSelectionPath =
-    path === '/role-selection' || path.startsWith('/register/role-selection')
 
   if (path === '/' && user) {
     const { data: profile } = await supabase
@@ -58,7 +86,7 @@ export async function updateSession(request: NextRequest) {
   // TODO(multi-role): replace these path-prefix checks with membership-aware workspace guards.
   // A. Protected Routes (Candidate/HR Dashboard, Profile)
   // If NOT logged in -> Redirect to /login
-  if (path.startsWith('/candidate') || path.startsWith('/hr') || path.startsWith('/profile')) {
+  if (isProtectedPath(path)) {
       if (!user) {
         return NextResponse.redirect(getSafeRedirectUrl('/login', request))
       }

@@ -14,6 +14,7 @@ export const revalidate = 60;
 const PAGE_LIMIT = 10;
 const SORT_VALUES = new Set<SortKey>([
   "newest",
+  "relevance",
   "az",
   "salary-high",
   "salary-low",

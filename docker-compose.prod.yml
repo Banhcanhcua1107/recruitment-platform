@@ -78,6 +78,9 @@ services:
 
   celery-worker:
     image: recruitment-platform-ai-service-prod
+    build:
+      context: .
+      dockerfile: ai-service/Dockerfile
     restart: unless-stopped
     environment:
       REDIS_URL: redis://redis:6379/0

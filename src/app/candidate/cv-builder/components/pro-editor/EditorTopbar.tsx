@@ -5,7 +5,9 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ChevronDown,
+  Download,
   Loader2,
+  Palette,
   PencilLine,
   Plus,
   Redo2,
@@ -16,6 +18,11 @@ import {
 import { ActionButton, StatusBadge } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
 import { CV_TEMPLATE_LIBRARY, CV_TEMPLATE_LIBRARY_UI } from "@/components/cv/templates/templateCatalog";
+import {
+  CV_THEME_PATTERN_OPTIONS,
+  CV_THEME_PRIMARY_SWATCHES,
+} from "@/app/candidate/cv-builder/components/pro-editor/schema-driven-preview/theme-tokens";
+import type { CVThemePatternId } from "../../types";
 import { EDITOR_UI_TEXTS } from "./editor-ui-texts.vi";
 
 interface SaveStateChipProps {
@@ -70,16 +77,76 @@ function formatFontChoiceLabel(fontValue: string) {
     .trim();
 }
 
+function resolveFontPreviewClassName(fontValue: string) {
+  const normalized = normalizeFontChoiceValue(fontValue);
+
+  switch (normalized) {
+    case "arial":
+      return "cv-preview-font-arial";
+    case "times new roman":
+      return "cv-preview-font-times";
+    case "courier new":
+      return "cv-preview-font-courier";
+    case "ubuntu":
+      return "cv-preview-font-ubuntu";
+    case "amiri":
+      return "cv-preview-font-amiri";
+    case "cairo":
+      return "cv-preview-font-cairo";
+    case "roboto":
+      return "cv-preview-font-roboto";
+    case "inter":
+      return "cv-preview-font-inter";
+    case "manrope":
+      return "cv-preview-font-manrope";
+    case "ibm plex sans":
+      return "cv-preview-font-ibm-plex-sans";
+    case "plus jakarta sans":
+      return "cv-preview-font-plus-jakarta-sans";
+    case "source sans 3":
+      return "cv-preview-font-source-sans-3";
+    case "lora":
+      return "cv-preview-font-lora";
+    default:
+      return "font-sans";
+  }
+}
+
+const COLOR_SWATCH_CLASS_BY_HEX: Record<string, string> = {
+  "#0f766e": "bg-[#0f766e]",
+  "#0f4c81": "bg-[#0f4c81]",
+  "#b45309": "bg-[#b45309]",
+  "#be123c": "bg-[#be123c]",
+  "#4c1d95": "bg-[#4c1d95]",
+  "#14532d": "bg-[#14532d]",
+  "#6b21a8": "bg-[#6b21a8]",
+  "#374151": "bg-[#374151]",
+  "#2563eb": "bg-[#2563eb]",
+  "#0d9488": "bg-[#0d9488]",
+  "#b91c1c": "bg-[#b91c1c]",
+  "#1d4ed8": "bg-[#1d4ed8]",
+};
+
+function resolveSwatchColorClassName(colorValue: string) {
+  const normalized = colorValue.trim().toLowerCase();
+  return COLOR_SWATCH_CLASS_BY_HEX[normalized] ?? "bg-slate-300";
+}
+
 interface EditorTopbarProps {
   resumeTitle: string;
   saveStatus: "idle" | "saving" | "saved";
   isDirty: boolean;
+  isDownloading?: boolean;
   canUndo: boolean;
   canRedo: boolean;
   activeTemplateId?: string;
   fontFamily: string;
   fontOptions: string[];
   fontSizeMode: FontSizeMode;
+  primaryColor: string;
+  patternColor: string;
+  patternId: CVThemePatternId;
+  syncPatternWithPrimary: boolean;
   onUndo: () => void;
   onRedo: () => void;
   onSave: () => void;
@@ -90,29 +157,44 @@ interface EditorTopbarProps {
   onChangeTemplate: (templateId: string) => void;
   onChangeFontFamily: (fontFamily: string) => void;
   onChangeFontSizeMode: (mode: FontSizeMode) => void;
+  onChangePrimaryColor: (color: string) => void;
+  onChangePatternColor: (color: string) => void;
+  onChangePatternId: (patternId: CVThemePatternId) => void;
+  onTogglePatternSync: (nextValue: boolean) => void;
 }
 
 export function EditorTopbar({
   resumeTitle,
   saveStatus,
   isDirty,
+  isDownloading = false,
   canUndo,
   canRedo,
   activeTemplateId,
   fontFamily,
   fontOptions,
   fontSizeMode,
+  primaryColor,
+  patternColor,
+  patternId,
+  syncPatternWithPrimary,
   onUndo,
   onRedo,
   onSave,
+  onDownload,
   onRenameResume,
   onOpenAddSection,
   onChangeTemplate,
   onChangeFontFamily,
   onChangeFontSizeMode,
+  onChangePrimaryColor,
+  onChangePatternColor,
+  onChangePatternId,
+  onTogglePatternSync,
 }: EditorTopbarProps) {
   const [isTemplateMenuOpen, setIsTemplateMenuOpen] = useState(false);
   const [isTypographyMenuOpen, setIsTypographyMenuOpen] = useState(false);
+  const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(resumeTitle);
 
@@ -201,9 +283,15 @@ export function EditorTopbar({
               type="button"
               onClick={() => {
                 setIsTemplateMenuOpen(false);
+                setIsThemeMenuOpen(false);
                 setIsTypographyMenuOpen((prev) => !prev);
               }}
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50"
+              className={cn(
+                "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-all duration-200",
+                isTypographyMenuOpen
+                  ? "border-sky-300 bg-sky-50 text-sky-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+              )}
               title="Chỉnh phông chữ và cỡ chữ"
             >
               <Type size={15} />
@@ -212,9 +300,9 @@ export function EditorTopbar({
             </button>
 
             {isTypographyMenuOpen ? (
-              <div className="absolute right-0 top-12 z-70 w-72 rounded-[18px] border border-slate-200 bg-slate-700 p-3 text-slate-100 shadow-[0_30px_70px_-42px_rgba(15,23,42,0.65)]">
-                <p className="mb-2 text-xs font-semibold">Phông chữ</p>
-                <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl bg-slate-600/65 p-2">
+              <div className="animate-fade-in absolute right-0 top-12 z-70 w-[min(19rem,calc(100vw-1rem))] rounded-2xl border border-slate-200 bg-white p-3.5 text-slate-800 shadow-[0_26px_55px_-38px_rgba(15,23,42,0.4)]">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Phông chữ</p>
+                <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/80 p-1.5 [scrollbar-color:rgb(203_213_225)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300/90 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5">
                   {fontOptions.map((fontOption) => {
                     const selected = normalizeFontChoiceValue(fontOption) === normalizeFontChoiceValue(fontFamily);
 
@@ -224,21 +312,32 @@ export function EditorTopbar({
                         type="button"
                         onClick={() => onChangeFontFamily(fontOption)}
                         className={cn(
-                          "w-full rounded-lg px-2 py-1.5 text-left text-sm transition",
+                          "flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-sm transition-colors duration-150",
                           selected
-                            ? "bg-cyan-500/20 text-cyan-100"
-                            : "text-slate-100 hover:bg-slate-500/70",
+                            ? "border-sky-200 bg-sky-50 text-sky-700"
+                            : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-100",
                         )}
                       >
-                        {formatFontChoiceLabel(fontOption)}
+                        <span
+                          className={cn("truncate", resolveFontPreviewClassName(fontOption))}
+                        >
+                          {formatFontChoiceLabel(fontOption)}
+                        </span>
+                        <span
+                          className={cn(
+                            "ml-2 h-2.5 w-2.5 shrink-0 rounded-full border transition",
+                            selected ? "border-sky-500 bg-sky-500" : "border-slate-300 bg-white",
+                          )}
+                          aria-hidden="true"
+                        />
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="mt-3 border-t border-slate-500/70 pt-3">
-                  <p className="mb-2 text-xs font-semibold">Cỡ chữ</p>
-                  <div className="flex items-center gap-3 text-sm">
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Cỡ chữ</p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
                     {[
                       { id: "small", label: "Nhỏ" },
                       { id: "medium", label: "Vừa" },
@@ -251,19 +350,156 @@ export function EditorTopbar({
                           key={option.id}
                           type="button"
                           onClick={() => onChangeFontSizeMode(option.id as FontSizeMode)}
-                          className="inline-flex items-center gap-1.5"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors duration-150",
+                            selected
+                              ? "border-sky-200 bg-sky-50 text-sky-700"
+                              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-100",
+                          )}
                         >
                           <span
                             className={cn(
-                              "inline-flex h-4 w-4 rounded-full border border-slate-200",
-                              selected ? "border-cyan-400 bg-cyan-400" : "bg-white",
+                              "inline-flex h-3.5 w-3.5 rounded-full border",
+                              selected ? "border-sky-500 bg-sky-500" : "border-slate-300 bg-white",
                             )}
+                            aria-hidden="true"
                           />
-                          <span className={selected ? "text-cyan-100" : "text-slate-100"}>{option.label}</span>
+                          <span>{option.label}</span>
                         </button>
                       );
                     })}
                   </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setIsTemplateMenuOpen(false);
+                setIsTypographyMenuOpen(false);
+                setIsThemeMenuOpen((prev) => !prev);
+              }}
+              className={cn(
+                "inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-all duration-200",
+                isThemeMenuOpen
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+              )}
+              title="Tùy chỉnh màu và họa tiết"
+            >
+              <Palette size={15} />
+              <span className="max-w-20 truncate">Màu sắc</span>
+              <ChevronDown size={15} />
+            </button>
+
+            {isThemeMenuOpen ? (
+              <div className="animate-fade-in absolute right-0 top-12 z-70 w-[min(21rem,calc(100vw-1rem))] rounded-2xl border border-slate-200 bg-white p-3.5 text-slate-800 shadow-[0_26px_55px_-38px_rgba(15,23,42,0.4)]">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Màu chủ đạo</p>
+                <div className="grid grid-cols-6 gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2">
+                  {CV_THEME_PRIMARY_SWATCHES.map((colorValue) => {
+                    const selected = colorValue.toLowerCase() === primaryColor.toLowerCase();
+
+                    return (
+                      <button
+                        key={colorValue}
+                        type="button"
+                        onClick={() => onChangePrimaryColor(colorValue)}
+                        className={cn(
+                          "h-7 w-7 rounded-full border transition-transform",
+                          resolveSwatchColorClassName(colorValue),
+                          selected
+                            ? "scale-110 border-slate-600 ring-2 ring-slate-400/40"
+                            : "border-white/60 hover:scale-105",
+                        )}
+                        aria-label={`Chọn màu chủ đạo ${colorValue}`}
+                        title={colorValue}
+                      />
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Họa tiết nền</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {CV_THEME_PATTERN_OPTIONS.map((patternOption) => {
+                      const selected = patternOption.id === patternId;
+
+                      return (
+                        <button
+                          key={patternOption.id}
+                          type="button"
+                          onClick={() => onChangePatternId(patternOption.id)}
+                          className={cn(
+                            "rounded-lg border bg-white p-1.5 text-left transition",
+                            selected
+                              ? "border-emerald-300 ring-1 ring-emerald-200"
+                              : "border-slate-200 hover:border-slate-300",
+                          )}
+                          title={patternOption.label}
+                        >
+                          <span
+                            className={cn(
+                              "block h-8 w-full rounded-md border border-slate-200",
+                              patternOption.previewClassName,
+                            )}
+                          />
+                          <span className="mt-1 block truncate text-[10px] font-semibold text-slate-600">
+                            {patternOption.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-3 border-t border-slate-200 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => onTogglePatternSync(!syncPatternWithPrimary)}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                      syncPatternWithPrimary
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex h-3.5 w-3.5 rounded-full border",
+                        syncPatternWithPrimary ? "border-emerald-500 bg-emerald-500" : "border-slate-300 bg-white",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span>Đồng bộ màu họa tiết theo màu chủ đạo</span>
+                  </button>
+
+                  {!syncPatternWithPrimary ? (
+                    <div className="mt-2 grid grid-cols-6 gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2">
+                      {CV_THEME_PRIMARY_SWATCHES.map((colorValue) => {
+                        const selected = colorValue.toLowerCase() === patternColor.toLowerCase();
+
+                        return (
+                          <button
+                            key={`pattern-${colorValue}`}
+                            type="button"
+                            onClick={() => onChangePatternColor(colorValue)}
+                            className={cn(
+                              "h-6 w-6 rounded-full border transition-transform",
+                              resolveSwatchColorClassName(colorValue),
+                              selected
+                                ? "scale-110 border-slate-600 ring-2 ring-slate-400/40"
+                                : "border-white/60 hover:scale-105",
+                            )}
+                            aria-label={`Chọn màu họa tiết ${colorValue}`}
+                            title={colorValue}
+                          />
+                        );
+                      })}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -278,6 +514,7 @@ export function EditorTopbar({
                 }
 
                 setIsTypographyMenuOpen(false);
+                setIsThemeMenuOpen(false);
                 setIsTemplateMenuOpen((prev) => !prev);
               }}
               disabled={!hasTemplateOptions}
@@ -353,6 +590,21 @@ export function EditorTopbar({
             icon={<Plus size={14} />}
           >
             {EDITOR_UI_TEXTS.topbar.addSection}
+          </ActionButton>
+          <ActionButton
+            onClick={onDownload}
+            size="sm"
+            variant="secondary"
+            disabled={isDownloading}
+            icon={
+              isDownloading ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Download size={14} />
+              )
+            }
+          >
+            {isDownloading ? "Đang tải PDF" : EDITOR_UI_TEXTS.topbar.exportPdf}
           </ActionButton>
           <ActionButton
             onClick={onSave}

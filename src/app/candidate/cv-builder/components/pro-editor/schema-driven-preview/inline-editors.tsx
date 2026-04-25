@@ -404,7 +404,7 @@ export function EditableText({
       }}
     >
       {previewHtml ? (
-        <div className="text-[1em] leading-[1.65] text-slate-800" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+        <div className="text-[1em] leading-[1.65] text-inherit" dangerouslySetInnerHTML={{ __html: previewHtml }} />
       ) : (
         <span className="text-[1em] italic leading-6 text-slate-400">{placeholder}</span>
       )}
@@ -580,7 +580,7 @@ export function EditableList({
       {normalizedItems.length === 0 ? (
         <span className="text-[13px] italic text-slate-400">{placeholder}</span>
       ) : (
-        <ul className="list-disc pl-5 text-[13px] leading-[1.65] text-slate-800">
+        <ul className="list-disc pl-5 text-[13px] leading-[1.65] text-inherit">
           {normalizedItems.map((item, index) => (
             <li key={`${item}-${index}`}>{item}</li>
           ))}

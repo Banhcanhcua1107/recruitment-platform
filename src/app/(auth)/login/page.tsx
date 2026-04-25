@@ -7,10 +7,12 @@ import { ArrowLeft, Eye, EyeOff, Star } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { signInWithGoogle } from "@/utils/supabase/auth-helpers";
 import { login } from "@/app/(auth)/actions";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { alert } = useAppDialog();
   const supabase = createClient();
 
   const handleGoogleLogin = async () => {
@@ -25,7 +27,12 @@ export default function LoginPage() {
     const result = await login(formData);
 
     if (result?.error) {
-      alert(`Dang nhap that bai: ${result.error}`);
+      await alert({
+        title: "Đăng nhập thất bại",
+        description: `Dang nhap that bai: ${result.error}`,
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
       setLoading(false);
     }
   };

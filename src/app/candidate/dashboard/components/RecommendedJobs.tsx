@@ -4,6 +4,10 @@ import React, { useState, useCallback, useEffect, useMemo } from "react";
 import Link from "next/link";
 import type { Job as FullJob } from "@/types/job";
 import { Job as DashJob } from "@/types/dashboard";
+import {
+  getRecommendedJobsPayload,
+  postRecommendedJobsPayload,
+} from "@/lib/client/recommend-jobs";
 
 /* ─── Skill display filter (mirrors server-side isDisplayableSkill) ─── */
 const JUNK_TAG_SET = new Set([
@@ -272,8 +276,9 @@ export default function RecommendedJobs({
 
   /* ── Pick 6 random jobs for default display ── */
   const randomJobs = useMemo(() => {
-    const shuffled = [...jobs].sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, 6);
+    return [...jobs]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, 6);
   }, [jobs]);
 
   /* ── Load cached recommendations on mount ── */
@@ -283,24 +288,26 @@ export default function RecommendedJobs({
     async function loadCached() {
       try {
         // Try Supabase cache first (GET)
-        const res = await fetch("/api/recommend-jobs");
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled && data.items?.length > 0) {
-            setGeminiItems(data.items);
-            setCandidateSummary(data.candidateSummary ?? "");
-            setSuggestedRoles(data.suggestedRoles ?? []);
-            setSuggestedCompanies(data.suggestedCompanies ?? []);
-            setHasFetched(true);
-            // Also mirror to localStorage
-            try {
-              localStorage.setItem(
-                "rec_jobs_cache",
-                JSON.stringify({ items: data.items, candidateSummary: data.candidateSummary, suggestedRoles: data.suggestedRoles, suggestedCompanies: data.suggestedCompanies })
-              );
-            } catch { /* quota exceeded */ }
-            return;
-          }
+        const data = (await getRecommendedJobsPayload()) as {
+          items?: RecommendedItem[];
+          candidateSummary?: string;
+          suggestedRoles?: string[];
+          suggestedCompanies?: string[];
+        } | null;
+        if (!cancelled && data?.items?.length) {
+          setGeminiItems(data.items);
+          setCandidateSummary(data.candidateSummary ?? "");
+          setSuggestedRoles(data.suggestedRoles ?? []);
+          setSuggestedCompanies(data.suggestedCompanies ?? []);
+          setHasFetched(true);
+          // Also mirror to localStorage
+          try {
+            localStorage.setItem(
+              "rec_jobs_cache",
+              JSON.stringify({ items: data.items, candidateSummary: data.candidateSummary, suggestedRoles: data.suggestedRoles, suggestedCompanies: data.suggestedCompanies })
+            );
+          } catch { /* quota exceeded */ }
+          return;
         }
       } catch {
         // Supabase/network unavailable — fall through to localStorage
@@ -335,13 +342,12 @@ export default function RecommendedJobs({
         body.candidate_text = customText.trim();
       }
 
-      const res = await fetch("/api/recommend-jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Lỗi không xác định");
+      const data = (await postRecommendedJobsPayload(body)) as {
+        items?: RecommendedItem[];
+        candidateSummary?: string;
+        suggestedRoles?: string[];
+        suggestedCompanies?: string[];
+      };
       setCandidateSummary(data.candidateSummary ?? "");
       setSuggestedRoles(data.suggestedRoles ?? []);
       setSuggestedCompanies(data.suggestedCompanies ?? []);

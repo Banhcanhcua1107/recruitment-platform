@@ -5,6 +5,39 @@ interface CloudinaryUploadResult {
   publicId: string;
 }
 
+const DEFAULT_UPLOAD_FILE_NAME = "cv-avatar-upload";
+
+function sanitizeUploadFileName(rawName: string) {
+  const normalizedRawName = String(rawName || "").replace(/\\/g, "/");
+  const baseName = normalizedRawName.split("/").pop() || DEFAULT_UPLOAD_FILE_NAME;
+  const withoutControlChars = baseName.replace(/[\u0000-\u001f\u007f]/g, "");
+  const normalizedSpaces = withoutControlChars.replace(/\s+/g, " ").trim();
+  const safeName = normalizedSpaces
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "");
+
+  if (!safeName) {
+    return `${DEFAULT_UPLOAD_FILE_NAME}.png`;
+  }
+
+  if (safeName.includes(".")) {
+    return safeName;
+  }
+
+  return `${safeName}.png`;
+}
+
+async function normalizeUploadFile(file: File) {
+  const safeFileName = sanitizeUploadFileName(file.name || DEFAULT_UPLOAD_FILE_NAME);
+  const binary = await file.arrayBuffer();
+
+  return new File([binary], safeFileName, {
+    type: file.type || "application/octet-stream",
+    lastModified: Date.now(),
+  });
+}
+
 function getCloudinaryConfig() {
   return {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
@@ -28,8 +61,9 @@ export async function uploadImageToCloudinary(
     throw new Error("Vui lòng chọn một ảnh hợp lệ.");
   }
 
+  const normalizedFile = await normalizeUploadFile(file);
   const cloudinaryForm = new FormData();
-  cloudinaryForm.append("file", file);
+  cloudinaryForm.append("file", normalizedFile, normalizedFile.name);
   cloudinaryForm.append("folder", folder);
 
   if (uploadPreset) {

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ChevronLeft, ChevronRight, Eye, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { createResumeFromSections, saveResume } from "@/app/candidate/cv-builder/route-api";
 import { TemplateCard } from "./TemplateCard";
 import { TemplateCarousel } from "./TemplateCarousel";
@@ -65,23 +65,6 @@ export function TemplateGallery() {
     }
   }, [filteredTemplates, selectedTemplateId]);
 
-  const selectedTemplate = useMemo(() => {
-    if (!selectedTemplateId) {
-      return null;
-    }
-
-    return filteredTemplates.find((template) => template.id === selectedTemplateId) ?? null;
-  }, [filteredTemplates, selectedTemplateId]);
-
-  const selectedTemplateIndex = useMemo(() => {
-    if (!selectedTemplateId) {
-      return 0;
-    }
-
-    const index = filteredTemplates.findIndex((template) => template.id === selectedTemplateId);
-    return index < 0 ? 0 : index;
-  }, [filteredTemplates, selectedTemplateId]);
-
   const handleUseTemplate = useCallback(
     async (template: CVTemplateDefinition) => {
       if (creatingTemplateId) {
@@ -118,56 +101,6 @@ export function TemplateGallery() {
     },
     [creatingTemplateId, router],
   );
-
-  const handleMoveSelected = useCallback((direction: "prev" | "next") => {
-    if (filteredTemplates.length <= 1 || !selectedTemplateId) {
-      return;
-    }
-
-    const currentIndex = filteredTemplates.findIndex((template) => template.id === selectedTemplateId);
-    if (currentIndex < 0) {
-      setSelectedTemplateId(filteredTemplates[0].id);
-      return;
-    }
-
-    const nextIndex =
-      direction === "next"
-        ? (currentIndex + 1) % filteredTemplates.length
-        : (currentIndex - 1 + filteredTemplates.length) % filteredTemplates.length;
-
-    setSelectedTemplateId(filteredTemplates[nextIndex].id);
-  }, [filteredTemplates, selectedTemplateId]);
-
-  useEffect(() => {
-    const handleKeyboardNavigate = (event: KeyboardEvent) => {
-      if (previewTemplate) {
-        return;
-      }
-
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-        return;
-      }
-
-      const target = event.target as HTMLElement | null;
-      if (target) {
-        const tagName = target.tagName;
-        if (
-          target.isContentEditable ||
-          tagName === "INPUT" ||
-          tagName === "TEXTAREA" ||
-          tagName === "SELECT"
-        ) {
-          return;
-        }
-      }
-
-      event.preventDefault();
-      handleMoveSelected(event.key === "ArrowRight" ? "next" : "prev");
-    };
-
-    window.addEventListener("keydown", handleKeyboardNavigate);
-    return () => window.removeEventListener("keydown", handleKeyboardNavigate);
-  }, [handleMoveSelected, previewTemplate]);
 
   return (
     <div className="mx-auto w-full max-w-[1680px] px-4 pb-14 pt-6 sm:px-6 lg:px-8 lg:pt-8">
@@ -209,111 +142,7 @@ export function TemplateGallery() {
         </div>
       ) : null}
 
-      {selectedTemplate ? (
-        <section className="mt-8 rounded-[28px] border border-[var(--app-border)] bg-white/96 p-5 shadow-[var(--app-shadow-soft)] sm:p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-              Mẫu CV {selectedTemplateIndex + 1}/{filteredTemplates.length}
-            </p>
-            <div className="flex items-center gap-3">
-              <p className="hidden text-xs font-semibold text-slate-500 md:block">Phím nhanh: &lt;- / -&gt;</p>
-              <button
-                type="button"
-                onClick={() => handleMoveSelected("prev")}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                aria-label="Chọn mẫu trước"
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMoveSelected("next")}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
-                aria-label="Chọn mẫu tiếp theo"
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <button
-              type="button"
-              onClick={() => setPreviewTemplate(selectedTemplate)}
-              className="group relative overflow-hidden rounded-[22px] border border-slate-200 bg-slate-50 p-3 text-left"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={selectedTemplate.previewImages[0] ?? selectedTemplate.thumbnail}
-                alt={selectedTemplate.name}
-                className="h-full max-h-159 w-full rounded-xl bg-white object-contain shadow-[0_22px_44px_-28px_rgba(15,23,42,0.42)]"
-              />
-              <span className="pointer-events-none absolute bottom-5 right-5 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/90 px-3 py-1 text-xs font-semibold text-slate-700 shadow-lg transition group-hover:-translate-y-px">
-                <Eye size={13} />
-                Xem lớn
-              </span>
-            </button>
-
-            <aside className="flex flex-col rounded-[22px] border border-slate-200 bg-slate-50 p-4">
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black tracking-tight text-slate-900">{selectedTemplate.name}</h2>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
-                    selectedTemplate.badge === "PRO"
-                      ? "bg-slate-900 text-white"
-                      : "bg-white text-slate-700"
-                  }`}
-                >
-                  {selectedTemplate.badge}
-                </span>
-              </div>
-
-              <p className="mt-2 text-sm leading-6 text-slate-600">{selectedTemplate.description}</p>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {selectedTemplate.tags.map((tag) => (
-                  <span
-                    key={`${selectedTemplate.id}-${tag}`}
-                    className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-
-              <div className="mt-auto grid gap-2 pt-6">
-                <button
-                  type="button"
-                  onClick={() => setPreviewTemplate(selectedTemplate)}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
-                >
-                  <Eye size={15} />
-                  Xem trước chi tiết
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void handleUseTemplate(selectedTemplate)}
-                  disabled={creatingTemplateId !== null}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-primary px-4 text-sm font-bold text-white transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {creatingTemplateId === selectedTemplate.id ? (
-                    <>
-                      <Loader2 size={15} className="animate-spin" />
-                      Đang tạo CV...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={15} />
-                      Dùng mẫu này
-                    </>
-                  )}
-                </button>
-              </div>
-            </aside>
-          </div>
-        </section>
-      ) : (
+      {filteredTemplates.length === 0 ? (
         <section className="mt-8 rounded-[28px] border border-slate-200 bg-white px-6 py-14 text-center shadow-[var(--app-shadow-soft)]">
           <p className="text-lg font-bold text-slate-900">
             {hasTemplateInLibrary ? "Không tìm thấy template phù hợp" : "Mẫu CV đang được cập nhật"}
@@ -324,7 +153,7 @@ export function TemplateGallery() {
               : "Tạm thời toàn bộ mẫu CV hiện có đã được ẩn khỏi giao diện. Vui lòng quay lại sau khi có mẫu mới."}
           </p>
         </section>
-      )}
+      ) : null}
 
       {filteredTemplates.length > 0 ? (
         <div className="mt-8">

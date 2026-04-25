@@ -25,6 +25,7 @@ import {
 import { useStablePreviewSource } from "./use-stable-preview-source";
 import { normalizeCvSections } from "../../section-normalization";
 import type { CVSection } from "../../types";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 interface OCRPreviewModalProps {
   isOpen: boolean;
@@ -251,6 +252,7 @@ export function OCRPreviewModal({
   onConfirm,
 }: OCRPreviewModalProps) {
   const router = useRouter();
+  const { alert } = useAppDialog();
   const [step, setStep] = useState<ModalStep>("upload");
   const [file, setFile] = useState<File | null>(null);
   const { previewSource, applyLocalPreview, applyPreparedPreview, setPreviewError, resetPreviewSource } =
@@ -544,11 +546,16 @@ export function OCRPreviewModal({
       });
     } catch (promotionError) {
       console.error("Không thể chuyển sang import persisted:", promotionError);
-      alert("Không thể đưa file sang quy trình import mới. Vui lòng thử lại.");
+      await alert({
+        title: "Không thể chuyển quy trình import",
+        description: "Không thể đưa file sang quy trình import mới. Vui lòng thử lại.",
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
     } finally {
       setIsPromotingImport(false);
     }
-  }, [file, isPromotingImport, onClose, resetState, router]);
+  }, [alert, file, isPromotingImport, onClose, resetState, router]);
 
   const showWorkspace = step === "workspace" && file;
   const showFinalResult =

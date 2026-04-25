@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { AppShell } from "@/components/app-shell";
+import { AppShell } from "@/components/app-shell/AppShell";
 import WorkspaceHeader from "./WorkspaceHeader";
 import WorkspaceSidebar from "./WorkspaceSidebar";
 import type { WorkspaceHeaderConfig, WorkspaceShellModel, WorkspaceSidebarConfig } from "./types";

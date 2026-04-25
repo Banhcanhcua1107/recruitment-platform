@@ -51,6 +51,7 @@ export function buildResumeSaveInput(input: {
       fonts: cv.theme.fonts,
       colors: cv.theme.colors,
       spacing: cv.theme.spacing,
+      appearance: cv.theme.appearance,
       editorTemplateId: cv.meta.templateId ?? null,
       editorRootJson: rootJson,
     },

@@ -8,6 +8,11 @@ import { CVPaper } from "./CVPaper";
 import { CVSectionRenderer } from "./CVSectionRenderer";
 import { mapBuilderSectionsToPreviewData, orderPreviewSections } from "./schema-driven-preview/adapters";
 import { resolveSectionStyleConfig } from "./schema-driven-preview/section-renderers";
+import {
+  buildTemplatePaletteTokens,
+  resolveSidebarPatternClassName,
+  resolveTemplatePatternClassName,
+} from "./schema-driven-preview/theme-tokens";
 import type { SectionRenderMode } from "./schema-driven-preview/SectionRenderer";
 import type {
   CVHeaderSummaryContentData,
@@ -19,6 +24,7 @@ import { useCVStore } from "../../store";
 
 const A4_HEIGHT_PX = 1122;
 const PAGE_FOOTER_RESERVE_PX = 44;
+const SIDEBAR_PAGE_FOOTER_RESERVE_PX = 28;
 const HEADER_SECTION_GAP_PX = 20;
 const SINGLE_PAGE_ZOOM_DEFAULT_CLASS = "[zoom:1]";
 const MIN_READABLE_SINGLE_PAGE_ZOOM = 0.96;
@@ -687,6 +693,73 @@ function splitBlockToFitRemaining(input: {
   };
 }
 
+function paginateColumnBlocks(input: {
+  blocks: RenderSectionBlock[];
+  firstPageAvailableHeight: number;
+  fullPageAvailableHeight: number;
+  sectionGap: number;
+  maxPageContentHeight: number;
+}): RenderSectionBlock[][] {
+  const {
+    blocks,
+    firstPageAvailableHeight,
+    fullPageAvailableHeight,
+    sectionGap,
+    maxPageContentHeight,
+  } = input;
+  const queue = [...blocks];
+  const paginatedBlocks: RenderSectionBlock[][] = [];
+  let pageIndex = 0;
+
+  while (queue.length > 0) {
+    const pageBlocks: RenderSectionBlock[] = [];
+    let remainingHeight = Math.max(
+      80,
+      pageIndex === 0 ? firstPageAvailableHeight : fullPageAvailableHeight,
+    );
+
+    while (queue.length > 0) {
+      const currentBlock = queue[0];
+      if (!currentBlock) {
+        break;
+      }
+
+      const sectionGapBeforeBlock = pageBlocks.length > 0 ? sectionGap : 0;
+      const requiredHeight = currentBlock.height + sectionGapBeforeBlock;
+
+      if (requiredHeight <= remainingHeight) {
+        pageBlocks.push(currentBlock);
+        queue.shift();
+        remainingHeight -= requiredHeight;
+        continue;
+      }
+
+      const splitResult = splitBlockToFitRemaining({
+        block: currentBlock,
+        availableHeight: Math.max(0, remainingHeight - sectionGapBeforeBlock),
+        maxPageContentHeight,
+      });
+
+      if (splitResult) {
+        pageBlocks.push(splitResult.headBlock);
+        queue.shift();
+        queue.unshift(...splitResult.tailBlocks);
+      } else if (pageBlocks.length === 0) {
+        // Keep progress moving when a non-splittable block is taller than the remaining column space.
+        pageBlocks.push(currentBlock);
+        queue.shift();
+      }
+
+      break;
+    }
+
+    paginatedBlocks.push(pageBlocks);
+    pageIndex += 1;
+  }
+
+  return paginatedBlocks.length > 0 ? paginatedBlocks : [[]];
+}
+
 function measureListItemLayout(sectionNode: HTMLDivElement | null, expectedItemCount: number) {
   if (!sectionNode || expectedItemCount <= 0) {
     return null;
@@ -842,6 +915,9 @@ export function CVPreviewCanvas({
   mode = "edit",
 }: CVPreviewCanvasProps) {
   const themeBodyFont = useCVStore((state) => state.cv.theme.fonts.body);
+  const themePrimaryColor = useCVStore((state) => state.cv.theme.colors.primary);
+  const themePatternColor = useCVStore((state) => state.cv.theme.colors.pattern);
+  const themeAppearance = useCVStore((state) => state.cv.theme.appearance);
   const themeSpacing = useCVStore((state) => state.cv.theme.spacing);
   const template = useMemo(() => getTemplateConfig(templateId), [templateId]);
   const isTealFamily = template.visualFamily === "teal";
@@ -860,6 +936,22 @@ export function CVPreviewCanvas({
     () => resolvePreviewTextSizeClass(Number(themeSpacing)),
     [themeSpacing],
   );
+  const paletteTokens = useMemo(
+    () => buildTemplatePaletteTokens({
+      primaryColor: themePrimaryColor,
+      patternColor: themePatternColor,
+      syncPatternWithPrimary: themeAppearance?.syncPatternWithPrimary,
+    }),
+    [themeAppearance?.syncPatternWithPrimary, themePatternColor, themePrimaryColor],
+  );
+  const resolvedPaperPatternClassName = useMemo(
+    () => resolveTemplatePatternClassName(themeAppearance?.patternId),
+    [themeAppearance?.patternId],
+  );
+  const resolvedSidebarPatternClassName = useMemo(
+    () => resolveSidebarPatternClassName(themeAppearance?.patternId),
+    [themeAppearance?.patternId],
+  );
   const previewData = useMemo(() => mapBuilderSectionsToPreviewData(sections), [sections]);
   const orderedSections = useMemo(
     () => orderPreviewSections(previewData.sections, template.sectionOrder),
@@ -867,6 +959,9 @@ export function CVPreviewCanvas({
   );
   const bodyLayout = template.bodyLayout;
   const isTwoColumnBody = bodyLayout?.mode === "two-column";
+  const isSidebarHeaderLayout = template.headerLayout.variant === "sidebar-profile";
+  const shouldRenderTopHeader = !isSidebarHeaderLayout;
+  const shouldRenderSidebarColumnHeader = isSidebarHeaderLayout && isTwoColumnBody;
   const bodyColumnGridClassName = useMemo(
     () => resolveTwoColumnGridClass(bodyLayout),
     [bodyLayout],
@@ -957,8 +1052,11 @@ export function CVPreviewCanvas({
     return new Map<string, CVSection>(entries);
   }, [sections]);
 
+  const previewThemeScopeRef = useRef<HTMLDivElement | null>(null);
+  const measureThemeScopeRef = useRef<HTMLDivElement | null>(null);
   const measurePaperRef = useRef<HTMLDivElement | null>(null);
   const measureHeaderRef = useRef<HTMLDivElement | null>(null);
+  const measureSidebarHeaderRef = useRef<HTMLDivElement | null>(null);
   const measureSectionsContainerRef = useRef<HTMLDivElement | null>(null);
   const measureLeftColumnRef = useRef<HTMLDivElement | null>(null);
   const measureRightColumnRef = useRef<HTMLDivElement | null>(null);
@@ -967,6 +1065,30 @@ export function CVPreviewCanvas({
   const [paginatedPages, setPaginatedPages] = useState<PreviewPage[]>([]);
   const [singlePageZoomClassName, setSinglePageZoomClassName] = useState(SINGLE_PAGE_ZOOM_DEFAULT_CLASS);
   const [tealPaginateForReadability, setTealPaginateForReadability] = useState(false);
+
+  useLayoutEffect(() => {
+    const themeScopes = [previewThemeScopeRef.current, measureThemeScopeRef.current].filter(
+      (node): node is HTMLDivElement => node instanceof HTMLDivElement,
+    );
+
+    themeScopes.forEach((scopeElement) => {
+      scopeElement.style.setProperty("--cv-template-accent-rgb", paletteTokens.primaryRgb);
+      scopeElement.style.setProperty("--cv-template-primary-rgb", paletteTokens.primaryRgb);
+      scopeElement.style.setProperty("--cv-template-primary-soft-rgb", paletteTokens.primarySoftRgb);
+      scopeElement.style.setProperty("--cv-template-primary-muted-rgb", paletteTokens.primaryMutedRgb);
+      scopeElement.style.setProperty("--cv-template-primary-border-rgb", paletteTokens.primaryBorderRgb);
+      scopeElement.style.setProperty("--cv-template-primary-contrast-rgb", paletteTokens.primaryContrastRgb);
+      scopeElement.style.setProperty("--cv-template-pattern-rgb", paletteTokens.patternRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-background-rgb", paletteTokens.sidebarBackgroundRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-text-rgb", paletteTokens.sidebarTextRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-muted-rgb", paletteTokens.sidebarMutedRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-icon-rgb", paletteTokens.sidebarIconRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-divider-rgb", paletteTokens.sidebarDividerRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-overlay-rgb", paletteTokens.sidebarOverlayRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-skill-track-rgb", paletteTokens.sidebarSkillTrackRgb);
+      scopeElement.style.setProperty("--cv-template-sidebar-skill-fill-rgb", paletteTokens.sidebarSkillFillRgb);
+    });
+  }, [paletteTokens]);
 
   const emitItemSelection = (selection: CVSelectedSectionItem | null) => {
     if (!onSelectSectionItem) {
@@ -985,6 +1107,8 @@ export function CVPreviewCanvas({
   const headerSection = sections.find((section) => section.type === "header");
   const personalInfoSection = sections.find((section) => section.type === "personal_info");
   const hasHeader = Boolean(headerSection || personalInfoSection);
+  const hasTopHeader = hasHeader && shouldRenderTopHeader;
+  const hasSidebarHeader = hasHeader && shouldRenderSidebarColumnHeader;
   const headerSelected = selectedSectionId === headerSection?.id || selectedSectionId === personalInfoSection?.id;
 
   const selectHeader = () => {
@@ -1013,7 +1137,7 @@ export function CVPreviewCanvas({
       if (!paperElement) {
         const fallbackPages: PreviewPage[] = [
           {
-            includeHeader: hasHeader,
+            includeHeader: hasTopHeader,
             blocks: fallbackBlocks,
           },
         ];
@@ -1030,13 +1154,18 @@ export function CVPreviewCanvas({
       const borderTop = Number.parseFloat(paperStyles.borderTopWidth || "0") || 0;
       const borderBottom = Number.parseFloat(paperStyles.borderBottomWidth || "0") || 0;
 
-      const footerReservePx = forceSinglePage ? 34 : PAGE_FOOTER_RESERVE_PX;
+      const footerReservePx = isSidebarHeaderLayout
+        ? SIDEBAR_PAGE_FOOTER_RESERVE_PX
+        : (forceSinglePage ? 34 : PAGE_FOOTER_RESERVE_PX);
       const maxPageContentHeight = Math.max(
         280,
         A4_HEIGHT_PX - paddingTop - paddingBottom - borderTop - borderBottom - footerReservePx,
       );
 
-      const headerHeight = hasHeader ? Math.max(1, measureHeaderRef.current?.offsetHeight ?? 0) : 0;
+      const headerHeight = hasTopHeader ? Math.max(1, measureHeaderRef.current?.offsetHeight ?? 0) : 0;
+      const sidebarHeaderHeight = hasSidebarHeader
+        ? Math.max(1, measureSidebarHeaderRef.current?.offsetHeight ?? 0)
+        : 0;
       const sectionGap = isTwoColumnBody
         ? Math.max(
             measureSectionGap(measureLeftColumnRef.current),
@@ -1072,7 +1201,7 @@ export function CVPreviewCanvas({
           (total, block, blockIndex) => total + block.height + (blockIndex > 0 ? sectionGap : 0),
           0,
         );
-        const totalContentHeight = totalBlocksHeight + (hasHeader ? headerHeight + headerSectionGapPx : 0);
+        const totalContentHeight = totalBlocksHeight + (hasTopHeader ? headerHeight + headerSectionGapPx : 0);
 
         const nextZoom = totalContentHeight > maxPageContentHeight
           ? Math.max(0.72, maxPageContentHeight / totalContentHeight)
@@ -1088,7 +1217,7 @@ export function CVPreviewCanvas({
 
           const singlePage: PreviewPage[] = [
             {
-              includeHeader: hasHeader,
+              includeHeader: hasTopHeader,
               blocks,
             },
           ];
@@ -1114,118 +1243,44 @@ export function CVPreviewCanvas({
       );
 
       if (isTwoColumnBody) {
-        const computedPages: PreviewPage[] = [];
-        let currentPage: PreviewPage = {
-          includeHeader: hasHeader,
-          blocks: [],
-        };
-        let leftBlockCount = 0;
-        let rightBlockCount = 0;
-        let leftRemainingHeight = maxPageContentHeight - (hasHeader ? headerHeight + headerSectionGapPx : 0);
-        let rightRemainingHeight = maxPageContentHeight - (hasHeader ? headerHeight + headerSectionGapPx : 0);
+        const firstPageAvailableHeight = Math.max(
+          80,
+          maxPageContentHeight - (hasTopHeader ? headerHeight + headerSectionGapPx : 0),
+        );
+        const leftColumnBlocks = blocks.filter((block) => resolveBodyColumnForSection(block.section) === "left");
+        const rightColumnBlocks = blocks.filter((block) => resolveBodyColumnForSection(block.section) === "right");
 
-        leftRemainingHeight = Math.max(80, leftRemainingHeight);
-        rightRemainingHeight = Math.max(80, rightRemainingHeight);
+        const leftColumnFirstPageAvailableHeight = Math.max(
+          80,
+          firstPageAvailableHeight
+            - (hasSidebarHeader
+              ? sidebarHeaderHeight + (leftColumnBlocks.length > 0 ? headerSectionGapPx : 0)
+              : 0),
+        );
 
-        const startNextPage = () => {
-          currentPage = {
-            includeHeader: false,
-            blocks: [],
-          };
-          leftBlockCount = 0;
-          rightBlockCount = 0;
-          leftRemainingHeight = maxPageContentHeight;
-          rightRemainingHeight = maxPageContentHeight;
-        };
+        const leftColumnPages = paginateColumnBlocks({
+          blocks: leftColumnBlocks,
+          firstPageAvailableHeight: leftColumnFirstPageAvailableHeight,
+          fullPageAvailableHeight: maxPageContentHeight,
+          sectionGap,
+          maxPageContentHeight,
+        });
+        const rightColumnPages = paginateColumnBlocks({
+          blocks: rightColumnBlocks,
+          firstPageAvailableHeight,
+          fullPageAvailableHeight: maxPageContentHeight,
+          sectionGap,
+          maxPageContentHeight,
+        });
 
-        const pushCurrentPageIfNeeded = () => {
-          if (currentPage.blocks.length > 0 || currentPage.includeHeader) {
-            computedPages.push(currentPage);
-          }
-        };
-
-        const blockQueue = [...blocks];
-
-        while (blockQueue.length > 0) {
-          const block = blockQueue.shift();
-          if (!block) {
-            continue;
-          }
-
-          const targetColumn = resolveBodyColumnForSection(block.section);
-          const isLeftColumn = targetColumn === "left";
-          const targetCount = isLeftColumn ? leftBlockCount : rightBlockCount;
-          const targetRemainingHeight = isLeftColumn ? leftRemainingHeight : rightRemainingHeight;
-          const sectionGapBeforeBlock = targetCount > 0 ? sectionGap : 0;
-          const requiredHeight = block.height + sectionGapBeforeBlock;
-
-          if (requiredHeight > targetRemainingHeight) {
-            const availableBlockHeight = Math.max(0, targetRemainingHeight - sectionGapBeforeBlock);
-            const splitResult = splitBlockToFitRemaining({
-              block,
-              availableHeight: availableBlockHeight,
-              maxPageContentHeight,
-            });
-
-            if (splitResult) {
-              currentPage.blocks.push(splitResult.headBlock);
-
-              if (isLeftColumn) {
-                leftBlockCount += 1;
-                leftRemainingHeight -= splitResult.headBlock.height + sectionGapBeforeBlock;
-              } else {
-                rightBlockCount += 1;
-                rightRemainingHeight -= splitResult.headBlock.height + sectionGapBeforeBlock;
-              }
-
-              pushCurrentPageIfNeeded();
-              startNextPage();
-              blockQueue.unshift(...splitResult.tailBlocks);
-              continue;
-            }
-
-            if (currentPage.blocks.length === 0 && currentPage.includeHeader) {
-              startNextPage();
-              blockQueue.unshift(block);
-              continue;
-            }
-
-            if (currentPage.blocks.length === 0) {
-              currentPage.blocks.push(block);
-
-              if (isLeftColumn) {
-                leftBlockCount += 1;
-                leftRemainingHeight = 0;
-              } else {
-                rightBlockCount += 1;
-                rightRemainingHeight = 0;
-              }
-
-              pushCurrentPageIfNeeded();
-              startNextPage();
-              continue;
-            }
-
-            pushCurrentPageIfNeeded();
-            startNextPage();
-            blockQueue.unshift(block);
-            continue;
-          }
-
-          currentPage.blocks.push(block);
-
-          if (isLeftColumn) {
-            leftBlockCount += 1;
-            leftRemainingHeight -= requiredHeight;
-          } else {
-            rightBlockCount += 1;
-            rightRemainingHeight -= requiredHeight;
-          }
-        }
-
-        if (currentPage.blocks.length > 0 || currentPage.includeHeader || computedPages.length === 0) {
-          computedPages.push(currentPage);
-        }
+        const totalPageCount = Math.max(leftColumnPages.length, rightColumnPages.length, 1);
+        const computedPages: PreviewPage[] = Array.from({ length: totalPageCount }, (_, pageIndex) => ({
+          includeHeader: hasTopHeader && pageIndex === 0,
+          blocks: [
+            ...(leftColumnPages[pageIndex] ?? []),
+            ...(rightColumnPages[pageIndex] ?? []),
+          ],
+        }));
 
         setPaginatedPages((previousPages) =>
           shouldReusePaginatedPages(previousPages, computedPages) ? previousPages : computedPages,
@@ -1235,11 +1290,11 @@ export function CVPreviewCanvas({
 
       const computedPages: PreviewPage[] = [];
       let currentPage: PreviewPage = {
-        includeHeader: hasHeader,
+        includeHeader: hasTopHeader,
         blocks: [],
       };
       let remainingHeight =
-        maxPageContentHeight - (hasHeader ? headerHeight + headerSectionGapPx : 0);
+        maxPageContentHeight - (hasTopHeader ? headerHeight + headerSectionGapPx : 0);
       remainingHeight = Math.max(80, remainingHeight);
 
       const blockQueue = [...blocks];
@@ -1306,9 +1361,11 @@ export function CVPreviewCanvas({
     };
   }, [
     forceSinglePage,
-    hasHeader,
+    hasSidebarHeader,
+    hasTopHeader,
     headerSectionGapPx,
     isTwoColumnBody,
+    isSidebarHeaderLayout,
     previewBodyTextClassName,
     previewFontFamilyClassName,
     renderedSections,
@@ -1338,12 +1395,20 @@ export function CVPreviewCanvas({
     onUpdateSectionData(personalInfoSection.id, { [field]: value });
   };
 
+  const handleAvatarEdit = (avatarUrl: string) => {
+    if (!headerSection) {
+      return;
+    }
+
+    onUpdateSectionData(headerSection.id, { avatarUrl });
+  };
+
   const pages =
     paginatedPages.length > 0
       ? paginatedPages
       : [
           {
-            includeHeader: hasHeader,
+            includeHeader: hasTopHeader,
             blocks: renderedSections.map((section, index) => ({
               id: `${section.id}__initial_${index + 1}`,
               section,
@@ -1494,21 +1559,28 @@ export function CVPreviewCanvas({
 
   return (
     <>
-      <div className={pageListClassName} onMouseDown={handleCanvasPointerDown}>
+      <div
+        ref={previewThemeScopeRef}
+        data-cv-preview-canvas-root="true"
+        className={pageListClassName}
+        onMouseDown={handleCanvasPointerDown}
+      >
         {pages.map((page, pageIndex) => (
           <div
             key={`cv-page-${pageIndex + 1}`}
+            data-cv-preview-page="true"
             className="print:break-after-page last:print:break-after-auto"
           >
             <CVPaper
               template={template}
               fontFamilyClassName={previewFontFamilyClassName}
               bodyTextClassName={previewBodyTextClassName}
+              paperPatternClassName={resolvedPaperPatternClassName}
             >
               <div className="relative flex h-full flex-col">
                 <div
                   className={cn(
-                    "flex-1 origin-top-left",
+                    "flex min-h-0 flex-1 flex-col origin-top-left",
                     shouldUseSinglePageMode ? singlePageZoomClassName : SINGLE_PAGE_ZOOM_DEFAULT_CLASS,
                   )}
                 >
@@ -1522,25 +1594,57 @@ export function CVPreviewCanvas({
                       onSelect={selectHeader}
                       onEditHeader={handleHeaderEdit}
                       onEditContact={handleContactEdit}
+                      onEditAvatar={mode === "edit" ? handleAvatarEdit : undefined}
                     />
                   ) : null}
 
-                  {page.blocks.length > 0 ? (
+                  {page.blocks.length > 0 || (hasSidebarHeader && pageIndex === 0) ? (
                     isTwoColumnBody ? (
                       <div
                         className={cn(
                           page.includeHeader ? headerSectionGapClassName : "",
-                          "grid items-start",
+                          "grid min-h-0",
+                          isSidebarHeaderLayout ? "flex-1 items-stretch" : "items-start",
                           bodyColumnGridClassName,
                           bodyColumnGapClassName,
                         )}
                       >
-                        <div className={template.spacingRules.sectionGapClassName}>
+                        <div
+                          className={cn(
+                            "min-h-0",
+                            template.spacingRules.sectionGapClassName,
+                            isSidebarHeaderLayout
+                              ? "flex h-full min-h-full flex-col bg-[rgb(var(--cv-template-sidebar-background-rgb,31_90_59))] px-3 py-3 text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                              : "",
+                            isSidebarHeaderLayout ? resolvedSidebarPatternClassName : "",
+                          )}
+                        >
+                          {hasSidebarHeader && pageIndex === 0 ? (
+                            <CVHeader
+                              template={template}
+                              header={previewData.header}
+                              contact={previewData.contact}
+                              summary={undefined}
+                              selected={headerSelected}
+                              onSelect={selectHeader}
+                              onEditHeader={handleHeaderEdit}
+                              onEditContact={handleContactEdit}
+                              onEditAvatar={mode === "edit" ? handleAvatarEdit : undefined}
+                            />
+                          ) : null}
+
                           {page.blocks
                             .filter((block) => resolveBodyColumnForSection(block.section) === "left")
                             .map(renderPreviewBlock)}
                         </div>
-                        <div className={template.spacingRules.sectionGapClassName}>
+
+                        <div
+                          className={cn(
+                            "min-h-0",
+                            template.spacingRules.sectionGapClassName,
+                            isSidebarHeaderLayout ? "flex h-full min-h-full flex-col bg-white px-3 py-3" : "",
+                          )}
+                        >
                           {page.blocks
                             .filter((block) => resolveBodyColumnForSection(block.section) === "right")
                             .map(renderPreviewBlock)}
@@ -1562,12 +1666,11 @@ export function CVPreviewCanvas({
                 {isTealFamily ? (
                   <footer
                     className={cn(
-                      "pointer-events-none absolute inset-x-3 bottom-2 flex items-end justify-between text-[11px] font-semibold",
+                      "pointer-events-none absolute bottom-2 right-3 text-[11px] font-semibold",
                       template.colorPalette.mutedTextClassName,
                     )}
                   >
-                    <span className="text-[10px]">© f8.edu.vn</span>
-                    <span>Trang {pageIndex + 1}/{totalPages}</span>
+                    Trang {pageIndex + 1}/{totalPages}
                   </footer>
                 ) : (
                   <footer
@@ -1585,13 +1688,17 @@ export function CVPreviewCanvas({
         ))}
       </div>
 
-      <div aria-hidden className="pointer-events-none invisible absolute left-0 top-0 -z-10 opacity-0">
+      <div
+        aria-hidden
+        ref={measureThemeScopeRef}
+        className="pointer-events-none invisible absolute left-0 top-0 -z-10 opacity-0"
+      >
         <div
           ref={measurePaperRef}
           className={cn(
             measurePaperClassName,
             template.pageSettings.paperFrameClassName,
-            template.pageSettings.paperPatternClassName,
+            resolvedPaperPatternClassName,
             template.pageSettings.paperPaddingClassName,
             template.typographySettings.bodyFontClassName,
             template.typographySettings.bodyTextClassName,
@@ -1600,7 +1707,7 @@ export function CVPreviewCanvas({
             template.colorPalette.pageTextClassName,
           )}
         >
-          {hasHeader ? (
+          {hasTopHeader ? (
             <div ref={measureHeaderRef}>
               <CVHeader
                 template={template}
@@ -1619,18 +1726,51 @@ export function CVPreviewCanvas({
             <div
               ref={measureSectionsContainerRef}
               className={cn(
-                hasHeader ? headerSectionGapClassName : "",
-                "grid items-start",
+                hasTopHeader ? headerSectionGapClassName : "",
+                "grid min-h-0",
+                isSidebarHeaderLayout ? "items-stretch" : "items-start",
                 bodyColumnGridClassName,
                 bodyColumnGapClassName,
               )}
             >
-              <div ref={measureLeftColumnRef} className={template.spacingRules.sectionGapClassName}>
+              <div
+                ref={measureLeftColumnRef}
+                className={cn(
+                  "min-h-0",
+                  template.spacingRules.sectionGapClassName,
+                  isSidebarHeaderLayout
+                    ? "flex h-full min-h-full flex-col bg-[rgb(var(--cv-template-sidebar-background-rgb,31_90_59))] px-3 py-3 text-[rgb(var(--cv-template-sidebar-text-rgb,255_255_255))]"
+                    : "",
+                  isSidebarHeaderLayout ? resolvedSidebarPatternClassName : "",
+                )}
+              >
+                {hasSidebarHeader ? (
+                  <div ref={measureSidebarHeaderRef}>
+                    <CVHeader
+                      template={template}
+                      header={previewData.header}
+                      contact={previewData.contact}
+                      summary={undefined}
+                      selected={false}
+                      onSelect={() => undefined}
+                      onEditHeader={() => undefined}
+                      onEditContact={() => undefined}
+                    />
+                  </div>
+                ) : null}
+
                 {renderedSections
                   .filter((section) => resolveBodyColumnForSection(section) === "left")
                   .map(renderMeasureSection)}
               </div>
-              <div ref={measureRightColumnRef} className={template.spacingRules.sectionGapClassName}>
+              <div
+                ref={measureRightColumnRef}
+                className={cn(
+                  "min-h-0",
+                  template.spacingRules.sectionGapClassName,
+                  isSidebarHeaderLayout ? "flex h-full min-h-full flex-col bg-white px-3 py-3" : "",
+                )}
+              >
                 {renderedSections
                   .filter((section) => resolveBodyColumnForSection(section) === "right")
                   .map(renderMeasureSection)}
@@ -1639,7 +1779,7 @@ export function CVPreviewCanvas({
           ) : (
             <div
               ref={measureSectionsContainerRef}
-              className={cn(hasHeader ? headerSectionGapClassName : "", template.spacingRules.sectionGapClassName)}
+              className={cn(hasTopHeader ? headerSectionGapClassName : "", template.spacingRules.sectionGapClassName)}
             >
               {renderedSections.map(renderMeasureSection)}
             </div>

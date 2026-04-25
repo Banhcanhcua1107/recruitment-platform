@@ -3,6 +3,10 @@
 import * as React from "react";
 import { createClient } from "@/utils/supabase/client";
 import {
+  getRecommendedJobsPayload,
+  postRecommendedJobsPayload,
+} from "@/lib/client/recommend-jobs";
+import {
   RECOMMENDATION_CACHE_KEY,
   resolveRecommendedJobsData,
 } from "./jobs-page.utils";
@@ -89,18 +93,14 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
 
       const supabase = createClient();
 
-      const [authResult, response] = await Promise.all([
+      const [authResult, initialApiPayload] = await Promise.all([
         supabase.auth.getUser().catch(() => null),
-        fetch("/api/recommend-jobs", {
-          method: "GET",
-          cache: "no-store",
-          credentials: "same-origin",
-        }).catch(() => null),
+        getRecommendedJobsPayload().catch(() => null),
       ]);
 
       const authUserId = authResult?.data?.user?.id || "";
       const hasAuthenticatedUser = authUserId.length > 0;
-      let apiPayload = response?.ok ? await response.json().catch(() => null) : null;
+      let apiPayload = initialApiPayload;
       const localPayload = hasAuthenticatedUser
         ? readRecommendationCache(authUserId)
         : null;
@@ -109,7 +109,7 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
         setIsAuthenticated(hasAuthenticatedUser);
       }
 
-      if (response?.ok && apiPayload && hasAuthenticatedUser) {
+      if (apiPayload && hasAuthenticatedUser) {
         writeRecommendationCache(apiPayload, authUserId);
       }
 
@@ -120,18 +120,7 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
       });
 
       if (!resolved && hasAuthenticatedUser) {
-        const regenerateResponse = await fetch("/api/recommend-jobs", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-          credentials: "same-origin",
-        }).catch(() => null);
-
-        const regeneratedPayload = regenerateResponse?.ok
-          ? await regenerateResponse.json().catch(() => null)
-          : null;
+        const regeneratedPayload = await postRecommendedJobsPayload({}).catch(() => null);
 
         if (regeneratedPayload) {
           apiPayload = regeneratedPayload;
@@ -178,19 +167,7 @@ export function useRecommendedJobs(options: UseRecommendedJobsOptions = {}) {
       const authUserResult = await supabase.auth.getUser().catch(() => null);
       const authUserId = authUserResult?.data?.user?.id || "";
 
-      const response = await fetch("/api/recommend-jobs", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
-
-      const payload = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(payload?.error || "Không thể phân tích hồ sơ lúc này.");
-      }
+      const payload = await postRecommendedJobsPayload({});
 
       if (authUserId) {
         writeRecommendationCache(payload, authUserId);

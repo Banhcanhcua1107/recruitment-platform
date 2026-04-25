@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAppDialog } from "@/components/ui/app-dialog";
 
 const AI_SERVICE_URL =
   process.env.NEXT_PUBLIC_AI_SERVICE_URL || "http://localhost:8000";
@@ -9,10 +10,15 @@ export default function TestOCR() {
   const [file, setFile] = useState<File | null>(null);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
+  const { alert } = useAppDialog();
 
   const handleTest = async () => {
     if (!file) {
-      alert("Please select a CV image or PDF.");
+      await alert({
+        title: "Thiếu tệp đầu vào",
+        description: "Please select a CV image or PDF.",
+        confirmText: "Đã hiểu",
+      });
       return;
     }
 
@@ -29,7 +35,12 @@ export default function TestOCR() {
       setResult(data);
     } catch (error) {
       console.error(error);
-      alert(`Could not connect to the AI service at ${AI_SERVICE_URL}.`);
+      await alert({
+        title: "Không thể kết nối AI service",
+        description: `Could not connect to the AI service at ${AI_SERVICE_URL}.`,
+        confirmText: "Đã hiểu",
+        tone: "danger",
+      });
     } finally {
       setLoading(false);
     }

@@ -2,11 +2,8 @@
 
 import { type ReactNode } from "react";
 import type { CandidateWorkspaceModel } from "./candidateWorkspaceModel";
-import {
-  WorkspaceLayout,
-  type WorkspaceHeaderConfig,
-  type WorkspaceShellModel,
-} from "@/components/workspace";
+import WorkspaceLayout from "@/components/workspace/WorkspaceLayout";
+import type { WorkspaceHeaderConfig, WorkspaceShellModel } from "@/components/workspace/types";
 import { candidateSidebarConfig } from "@/components/workspace/sidebarConfigs";
 
 const CANDIDATE_HEADER_CONFIG: WorkspaceHeaderConfig = {

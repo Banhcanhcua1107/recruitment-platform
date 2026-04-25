@@ -1,6 +1,6 @@
 "use client";
 
-import { AppSidebar } from "@/components/app-shell";
+import { AppSidebar } from "@/components/app-shell/AppSidebar";
 import type { WorkspaceSidebarConfig, WorkspaceSidebarItem } from "./types";
 
 interface WorkspaceSidebarProps {

@@ -1,6 +1,11 @@
 import type { Job } from "@/types/job";
 
-export type SortKey = "newest" | "az" | "salary-high" | "salary-low";
+export type SortKey =
+  | "newest"
+  | "relevance"
+  | "az"
+  | "salary-high"
+  | "salary-low";
 
 export interface JobsQueryFilters {
   q: string;

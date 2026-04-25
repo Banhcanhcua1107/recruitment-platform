@@ -17,6 +17,15 @@ export async function POST(request: Request) {
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Không thể tải ảnh lên.";
-    return NextResponse.json({ error: message }, { status: 500 });
+
+    const normalizedMessage = message.toLowerCase();
+    const isInputError =
+      normalizedMessage.includes("hợp lệ")
+      || normalizedMessage.includes("illegal path")
+      || normalizedMessage.includes("unsupported")
+      || normalizedMessage.includes("too large")
+      || normalizedMessage.includes("invalid");
+
+    return NextResponse.json({ error: message }, { status: isInputError ? 400 : 500 });
   }
 }

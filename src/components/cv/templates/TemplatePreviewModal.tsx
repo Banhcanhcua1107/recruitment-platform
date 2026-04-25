@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { X, ChevronLeft, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { useEffect } from "react";
+import { X, Loader2, Sparkles } from "lucide-react";
 import type { CVTemplateDefinition } from "@/components/cv/templates/templateCatalog";
+import { ResumeTemplateThumbnail } from "@/components/cv/templates/ResumeTemplateThumbnail";
 
 interface TemplatePreviewModalProps {
   template: CVTemplateDefinition | null;
@@ -19,9 +20,6 @@ export function TemplatePreviewModal({
   onClose,
   onUseTemplate,
 }: TemplatePreviewModalProps) {
-  const images = useMemo(() => template?.previewImages ?? [], [template]);
-  const [activeIndex, setActiveIndex] = useState(0);
-
   useEffect(() => {
     if (!open) {
       return;
@@ -33,21 +31,6 @@ export function TemplatePreviewModal({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
-        return;
-      }
-
-      if (images.length <= 1) {
-        return;
-      }
-
-      if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        setActiveIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-      }
-
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        setActiveIndex((prev) => (prev + 1) % images.length);
       }
     };
 
@@ -56,28 +39,11 @@ export function TemplatePreviewModal({
       window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
     };
-  }, [images.length, onClose, open]);
+  }, [onClose, open]);
 
   if (!open || !template) {
     return null;
   }
-
-  const activeImage = images[activeIndex] ?? template.thumbnail;
-  const canNavigate = images.length > 1;
-
-  const handlePrev = () => {
-    if (!canNavigate) {
-      return;
-    }
-    setActiveIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
-  };
-
-  const handleNext = () => {
-    if (!canNavigate) {
-      return;
-    }
-    setActiveIndex((prev) => (prev + 1) % images.length);
-  };
 
   return (
     <div
@@ -109,11 +75,6 @@ export function TemplatePreviewModal({
               </span>
             </div>
             <p className="mt-2 max-w-2xl text-sm text-slate-300">{template.description}</p>
-            {images.length > 0 ? (
-              <p className="mt-3 inline-flex rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">
-                {activeIndex + 1}/{images.length} ảnh xem trước
-              </p>
-            ) : null}
           </div>
           <button
             type="button"
@@ -126,64 +87,12 @@ export function TemplatePreviewModal({
         </div>
 
         <div className="grid gap-6 px-6 py-6 sm:grid-cols-[minmax(0,1fr)_19rem] sm:px-8 sm:py-7">
-          <div className="space-y-4">
-            <div className="relative rounded-2xl border border-white/10 bg-slate-800/70 p-3">
-              {canNavigate ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={handlePrev}
-                    className="absolute left-5 top-1/2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-900/70 text-white transition hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70"
-                    aria-label="Xem ảnh trước"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleNext}
-                    className="absolute right-5 top-1/2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/30 bg-slate-900/70 text-white transition hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/70"
-                    aria-label="Xem ảnh tiếp theo"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
-                </>
-              ) : null}
-
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={activeImage}
-                alt={`${template.name} preview ${activeIndex + 1}`}
-                className="mx-auto h-auto max-h-[72vh] w-full rounded-xl bg-white object-contain"
-              />
-            </div>
-
-            {images.length > 1 ? (
-              <div className="grid grid-cols-4 gap-3">
-                {images.map((imageUrl, index) => {
-                  const isActive = index === activeIndex;
-
-                  return (
-                    <button
-                      key={`${template.id}-preview-${index}`}
-                      type="button"
-                      onClick={() => setActiveIndex(index)}
-                      className={`overflow-hidden rounded-xl border transition ${
-                        isActive
-                          ? "border-emerald-400 shadow-[0_0_0_1px_rgba(52,211,153,0.4)]"
-                          : "border-white/20 hover:border-white/40"
-                      }`}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={imageUrl}
-                        alt={`${template.name} thumbnail ${index + 1}`}
-                        className="h-24 w-full bg-white object-contain"
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+          <div className="rounded-2xl border border-white/10 bg-slate-800/70 p-3">
+            <ResumeTemplateThumbnail
+              template={template}
+              density="modal"
+              className="mx-auto w-full max-w-lg"
+            />
           </div>
 
           <aside className="space-y-4 rounded-2xl border border-white/10 bg-slate-800/70 p-4">

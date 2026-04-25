@@ -1,0 +1,249 @@
+{
+  "targetUrl": "http://localhost:3000/candidate/templates",
+  "runtimeUrl": "http://localhost:3000/candidate/cv-builder/acdaa68c-fba6-4b4f-bffe-e0e5d099b014/edit",
+  "checks": [
+    {
+      "color": "#0f4c81",
+      "backgroundMatches": true,
+      "metrics": {
+        "found": {
+          "root": true,
+          "page": true,
+          "sidebar": true,
+          "rightColumn": true,
+          "textElement": true,
+          "iconElement": true,
+          "dividerElement": true
+        },
+        "cssVars": {
+          "sidebarBackgroundRgb": [
+            15,
+            76,
+            129
+          ],
+          "sidebarTextRgb": [
+            255,
+            255,
+            255
+          ],
+          "sidebarIconRgb": [
+            255,
+            255,
+            255
+          ],
+          "sidebarDividerRgb": [
+            111,
+            148,
+            179
+          ]
+        },
+        "computed": {
+          "sidebarBackground": [
+            15,
+            76,
+            129
+          ],
+          "textColor": [
+            255,
+            255,
+            255
+          ],
+          "iconColor": [
+            15,
+            76,
+            129
+          ],
+          "dividerColor": [
+            255,
+            255,
+            255
+          ]
+        },
+        "geometry": {
+          "sidebarTop": 261,
+          "sidebarBottom": 1381,
+          "sidebarHeight": 1120,
+          "rightTop": 261,
+          "rightBottom": 1381,
+          "rightHeight": 1120
+        },
+        "geometryCheck": {
+          "topDelta": 0,
+          "bottomDelta": 0,
+          "heightDelta": 0,
+          "fullHeightAligned": true
+        },
+        "contrast": {
+          "text": 8.856708611655117,
+          "icon": 8.856708611655117,
+          "divider": 2.7678471079670195
+        }
+      },
+      "pass": true
+    },
+    {
+      "color": "#b45309",
+      "backgroundMatches": true,
+      "metrics": {
+        "found": {
+          "root": true,
+          "page": true,
+          "sidebar": true,
+          "rightColumn": true,
+          "textElement": true,
+          "iconElement": true,
+          "dividerElement": true
+        },
+        "cssVars": {
+          "sidebarBackgroundRgb": [
+            180,
+            83,
+            9
+          ],
+          "sidebarTextRgb": [
+            255,
+            255,
+            255
+          ],
+          "sidebarIconRgb": [
+            255,
+            255,
+            255
+          ],
+          "sidebarDividerRgb": [
+            234,
+            207,
+            186
+          ]
+        },
+        "computed": {
+          "sidebarBackground": [
+            180,
+            83,
+            9
+          ],
+          "textColor": [
+            255,
+            255,
+            255
+          ],
+          "iconColor": [
+            180,
+            83,
+            9
+          ],
+          "dividerColor": [
+            255,
+            255,
+            255
+          ]
+        },
+        "geometry": {
+          "sidebarTop": 261,
+          "sidebarBottom": 1381,
+          "sidebarHeight": 1120,
+          "rightTop": 261,
+          "rightBottom": 1381,
+          "rightHeight": 1120
+        },
+        "geometryCheck": {
+          "topDelta": 0,
+          "bottomDelta": 0,
+          "heightDelta": 0,
+          "fullHeightAligned": true
+        },
+        "contrast": {
+          "text": 5.02163257594014,
+          "icon": 5.02163257594014,
+          "divider": 3.379474689550171
+        }
+      },
+      "pass": true
+    },
+    {
+      "color": "#374151",
+      "backgroundMatches": true,
+      "metrics": {
+        "found": {
+          "root": true,
+          "page": true,
+          "sidebar": true,
+          "rightColumn": true,
+          "textElement": true,
+          "iconElement": true,
+          "dividerElement": true
+        },
+        "cssVars": {
+          "sidebarBackgroundRgb": [
+            55,
+            65,
+            81
+          ],
+          "sidebarTextRgb": [
+            255,
+            255,
+            255
+          ],
+          "sidebarIconRgb": [
+            255,
+            255,
+            255
+          ],
+          "sidebarDividerRgb": [
+            135,
+            141,
+            151
+          ]
+        },
+        "computed": {
+          "sidebarBackground": [
+            55,
+            65,
+            81
+          ],
+          "textColor": [
+            255,
+            255,
+            255
+          ],
+          "iconColor": [
+            55,
+            65,
+            81
+          ],
+          "dividerColor": [
+            255,
+            255,
+            255
+          ]
+        },
+        "geometry": {
+          "sidebarTop": 261,
+          "sidebarBottom": 1381,
+          "sidebarHeight": 1120,
+          "rightTop": 261,
+          "rightBottom": 1381,
+          "rightHeight": 1120
+        },
+        "geometryCheck": {
+          "topDelta": 0,
+          "bottomDelta": 0,
+          "heightDelta": 0,
+          "fullHeightAligned": true
+        },
+        "contrast": {
+          "text": 10.307355969735845,
+          "icon": 10.307355969735845,
+          "divider": 3.085827533154246
+        }
+      },
+      "pass": true
+    }
+  ],
+  "download": {
+    "suggestedFilename": "cv-emerald-sidebar.pdf",
+    "success": true
+  },
+  "screenshot": "artifacts/responsive-qa/emerald-sidebar-runtime-verify.png",
+  "pass": true
+}

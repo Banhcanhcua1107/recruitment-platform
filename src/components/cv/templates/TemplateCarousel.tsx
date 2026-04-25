@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ResumeTemplateThumbnail } from "@/components/cv/templates/ResumeTemplateThumbnail";
 import type { CVTemplateDefinition } from "./templateCatalog";
 
 interface TemplateCarouselProps {
@@ -131,18 +132,21 @@ export function TemplateCarousel({
                   : "border-slate-200 hover:border-slate-300",
               )}
             >
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelectTemplate(template.id)}
-                className="w-full text-left"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectTemplate(template.id);
+                  }
+                }}
+                className="w-full cursor-pointer text-left"
+                aria-label={`Chọn mẫu ${template.name}`}
               >
                 <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={template.thumbnail}
-                    alt={template.name}
-                    className="h-42 w-full rounded-lg bg-white object-contain"
-                  />
+                  <ResumeTemplateThumbnail template={template} density="rail" />
                   <span
                     className={cn(
                       "absolute left-2 top-2 rounded-full px-2 py-1 text-[10px] font-bold uppercase",
@@ -156,7 +160,7 @@ export function TemplateCarousel({
                 </div>
                 <p className="mt-2.5 truncate text-sm font-semibold text-slate-900">{template.name}</p>
                 <p className="mt-0.5 text-xs text-slate-500">{template.category}</p>
-              </button>
+              </div>
 
               <button
                 type="button"

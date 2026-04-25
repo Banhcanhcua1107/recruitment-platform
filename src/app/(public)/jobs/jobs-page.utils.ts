@@ -20,6 +20,7 @@ export const SUGGESTION_CHIPS = [
 
 export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: "newest", label: "Mới nhất" },
+  { value: "relevance", label: "Phù hợp nhất" },
   { value: "az", label: "A → Z" },
   { value: "salary-high", label: "Lương cao → thấp" },
   { value: "salary-low", label: "Lương thấp → cao" },
@@ -149,6 +150,26 @@ export function filterJobs(jobs: Job[], filters: JobsPageFilters): Job[] {
 
   if (sort === "az") {
     nextJobs.sort((a, b) => a.title.localeCompare(b.title, "vi"));
+  } else if (sort === "relevance" && q) {
+    const query = normalize(q);
+    nextJobs.sort((a, b) => {
+      const scoreA =
+        (normalize(a.title).includes(query) ? 4 : 0) +
+        (normalize(a.company_name).includes(query) ? 2 : 0) +
+        (normalize(a.location).includes(query) ? 1 : 0) +
+        ((a.industry ?? []).some((industry) => normalize(industry).includes(query)) ? 2 : 0);
+      const scoreB =
+        (normalize(b.title).includes(query) ? 4 : 0) +
+        (normalize(b.company_name).includes(query) ? 2 : 0) +
+        (normalize(b.location).includes(query) ? 1 : 0) +
+        ((b.industry ?? []).some((industry) => normalize(industry).includes(query)) ? 2 : 0);
+
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA;
+      }
+
+      return normalize(b.posted_date).localeCompare(normalize(a.posted_date));
+    });
   } else if (sort === "salary-high" || sort === "salary-low") {
     nextJobs.sort((a, b) => {
       const salaryA = parseSalary(a.salary);

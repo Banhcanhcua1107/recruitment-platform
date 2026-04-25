@@ -1,9 +1,12 @@
-import RecommendedJobs from "@/app/candidate/dashboard/components/RecommendedJobs";
+import RecommendedJobsClientPanel from "@/app/candidate/jobs/recommended/RecommendedJobsClientPanel";
 import CandidateJobsTabs from "@/components/candidate/CandidateJobsTabs";
-import { getFreshPublicJobs } from "@/lib/jobs";
+import {
+  getLatestPublicJobSummaries,
+  type PublicJobSummary,
+} from "@/lib/public-job-summaries";
 import type { Job as DashboardJob } from "@/types/dashboard";
 
-function toDashboardJob(job: Awaited<ReturnType<typeof getFreshPublicJobs>>[number]): DashboardJob {
+function toDashboardJob(job: PublicJobSummary): DashboardJob {
   return {
     id: job.id,
     title: job.title,
@@ -18,7 +21,7 @@ function toDashboardJob(job: Awaited<ReturnType<typeof getFreshPublicJobs>>[numb
 }
 
 export default async function CandidateRecommendedJobsPage() {
-  const publicJobs = await getFreshPublicJobs();
+  const publicJobs = await getLatestPublicJobSummaries(24);
   const jobs = publicJobs.map((job) => toDashboardJob(job));
 
   return (
@@ -31,7 +34,7 @@ export default async function CandidateRecommendedJobsPage() {
         </p>
       </section>
       <section className="rounded-[26px] border border-slate-200/90 bg-white p-5 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.26)] sm:p-6">
-        <RecommendedJobs jobs={jobs} />
+        <RecommendedJobsClientPanel jobs={jobs} />
       </section>
     </div>
   );
